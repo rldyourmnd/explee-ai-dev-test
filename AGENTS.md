@@ -251,6 +251,40 @@ A `--max-result` flag truncated tool output while the generated header claimed
 nothing had been dropped. In all three the tool reported success while doing the
 opposite of its purpose.
 
+## Looking at the output beats grepping it — three times in one run
+
+Three defects reached a live page having passed every textual gate, and every one
+was obvious to a person who simply looked:
+
+1. **A 390 px screenshot that was a 500 px crop.** It looked exactly like a
+   layout overflow. Nothing in the image said which.
+2. **A `--accent` bar rendering near-black** because the variable was never
+   defined. The screenshot showed the *correct* colour, since the photographed
+   card carried `.warn`, which sets that property by a different rule.
+3. **`"3.0x typical decline , recorded as an event"`** — an em-dash sweep left a
+   comma with the dash's leading space. `ruff`, `pyright`, 297 tests and the
+   consistency check all passed it. A reader sees it instantly.
+
+The pattern: **textual gates read the source; a reader reads the render.** Between
+those two is a gap no amount of grepping closes, and it is where formatting,
+CSS-computed values and generated prose live.
+
+So a change that alters what a human sees needs a human-shaped check — open the
+page. And note the inversion in case 2: the screenshot *was* the check, and it
+passed while confirming a different rule than the broken one, which is why "look
+at it" is necessary but not sufficient. Ask what the picture would have shown had
+the thing been broken.
+
+## Fix the generator, not its output
+
+`snapshots/03` carries two em dashes while `01` and `02` carry none — because the
+written files were stripped and the **template that produces them was not**. Every
+future snapshot reintroduces the defect.
+
+Cleaning output that a generator will regenerate is not a fix; it is a delay. When
+a defect appears in generated content, the fix belongs in the generator, and the
+existing artifacts are a separate cleanup.
+
 ## A check can pass while testing something next to the break
 
 The families above are about tools reporting success while doing something else.
