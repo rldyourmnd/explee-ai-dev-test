@@ -10,13 +10,23 @@ packaging step.
 |---|---|
 | Artifact | `plugins/rldyour-serena-mcp/agents/flow-memory-sync.md` |
 | Source repository | `nddev-it-com/rldyour-claudecode` (marketplace `rldyour-claudecode`) |
-| Pinned commit | `e2573ddaea43c1a06d92177e31ad3485354f10a9` |
-| Installed copy | `~/.claude/plugins/cache/rldyour-claudecode/rldyour-serena-mcp/1.7.14/agents/flow-memory-sync.md` |
-| SHA-256 (all three) | `26d0ed17324707e5ac020b0a…07a04` |
-| Byte comparison | `cmp` clean: installed == submitted == published-at-pinned-commit |
+| Pinned commit | `e9879c212419992bda313c3725d615699f87a4c2` |
+| SHA-256 (submitted and published) | `a16009988b189413be382077…` |
+| Byte comparison | `cmp` clean: submitted == published-at-pinned-commit |
 
-Verified independently 2026-08-24, by fetching the published blob from the GitHub
-contents API at the pinned commit rather than trusting the local cache.
+Verified 2026-08-24 by fetching the published blob from the GitHub contents API
+at the pinned commit rather than trusting any local copy.
+
+**The installed copy is deliberately not part of that comparison right now.**
+`~/.claude/plugins/cache/.../1.7.14/agents/flow-memory-sync.md` still hashes
+`26d0ed17…`, the pre-fix content, because the marketplace cache pins v1.7.14 and
+the correction landed after it. Submitted matches the source of truth; the cache
+catches up on the next plugin update. Claiming a three-way match today would be
+false, and this file exists to be checkable.
+
+Earlier this chain read installed == submitted == published at `26d0ed17…`
+against commit `e2573dd`. That was true when written, and is superseded by the
+upstream correction below.
 
 ## Real use
 
@@ -38,6 +48,22 @@ no stop condition of its own.
 That earlier provenance chain was equally solid — three copies agreeing on
 `f4f1424b…`, 11 commits, 18 references. Provenance was never the reason for the
 change; the miscitations were.
+
+## Upstream correction, 2026-08-24 (`e9879c2`)
+
+External review found the artifact repeating the enforcement overclaim that
+disqualified the previous candidate: it said "no general write access" and
+"read-only on code" while its allowlist carries unrestricted `Bash`, and step 6
+runs a helper script through it. Removing `Edit`/`Write`/`NotebookEdit` closes
+those paths in the runtime, but a general shell is not bounded by which tool
+names are absent.
+
+Fixed at source rather than in the submitted copy, which must stay byte-identical.
+Agent frontmatter has no per-command granularity, so the property cannot be
+enforced at that layer; it is now described as what it is — source-preserving by
+contract, allowlist enforcing part and discipline the rest — and modifying the
+project tree through `Bash` is named as forbidden. The repository's own
+`validate_agent_tools.py` and `validate_contract.py` pass on the change.
 
 ## Known limits of the chosen artifact
 
