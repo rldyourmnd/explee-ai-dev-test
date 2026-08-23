@@ -435,11 +435,16 @@ def aggregate(scores: Sequence[SegmentScore]) -> dict[str, float | None]:
     term_hits = total("term_hits")
     precision = _ratio(term_hits, term_hyp)
     recall = _ratio(term_hits, term_ref)
-    f1 = (
-        2 * precision * recall / (precision + recall)
-        if precision is not None and recall is not None and (precision + recall) > 0
-        else None
-    )
+    if precision is not None and recall is not None and (precision + recall) > 0:
+        f1 = 2 * precision * recall / (precision + recall)
+    elif recall == 0.0:
+        # An engine that proposed no glossary term at all, against a reference
+        # that contains them, has an F1 of zero. Reporting `None` here would
+        # read as "not measured" when the truth is "measured, and it found
+        # nothing" -- and it made the JSON disagree with the published table.
+        f1 = 0.0
+    else:
+        f1 = None
     confusion: Counter = Counter()
     for score in scores:
         confusion.update(score.speaker_confusion)

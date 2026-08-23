@@ -34,7 +34,7 @@ from harness.bootstrap import (  # noqa: E402
 from harness.document import score_document  # noqa: E402
 from harness.glossary import load as load_glossary  # noqa: E402
 from harness.metrics import SegmentScore, aggregate  # noqa: E402
-from harness.runner import eligibility  # noqa: E402
+from harness.runner import raw_coverage  # noqa: E402
 
 RAW = HERE / "data" / "raw-hlk8s"
 REFERENCE = HERE / "data" / "reference-hlk8s.json"
@@ -54,22 +54,43 @@ def load_engine_documents() -> dict[str, dict]:
         if not engine_dir.is_dir():
             continue
         parts, latencies, missing = [], [], 0
+        returned_ids: list[str] = []
+        words_by_segment: dict[str, int] = {}
         for segment_id in order:
             path = engine_dir / f"{segment_id}.json"
             if not path.exists():
                 missing += 1
                 continue
             payload = json.loads(path.read_text(encoding="utf-8"))
-            parts.append(payload.get("text", ""))
+            returned_ids.append(segment_id)
+            text = payload.get("text", "")
+            words_by_segment[segment_id] = len(text.split())
+            parts.append(text)
             if payload.get("inference_s") is not None:
                 latencies.append(payload["inference_s"])
         engines[engine_dir.name] = {
+            "returned_ids": returned_ids,
+            "words_by_segment": words_by_segment,
             "text": " ".join(parts),
             "segments": len(order) - missing,
             "missing": missing,
             "median_inference_s": statistics.median(latencies) if latencies else None,
             "total_inference_s": round(sum(latencies), 1) if latencies else None,
         }
+    # A configuration "collapsed" on a segment when it produced less than half
+    # the words its own stock counterpart produced there. Measured against the
+    # same model without a prompt, so it isolates the prompt's effect rather
+    # than penalising a naturally terse engine.
+    for name, data in engines.items():
+        stock = name.replace("-tuned", "-default")
+        baseline = engines.get(stock, {}).get("words_by_segment", {})
+        data["collapsed"] = (
+            0 if stock == name or not baseline
+            else sum(
+                1 for sid, n in baseline.items()
+                if n and data["words_by_segment"].get(sid, 0) < 0.5 * n
+            )
+        )
     return engines
 
 
@@ -89,11 +110,36 @@ def main() -> int:
     }
     pooled = {name: aggregate(s) for name, s in scores.items()}
 
+    # Operational guards, applied BEFORE any quality metric is consulted. The
+    # amended guardrail excludes insertions, which is right for an edited
+    # reference but blind to a configuration that appends invented text or
+    # stops transcribing. These guards are not vulnerable to that blind spot.
+    manifest_ids = [s_["id"] for s_ in json.loads(MANIFEST.read_text(encoding="utf-8"))["segments"]]
+    returned = {name: data["returned_ids"] for name, data in engines.items()}
+    coverage = raw_coverage(returned, manifest_ids)
+
+    ineligible: dict[str, str] = {}
+    for name, data in engines.items():
+        if not coverage[name]["rankable"]:
+            ineligible[name] = (
+                f"raw coverage {coverage[name]['coverage']:.1%} below the 98% floor"
+            )
+        elif data["collapsed"] > 0:
+            ineligible[name] = (
+                f"{data['collapsed']} collapsed segments; the collapse ceiling is 0"
+            )
+
     outcome = decide(
         scores,
         primary=PRIMARY,
         guardrail_metric=GUARDRAIL_METRIC,
         guardrail_max=GUARDRAIL_MAX,
+        block_len=blocks_per_duration(
+            len(next(iter(scores.values()))),
+            float(json.loads(MANIFEST.read_text(encoding="utf-8"))["total_segment_duration_s"]),
+            BLOCK_SECONDS_PRIMARY,
+        ),
+        ineligible=ineligible,
     )
 
     intervals = {
@@ -160,7 +206,12 @@ def main() -> int:
         "primary": PRIMARY,
         "guardrail": {"metric": GUARDRAIL_METRIC, "max": GUARDRAIL_MAX},
         "decision": outcome,
-        "eligibility": eligibility(scores, corpus_size=len(next(iter(scores.values())))),
+        "coverage": coverage,
+        "operational_guards": {
+            "raw_coverage_min": 0.98,
+            "collapsed_segment_ceiling": 0,
+            "ineligible": ineligible,
+        },
         "engines": {
             name: {
                 **{k: v for k, v in pooled[name].items()},

@@ -37,72 +37,81 @@
       "whisper-large-v3-turbo-tuned"
     ],
     "rejected": {
+      "whisper-large-v3-tuned": "19 collapsed segments; the collapse ceiling is 0",
       "seamless-m4t-v2-default": "reference_error_rate=0.5430 exceeds 0.3000",
-      "wav2vec2-xlsr-ru-default": "reference_error_rate=0.3660 exceeds 0.3000",
-      "whisper-large-v3-tuned": "reference_error_rate=0.3930 exceeds 0.3000"
+      "wav2vec2-xlsr-ru-default": "reference_error_rate=0.3660 exceeds 0.3000"
     },
     "primary": "term_f1",
     "guardrail": {
       "metric": "reference_error_rate",
       "max": 0.3
-    }
+    },
+    "resampler": "moving-block",
+    "block_units": 4
   },
-  "eligibility": {
+  "coverage": {
     "parakeet-tdt-0.6b-v3-default": {
-      "segments_scored": 99,
+      "segments_returned": 99,
+      "segments_expected": 99,
       "segments_missing": 0,
-      "failure_rate": 0.0,
-      "rankable": true,
       "coverage": 1.0,
+      "rankable": true,
       "policy": "operational policy: coverage >= 98%"
     },
     "seamless-m4t-v2-default": {
-      "segments_scored": 99,
+      "segments_returned": 99,
+      "segments_expected": 99,
       "segments_missing": 0,
-      "failure_rate": 0.0,
-      "rankable": true,
       "coverage": 1.0,
+      "rankable": true,
       "policy": "operational policy: coverage >= 98%"
     },
     "wav2vec2-xlsr-ru-default": {
-      "segments_scored": 99,
+      "segments_returned": 99,
+      "segments_expected": 99,
       "segments_missing": 0,
-      "failure_rate": 0.0,
-      "rankable": true,
       "coverage": 1.0,
+      "rankable": true,
       "policy": "operational policy: coverage >= 98%"
     },
     "whisper-large-v3-default": {
-      "segments_scored": 99,
+      "segments_returned": 99,
+      "segments_expected": 99,
       "segments_missing": 0,
-      "failure_rate": 0.0,
-      "rankable": true,
       "coverage": 1.0,
+      "rankable": true,
       "policy": "operational policy: coverage >= 98%"
     },
     "whisper-large-v3-tuned": {
-      "segments_scored": 99,
+      "segments_returned": 99,
+      "segments_expected": 99,
       "segments_missing": 0,
-      "failure_rate": 0.0,
-      "rankable": true,
       "coverage": 1.0,
+      "rankable": true,
       "policy": "operational policy: coverage >= 98%"
     },
     "whisper-large-v3-turbo-default": {
-      "segments_scored": 99,
+      "segments_returned": 99,
+      "segments_expected": 99,
       "segments_missing": 0,
-      "failure_rate": 0.0,
-      "rankable": true,
       "coverage": 1.0,
+      "rankable": true,
       "policy": "operational policy: coverage >= 98%"
     },
     "whisper-large-v3-turbo-tuned": {
-      "segments_scored": 99,
+      "segments_returned": 99,
+      "segments_expected": 99,
       "segments_missing": 0,
-      "failure_rate": 0.0,
-      "rankable": true,
       "coverage": 1.0,
+      "rankable": true,
       "policy": "operational policy: coverage >= 98%"
+    }
+  },
+  "operational_guards": {
+    "raw_coverage_min": 0.98,
+    "collapsed_segment_ceiling": 0,
+    "ineligible": {
+      "whisper-large-v3-tuned": "19 collapsed segments; the collapse ceiling is 0"
     }
   },
   "engines": {
@@ -173,7 +182,7 @@
       "cs_wer": 1.0,
       "term_precision": 0.0,
       "term_recall": 0.0,
-      "term_f1": null,
+      "term_f1": 0.0,
       "name_recall": 0.0,
       "latin_to_cyrillic_rate": 1.0,
       "hallucination_rate": 0.419132549655452,
@@ -188,8 +197,8 @@
       "total_inference_s": 37.3,
       "missing": 0,
       "term_f1_ci": [
-        null,
-        null
+        0.0,
+        0.0
       ],
       "wer_ci": [
         0.7016607931770072,
@@ -338,12 +347,12 @@
     },
     {
       "vs": "wav2vec2-xlsr-ru-default",
-      "sentence": "term_f1: not measurable on this corpus.",
-      "indistinguishable": true,
-      "block_stability": "term_f1: no separation — stable across block sizes [60.0, 120.0, 180.0, 300.0].",
+      "sentence": "term_f1: whisper-large-v3-turbo-tuned is better by 0.6747 [-0.7532, -0.5876] over 99 paired segments.",
+      "indistinguishable": false,
+      "block_stability": "term_f1: whisper-large-v3-turbo-tuned — stable across block sizes [60.0, 120.0, 180.0, 300.0].",
       "stable": true,
-      "bootstrap_p": 1.0,
-      "significant_after_holm": false
+      "bootstrap_p": 9.999000099990002e-05,
+      "significant_after_holm": true
     },
     {
       "vs": "whisper-large-v3-default",

@@ -416,16 +416,67 @@ def bootstrap_interval(
     )
 
 
+def bootstrap_interval_blocks(
+    metric: str,
+    scores: Sequence[SegmentScore],
+    *,
+    block_len: int,
+    resamples: int = DEFAULT_RESAMPLES,
+    seed: int = BLOCK_SEED,
+    confidence: float = DEFAULT_CONFIDENCE,
+) -> Interval:
+    """Moving-block interval on one system's pooled metric.
+
+    The independent-unit version is kept for tests and for the sensitivity
+    comparison, but nothing that feeds a published ranking should use it: the
+    units are contiguous stretches of one talk and are correlated.
+    """
+    point = _pooled(scores, metric)
+    if point is None or not scores:
+        return Interval(None, None, None, confidence, resamples)
+    rng = random.Random(seed)
+    n = len(scores)
+    samples: list[float] = []
+    for _ in range(resamples):
+        picks = _moving_block_indices(rng, n, block_len)
+        value = _pooled([scores[i] for i in picks], metric)
+        if value is not None:
+            samples.append(value)
+    if not samples:
+        return Interval(point, None, None, confidence, 0)
+    samples.sort()
+    tail = (1 - confidence) / 2
+    return Interval(
+        point=point,
+        low=_percentile(samples, tail),
+        high=_percentile(samples, 1 - tail),
+        confidence=confidence,
+        resamples=len(samples),
+    )
+
+
 def rank(
     engines: dict[str, Sequence[SegmentScore]],
     metric: str,
     *,
     resamples: int = DEFAULT_RESAMPLES,
     seed: int = DEFAULT_SEED,
+    block_len: int | None = None,
 ) -> list[tuple[str, Interval]]:
-    """Order engines by a metric, best first, each with its interval."""
+    """Order engines by a metric, best first, each with its interval.
+
+    `block_len` selects the moving-block resampler. Pass it for anything that
+    reaches a published table; omitting it uses independent units, which is
+    correct only for uncorrelated data and must be labelled IID where reported.
+    """
     intervals = {
-        name: bootstrap_interval(metric, scores, resamples=resamples, seed=seed)
+        name: (
+            bootstrap_interval_blocks(
+                metric, scores, block_len=block_len, resamples=resamples, seed=seed
+            )
+            if block_len
+            else bootstrap_interval(metric, scores, resamples=resamples, seed=seed)
+        )
         for name, scores in engines.items()
     }
     measured = [(n, i) for n, i in intervals.items() if i.measured]
@@ -447,6 +498,8 @@ def decide(
     tie_break: Callable[[list[str]], str] | None = None,
     resamples: int = DEFAULT_RESAMPLES,
     seed: int = DEFAULT_SEED,
+    block_len: int | None = None,
+    ineligible: dict[str, str] | None = None,
 ) -> dict[str, object]:
     """Apply the pre-declared decision rule. See `PREREGISTRATION.md`.
 
@@ -455,8 +508,13 @@ def decide(
     hour long and two engines are close.
     """
     eligible = {}
-    rejected = {}
+    rejected = dict(ineligible or {})
     for name, scores in engines.items():
+        if name in rejected:
+            # Failed an operational guard (coverage, collapse) before any
+            # quality metric was consulted. A configuration that did not
+            # transcribe the corpus does not get to win it.
+            continue
         guard = aggregate(scores).get(guardrail_metric)
         if guard is None:
             rejected[name] = f"{guardrail_metric} not measurable"
@@ -467,12 +525,14 @@ def decide(
     if not eligible:
         return {"winner": None, "reason": "no engine met the guardrail", "rejected": rejected}
 
-    ordered = rank(eligible, primary, resamples=resamples, seed=seed)
+    ordered = rank(
+        eligible, primary, resamples=resamples, seed=seed, block_len=block_len
+    )
     leader = ordered[0][0]
     tied = [leader]
     for name, _ in ordered[1:]:
-        comparison = paired_bootstrap(
-            primary, eligible[leader], eligible[name], resamples=resamples, seed=seed
+        comparison = _compare(
+            primary, eligible[leader], eligible[name], block_len, resamples, seed
         )
         if comparison.indistinguishable:
             tied.append(name)
@@ -482,7 +542,7 @@ def decide(
     steps: list[str] = []
     if len(tied) > 1:
         winner, basis, steps = _apply_tie_break(
-            tied, eligible, cost_usd, tie_break, resamples, seed
+            tied, eligible, cost_usd, tie_break, resamples, seed, block_len
         )
     return {
         "winner": winner,
@@ -493,7 +553,25 @@ def decide(
         "rejected": rejected,
         "primary": primary,
         "guardrail": {"metric": guardrail_metric, "max": guardrail_max},
+        "resampler": "moving-block" if block_len else "IID (independent units)",
+        "block_units": block_len,
     }
+
+
+def _compare(
+    metric: str,
+    a: Sequence[SegmentScore],
+    b: Sequence[SegmentScore],
+    block_len: int | None,
+    resamples: int,
+    seed: int,
+) -> Comparison:
+    """One paired comparison, moving-block when a block length is supplied."""
+    if block_len:
+        return paired_moving_block(
+            metric, a, b, block_len=block_len, resamples=resamples, seed=seed
+        )
+    return paired_bootstrap(metric, a, b, resamples=resamples, seed=seed)
 
 
 def _apply_tie_break(
@@ -503,6 +581,7 @@ def _apply_tie_break(
     explicit: Callable[[list[str]], str] | None,
     resamples: int,
     seed: int,
+    block_len: int | None = None,
 ) -> tuple[str | None, str, list[str]]:
     """Walk the pre-declared tie-break order, one metric at a time.
 
@@ -518,7 +597,8 @@ def _apply_tie_break(
         if len(remaining) <= 1:
             break
         ordered = rank(
-            {n: engines[n] for n in remaining}, metric, resamples=resamples, seed=seed
+            {n: engines[n] for n in remaining}, metric,
+            resamples=resamples, seed=seed, block_len=block_len,
         )
         measured = [(n, i) for n, i in ordered if i.measured]
         if not measured:
@@ -527,8 +607,8 @@ def _apply_tie_break(
         leader = measured[0][0]
         still_tied = [leader]
         for name, _ in measured[1:]:
-            comparison = paired_bootstrap(
-                metric, engines[leader], engines[name], resamples=resamples, seed=seed
+            comparison = _compare(
+                metric, engines[leader], engines[name], block_len, resamples, seed
             )
             if comparison.indistinguishable:
                 still_tied.append(name)

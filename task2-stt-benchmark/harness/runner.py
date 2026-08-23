@@ -252,6 +252,37 @@ def pair_for_bootstrap(
     return [by_a[i] for i in common], [by_b[i] for i in common]
 
 
+def raw_coverage(
+    returned_segment_ids: Mapping[str, Sequence[str]],
+    manifest_segment_ids: Sequence[str],
+    max_failure_rate: float = MAX_FAILURE_RATE,
+) -> dict[str, dict[str, object]]:
+    """Coverage measured from RAW returned segments against the manifest.
+
+    This is the only measurement that can detect a missing segment. Counting
+    scored units cannot: the document scorer always emits one score per
+    reference block whether or not the engine returned anything for that stretch
+    of audio, so an engine that dropped a quarter of the corpus still produces a
+    full-length score list and a flattering average over the parts it managed.
+    """
+    expected = list(manifest_segment_ids)
+    total = len(expected)
+    report: dict[str, dict[str, object]] = {}
+    for engine, returned in sorted(returned_segment_ids.items()):
+        present = set(returned) & set(expected)
+        missing = total - len(present)
+        rate = missing / total if total else 0.0
+        report[engine] = {
+            "segments_returned": len(present),
+            "segments_expected": total,
+            "segments_missing": missing,
+            "coverage": 1.0 - rate,
+            "rankable": rate <= max_failure_rate,
+            "policy": f"operational policy: coverage >= {1 - max_failure_rate:.0%}",
+        }
+    return report
+
+
 def eligibility(
     scores: Mapping[str, Sequence[SegmentScore]],
     corpus_size: int,

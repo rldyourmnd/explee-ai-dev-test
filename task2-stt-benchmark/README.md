@@ -57,16 +57,19 @@ Three properties the tests enforce, because each is a way a benchmark can lie:
 | Eval design frozen | done — `PREREGISTRATION.md` |
 | Reference policy frozen | done — 12 rules with worked examples |
 | Glossary frozen | done — 50 terms, hashed |
-| Metrics + tests | done — 44 tests passing |
+| Metrics + tests | done — see `tests/test_task2_*.py` |
 | Paired bootstrap + decision rule | done |
-| Corpus selection and freeze | pending orchestrator approval of the candidate |
-| Engine runs | not started; nothing has been sent to any vendor |
-| Report | not started |
+| Corpus frozen | done — `hlk8s`, 99 segments, 2952.821 s, source SHA-256 `4b88b8d5…f0f39fd9` |
+| Reference | done — the publisher's human transcript, independent of every engine ranked |
+| Engine runs | done — 5 engines and 2 prompted Whisper configurations, 99/99 segments each, on our own GPUs |
+| Report | **published** — <https://stt.nddev.it.com/> |
+| Recommendation | conditional and two-level; see the report |
 
 ## Envelope
 
-Public or already-permitted audio, free tiers, existing credits, self-hosted
-inference. **No new spending without the human.** Two self-hosted engines
+Open models only, run on the employer's own GPUs. Nothing paid, no cloud STT,
+not even free tiers, so the audio was sent to no vendor and the employer can
+re-run the whole benchmark without buying anything. Two self-hosted engines
 (Whisper large-v3, Parakeet) need no account at all, so the benchmark has a
 floor that no account failure can remove. If fewer than five engines are
 reachable within the envelope, the report names the specific blocker per engine

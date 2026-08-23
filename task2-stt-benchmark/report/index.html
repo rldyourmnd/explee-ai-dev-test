@@ -79,87 +79,138 @@ talk, scored against a human transcript published by the conference itself, with
 evaluation frozen before any engine ran.</p>
 
 <div class="callout">
-<p><strong>Production recommendation: Whisper large-v3-turbo with a glossary prompt.</strong>
-Feed it your list of product and tool names. It recognises 61% of technical terms against
-36% without, a larger gain than any difference between engines, and it is the only
-configuration that both wins the primary metric and clears the usability guardrail.</p>
+<p><strong>Recommendation, and it depends on one thing: whether a human reviews the
+transcript.</strong></p>
 
-<p>It carries one risk you must decide about. Prompted with ten plausible term names that
-are never spoken in the audio, it wrote two of them into the transcript in 5 of 99 segments,
-including replacing the real word <em>Kubernetes</em> with the invented <em>Qdrantis</em>.
-An engine that invents the term it was told to expect is more dangerous than one that misses
-it, because a reader cannot tell the invention from a fact. If that is unacceptable, run
-<strong>large-v3-turbo without a prompt</strong>: no inventions, and term recall falls to
-36%.</p>
+<p><strong>With terminology review in the loop: prompted Whisper large-v3-turbo.</strong>
+Feed it your list of product and tool names. Technical-term recall rises from 0.355 to
+0.609. Expect roughly 5% of segments to carry a fabricated term that your reviewer has to
+catch: prompted with ten plausible names never spoken in the audio, it wrote two of them
+into the transcript, including <code>Kubernetics</code> over the real <em>Kubernetes</em>.</p>
 
-<p><strong>Do not prompt large-v3.</strong> It has the highest term score measured here and
-it earned that by collapsing. On 19 of 99 segments it stopped transcribing and emitted a two
-word summary such as <code>Кликхаус оператор</code>. The guardrail catches this and rejects
-the configuration.</p>
+<p><strong>Without review: unprompted Whisper large-v3-turbo.</strong> It fabricates
+nothing, and it misses about two thirds of the technical terms.</p>
 
-<p>No engine is good at this speech yet. Even the recommended setup misses about four
-technical terms in ten. Keep a human in the loop on terminology dense meetings.</p>
+<p>The trade is not symmetric, which is why the condition decides it. In a meeting record a
+fabricated term is worse than a missing one: a reader notices a gap from context, but cannot
+tell an invented product name from a real one. Losing half the terminology is a real cost
+too, so neither answer is free.</p>
+
+<p><strong>The honest headline: no configuration we tested is ready for unsupervised use on
+this speech.</strong> The best one still misses four technical terms in ten, and the one
+that does better invents words.</p>
 </div>
 
-<h2>Results</h2>
+<h2>Result 1: the engine ranking</h2>
 
-<p>Five engines, seven configurations, 99 segments each, zero failed requests. Ranked by the
-pre declared primary metric, IT term F1. Lower is better for the last four columns.</p>
+<p>Five engines, no terminology assistance, like for like. This is the only table that
+compares engines, because it is the only one where every engine got the same help.</p>
 
 <div class="scroll">
 <table>
-<colgroup>
-  <col style="width: 22ch"><col style="width: 7ch"><col style="width: 13ch">
-  <col style="width: 7ch"><col style="width: 8ch"><col style="width: 8ch">
-  <col style="width: 9ch"><col style="width: 8ch">
-</colgroup>
+<colgroup><col style="width: 24ch"><col style="width: 8ch"><col style="width: 13ch"><col style="width: 8ch"><col style="width: 8ch"><col style="width: 9ch"><col style="width: 9ch"></colgroup>
 <thead><tr>
-  <th>Configuration</th>
-  <th class="num">Term F1</th>
-  <th class="num">95% CI</th>
-  <th class="num">Recall</th>
-  <th class="num">Guard</th>
-  <th class="num">CS-WER</th>
-  <th class="num">Collapsed</th>
-  <th class="num">Invented</th>
+  <th>Engine, stock</th><th class="num">Term F1</th><th class="num">95% CI</th>
+  <th class="num">Recall</th><th class="num">Guard</th><th class="num">CS-WER</th><th class="num">Eligible</th>
 </tr></thead>
 <tbody>
-<tr class="pick">
-  <td>large-v3-turbo + glossary<span class="tag">recommended</span></td>
-  <td class="num">0.675</td><td class="ci">0.58 to 0.76</td><td class="num">0.609</td>
-  <td class="num ok">0.206</td><td class="num ok">0.492</td><td class="num">0</td><td class="num warn">5</td></tr>
-<tr><td>large-v3 + glossary</td>
-  <td class="num">0.688</td><td class="ci">0.60 to 0.77</td><td class="num">0.630</td>
-  <td class="num alarm">0.393</td><td class="num">0.590</td><td class="num alarm">19</td><td class="num">0</td></tr>
-<tr><td>large-v3, stock</td>
-  <td class="num">0.519</td><td class="ci">0.41 to 0.62</td><td class="num">0.399</td>
-  <td class="num ok">0.238</td><td class="num">0.675</td><td class="num">0</td><td class="num">0</td></tr>
-<tr><td>large-v3-turbo, stock</td>
-  <td class="num">0.483</td><td class="ci">0.35 to 0.59</td><td class="num">0.355</td>
-  <td class="num ok">0.229</td><td class="num">0.650</td><td class="num">0</td><td class="num">0</td></tr>
-<tr><td>Parakeet-TDT v3</td>
-  <td class="num">0.481</td><td class="ci">0.39 to 0.56</td><td class="num">0.362</td>
-  <td class="num ok">0.194</td><td class="num warn">0.748</td><td class="num">0</td><td class="num">0</td></tr>
-<tr><td>SeamlessM4T v2</td>
-  <td class="num">0.279</td><td class="ci">0.17 to 0.39</td><td class="num">0.174</td>
-  <td class="num alarm">0.543</td><td class="num alarm">0.865</td><td class="num alarm">21</td><td class="num">0</td></tr>
-<tr><td>wav2vec2 XLSR Russian</td>
-  <td class="num">0.000</td><td class="ci">not measurable</td><td class="num">0.000</td>
-  <td class="num alarm">0.366</td><td class="num alarm">1.000</td><td class="num">0</td><td class="num">0</td></tr>
+<tr><td>Whisper large-v3</td><td class="num">0.519</td><td class="ci">0.41 to 0.62</td>
+    <td class="num">0.399</td><td class="num ok">0.238</td><td class="num">0.675</td><td class="num ok">yes</td></tr>
+<tr><td>Whisper large-v3-turbo</td><td class="num">0.483</td><td class="ci">0.35 to 0.59</td>
+    <td class="num">0.355</td><td class="num ok">0.229</td><td class="num">0.650</td><td class="num ok">yes</td></tr>
+<tr><td>Parakeet-TDT v3</td><td class="num">0.481</td><td class="ci">0.39 to 0.56</td>
+    <td class="num">0.362</td><td class="num ok">0.194</td><td class="num warn">0.748</td><td class="num ok">yes</td></tr>
+<tr><td>SeamlessM4T v2</td><td class="num">0.279</td><td class="ci">0.17 to 0.39</td>
+    <td class="num">0.174</td><td class="num alarm">0.543</td><td class="num alarm">0.865</td><td class="num alarm">no</td></tr>
+<tr><td>wav2vec2 XLSR Russian</td><td class="num">0.000</td><td class="ci">0.00 to 0.00</td>
+    <td class="num">0.000</td><td class="num alarm">0.366</td><td class="num alarm">1.000</td><td class="num alarm">no</td></tr>
 </tbody>
 </table>
 </div>
 
-<p class="meta">Guard is the usability guardrail, substitutions plus deletions over reference
-words, threshold 0.30. CS-WER is word error rate measured only on code switched spans.
-Collapsed counts segments where output fell below half the stock length. Invented counts
-segments containing a planted term that is never spoken.</p>
+<p><strong>The top three are not separated.</strong> large-v3 leads on term F1 by 3.6 points
+over turbo and 3.8 over Parakeet, and neither gap survives the paired test. Read the power
+table below before treating that ordering as a result: this corpus detects a 3 point
+difference about one time in ten. Two engines are excluded by the guardrail.</p>
 
-<p>The decision procedure, run exactly as pre declared, selects
-<code>large-v3-turbo + glossary</code>. It has the best term F1 among configurations that
-clear the guardrail, and the paired test separates it from every rival that clears the
-guardrail: p = 0.009 against stock large-v3, significant after Holm correction, and stable
-at every block size tested. The stored results JSON names the same winner as this page.</p>
+<p>wav2vec2's F1 of 0.000 is an operational zero, not a missing measurement: it proposed no
+glossary term anywhere in 49 minutes against a reference containing 138 occurrences.</p>
+
+<h2>Result 2: does a glossary prompt help?</h2>
+
+<p>Only Whisper accepts a text prompt, so this is a within-family ablation, not an engine
+comparison. It cannot show that Whisper beats engines that never received terminology
+assistance, only which Whisper configuration to run.</p>
+
+<div class="scroll">
+<table>
+<colgroup><col style="width: 24ch"><col style="width: 8ch"><col style="width: 8ch"><col style="width: 8ch"><col style="width: 10ch"><col style="width: 10ch"></colgroup>
+<thead><tr>
+  <th>Configuration</th><th class="num">Term F1</th><th class="num">Recall</th>
+  <th class="num">Guard</th><th class="num">Collapsed</th><th class="num">Fabricated</th>
+</tr></thead>
+<tbody>
+<tr class="pick"><td>large-v3-turbo + glossary<span class="tag">recommended, with review</span></td>
+    <td class="num">0.675</td><td class="num">0.609</td><td class="num ok">0.206</td>
+    <td class="num ok">0</td><td class="num warn">5</td></tr>
+<tr><td>large-v3-turbo, stock</td><td class="num">0.483</td><td class="num">0.355</td>
+    <td class="num ok">0.229</td><td class="num ok">0</td><td class="num ok">0</td></tr>
+<tr><td>large-v3 + glossary</td><td class="num">0.688</td><td class="num">0.630</td>
+    <td class="num alarm">0.393</td><td class="num alarm">19</td><td class="num ok">0</td></tr>
+<tr><td>large-v3, stock</td><td class="num">0.519</td><td class="num">0.399</td>
+    <td class="num ok">0.238</td><td class="num ok">0</td><td class="num ok">0</td></tr>
+</tbody>
+</table>
+</div>
+
+<p class="meta">Guard is the amended usability guardrail, substitutions plus deletions over
+reference words, ceiling 0.30. Collapsed counts segments where a prompted run produced under
+half the words its own stock counterpart produced. Fabricated counts segments containing one
+of ten planted terms that are never spoken.</p>
+
+<p><strong>On this corpus the glossary prompt raised technical-term recall substantially for
+both Whisper variants</strong>, from 0.399 to 0.630 for large-v3 and from 0.355 to 0.609 for
+turbo. For turbo it did so without collapse, but at the cost of fabricated terms in 5 of 99
+segments. For large-v3 the apparent gain is not usable at all, for the reason in the next
+section. We cannot say whether prompting would help the engines that have no prompt
+interface, because we could not test it on them.</p>
+
+<h2>What changed our mind</h2>
+
+<p>An earlier version of this report recommended <strong>large-v3 with a glossary
+prompt</strong>. It had the highest technical-term score of anything we measured, 0.688 F1
+and 0.630 recall, comfortably ahead of the configuration we now recommend.</p>
+
+<p>That number was an artefact, and finding out why is the most instructive result here.</p>
+
+<p>Prompted large-v3 does not always transcribe. On <strong>19 of 99 segments</strong> it
+stops and emits a short summary of the topic instead:</p>
+
+<div class="ev"><span class="who">00:00  stock large-v3    </span>Итак, меня зовут Владислав Клеменко. Я бы хотел сегодня рассказать пару слов о нашем опыте разработки и эксплуатации оператора...
+<span class="who">00:00  large-v3 + gloss. </span><b>Кликхаус оператор</b>
+<span class="who">10:30  stock large-v3    </span>от практических задач. Первая задача, с чего мы все хотим начать, это, конечно же, просто запустить первый пример...
+<span class="who">10:30  large-v3 + gloss. </span><b>Практические задачи</b></div>
+
+<p>The speaker talks for 30 seconds; the transcript says two words. And those two words are
+almost always glossary terms, because the prompt is a list of glossary terms. So term recall
+went <em>up</em> while the transcript became worthless. A metric can be honest, correctly
+computed, and still measure the wrong thing.</p>
+
+<p>We found this while investigating something else, a disagreement between the stored
+results file and this page. The first diagnosis was wrong: we assumed our own code was
+stripping the prompt out of the output by character count and taking real text with it. That
+was a real bug and it was fixed, using Whisper's own transcript marker instead of a length
+guess. The collapse survived the fix, which is how we learned it came from the model rather
+than from us.</p>
+
+<p>Two things follow, and both are now built in. The guardrail catches this configuration
+without anyone needing to notice it by eye: it sits at 0.393 against a ceiling of 0.30. And
+the ranking code now refuses to consider any configuration with a collapsed segment before
+it looks at a single quality metric, because a system that stopped transcribing should not be
+eligible to win a transcription benchmark.</p>
+
+<p>The recommendation moved to prompted turbo, which shows zero collapse on the identical
+prompt.</p>
 
 <h2>The evidence, so you can check us</h2>
 
@@ -212,10 +263,12 @@ emitted no Latin script anywhere in 49 minutes, turning every English term into 
 syllables. On WER it is last by a modest margin. On the question the employer asked, it is
 unusable.</p>
 
-<p>Parakeet is the opposite trap. It has the best Russian only error rate in the field,
-0.269, better than either Whisper, and the largest code switch penalty, +0.358. Judged on
-Russian fluency it looks like the strongest engine here. Judged on the speech this employer
-actually has, it is third.</p>
+<p>Parakeet is the opposite trap. It has the <strong>lowest observed word error rate on the
+Russian-only slice</strong>, 0.269, below either Whisper, together with the largest code
+switch penalty, +0.358. That slice is 7 blocks and carries no interval, so the right claim is
+the one just made, a point estimate on a small slice, and not "best on Russian". Even as a
+point estimate it is the useful shape: an engine can look strongest on Russian fluency and
+still be third on the speech this employer actually has.</p>
 
 <div class="scroll">
 <table>
@@ -236,6 +289,49 @@ The Russian only slice is small, so treat its ordering as indicative rather than
 mixed morphology slice (<code>ClickHouse-е</code>) could not be measured at all, because our
 normalisation splits hyphens and no single token then carries both scripts. That follows from
 a deliberate scoring choice and is reported as unmeasured rather than approximated.</p>
+
+<h2>What was frozen, and what changed afterwards</h2>
+
+<p>The evaluation design was committed before any engine ran, and we are not claiming more
+than that. Several parts of the procedure that produced the numbers above were added or
+amended later. Some arrived after engine output already existed, which weakens them, and the
+table says which.</p>
+
+<div class="scroll">
+<table>
+<colgroup><col style="width: 26ch"><col style="width: 13ch"><col style="width: 14ch"><col></colgroup>
+<thead><tr><th>Element</th><th>Status</th><th>Output existed?</th><th>Why</th></tr></thead>
+<tbody>
+<tr><td>Primary metric, IT-term F1</td><td class="ok">frozen</td><td>no</td>
+    <td>Declared in the freeze commit, unchanged since.</td></tr>
+<tr><td>Two tracks never mixed</td><td class="ok">frozen</td><td>no</td>
+    <td>Declared in the freeze commit. This report follows it: engine ranking and prompt ablation are separate.</td></tr>
+<tr><td>Corpus and glossary</td><td class="warn">amended</td><td>no</td>
+    <td>Corpus changed to a talk that ships with a publisher transcript, so the reference is independent of every engine ranked.</td></tr>
+<tr><td>Moving-block resampling</td><td class="warn">added</td><td>yes</td>
+    <td>The original plan resampled units independently. Segments of one talk are correlated, so those intervals were too narrow. Correcting it changed no verdict.</td></tr>
+<tr><td>98% coverage floor</td><td class="warn">added</td><td>yes</td>
+    <td>Operational policy, not a finding. Every configuration returned 99 of 99, so it excluded nothing here.</td></tr>
+<tr><td>Distractor terms</td><td class="warn">added</td><td>yes</td>
+    <td>Added to detect prompt-induced fabrication. It found some.</td></tr>
+<tr><td>Collapse ceiling of zero</td><td class="warn">added</td><td>yes</td>
+    <td>Added after discovering prompted large-v3 collapsing. It excludes that configuration.</td></tr>
+<tr><td>Guardrail metric</td><td class="alarm">amended</td><td>yes</td>
+    <td>Changed from overall WER to substitutions plus deletions. Threshold unchanged at 0.30. Reasoning and evidence below.</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The guardrail change is the one that deserves the most scepticism, because it happened
+after we had seen every number. Three things are worth weighing against it. The threshold
+itself, 0.30, was never touched. The reason for the change was predicted in writing when we
+adopted this corpus, before the results existed. And the amended rule <strong>still rejects
+three of seven configurations, including the one this report previously
+recommended</strong>. A threshold moved to rescue a favourite would not have failed the
+favourite.</p>
+
+<p>Every entry above is dated in <code>PREREGISTRATION.md</code> section 12, each recording
+whether engine output existed at the time.</p>
 
 <h2>The guardrail, and a change made after results existed</h2>
 
@@ -275,6 +371,27 @@ of seven configurations, including <code>large-v3 + glossary</code>, which an ea
 of this report recommended. A threshold moved to rescue a favourite would not have failed the
 favourite.</p>
 
+<p><strong>It also has a blind spot, and we did not paper over it.</strong> Excluding
+insertions stops charging engines for speech the publisher edited out, and at the same time
+means a configuration could append unlimited invented text and still pass. Prompted turbo,
+the configuration we recommend, runs a 0.394 insertion rate while passing the guardrail at
+0.206. So the guardrail does not stand alone. Three operational guards, which are not
+vulnerable to the same blind spot, are applied <em>before</em> any quality metric is
+consulted:</p>
+
+<ul>
+<li><strong>Raw coverage at least 98%</strong>, counted from returned files against the
+manifest rather than from scored blocks. Scored blocks cannot detect a missing segment: the
+scorer emits one score per reference block whether or not the engine returned anything, so a
+configuration that dropped a quarter of the audio would still produce a full-length score
+list and a flattering average.</li>
+<li><strong>Collapsed segments must be zero.</strong> This is what excludes prompted
+large-v3.</li>
+<li><strong>Fabricated-term segments are reported against a declared ceiling</strong> rather
+than folded into a score. Prompted turbo sits at 5 of 99, which is why the recommendation is
+conditional on human review rather than unqualified.</li>
+</ul>
+
 <h2>How much can 49 minutes prove?</h2>
 
 <p>Before trusting any claim that two engines are equivalent, we simulated systems differing
@@ -292,6 +409,9 @@ by a known amount and ran the same paired moving block bootstrap the real compar
 </tbody>
 </table>
 </div>
+
+<p class="meta">All comparisons on this page, including the rankings above, use the paired
+moving-block resampler. Nothing published here uses independent-unit resampling.</p>
 
 <p>Differences below roughly 15 points of term F1 are not resolvable on this corpus. The two
 stock Whispers differ by 3.6 points, so they are unresolved rather than proven equal. The
