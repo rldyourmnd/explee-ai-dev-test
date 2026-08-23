@@ -259,6 +259,17 @@ def check_snapshot(problems: list[str], strict: bool) -> None:
     for token in ("sha256", "span", "gap"):
         if token not in flat:
             _fail(problems, f"{rel}: no '{token}' recorded")
+    # The snapshot's own integrity property: the copy's digest must equal the
+    # host's digest over the same leading byte count. A snapshot that failed its
+    # prefix check is not evidence of anything, so it must not pass silently
+    # just because the file exists and carries a span.
+    if meta.get("faithful_prefix") is False:
+        _fail(problems, f"{rel}: faithful_prefix is false — the copy does not match "
+                        f"the host's prefix digest, so this snapshot proves nothing")
+    for key in ("collector_before", "collector_after"):
+        if meta.get(key) not in (None, "active"):
+            _fail(problems, f"{rel}: {key} is {meta.get(key)!r}, not 'active'")
+
     span = None
     for key in ("span_s", "span_seconds", "window_span_s", "elapsed_s"):
         if isinstance(meta.get(key), (int, float)):
