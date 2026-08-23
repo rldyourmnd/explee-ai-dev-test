@@ -76,7 +76,15 @@ these; the minimum is a floor, not a finish line.
 ## Deployment state
 
 **The deployed build is this repository's code.** Verified rather than asserted:
-`monitor.py` hashes to `c2f8de127cb5f2af` locally and on the host.
+`monitor.py` hashes to `109c10aa34ab55db` locally and on the host. That hash is
+**T1**, the marker after which the monitor stopped changing, and the clean
+window runs from it.
+
+An earlier version of this sentence named `c2f8de127cb5f2af`, which was true of
+the 22:20Z deploy and stopped being true at 22:44Z when a second deploy shipped
+the `--accent` fix. A pinned hash in prose goes stale the moment the file moves,
+which is the argument for `sha256sum` in a command rather than a number in a
+sentence.
 
 Until 22:20Z it was deliberately behind, and the reason is worth keeping. Nothing
 about the running system changed while the six-hour minimum was still open,
@@ -90,12 +98,15 @@ The raw sampler was not touched by any of it. It has `NRestarts=0` and has been
 continuously active since T0, and the container mounts the raw data read-only
 (`rw=false`), so the deploy path cannot write to the window even by mistake.
 
-**The audit now reconciles every line, and it did not before.** The previous
-`alerts.jsonl` contained a `package_exhaustion` line for `bounceban` that
-disappeared when either a +3 credit reverted blip or a +3 credit top-up was
-removed from its estimation window: a 180 hour projection that a 0.04% change in
-the balance could flip. The task text is explicit that balances being topped up
-is normal operations and not an incident, so that line should never have shipped.
+**No alert is caused by normal operations any more, and one used to be.** The
+`alerts.jsonl` produced by the previous build contained a `package_exhaustion`
+line for `bounceban` that disappeared when either a +3 credit reverted blip or a
++3 credit top-up was removed from its estimation window: a 180 hour projection
+that a 0.04% change in the balance could flip. The task text is explicit that
+balances being topped up is normal operations and not an incident, so that line
+should never have shipped.
+
+Measured at the 22:20Z re-derivation, before and after:
 
 | | before | after |
 |---|---:|---:|
@@ -108,6 +119,30 @@ What removed it was the uncertainty guard, which requires a projection to
 survive its own burn estimate recomputed one MAD slower. What found it was the
 audit, running against the build that was actually deployed and reporting a
 failure rather than a green tick.
+
+**The current audit reports one unreconciled line, and it is not that class.**
+The monitor keeps running, so `alerts.jsonl` keeps growing; it is 13 lines at the
+last regeneration, and the thirteenth is a `critical` runway on `openrouter`. It
+fails to reconcile on exactly one of nine compared evidence fields:
+
+```
+field 'depleted_at': line says '2026-08-24T22:35:31.863Z',
+                     re-run  gives '2026-08-24T22:35:31.862Z'
+```
+
+One millisecond, on a timestamp projected 24 hours ahead. `burn_per_h`,
+`runway_h`, `value`, `samples` and the rest match exactly, and the counterfactual
+checks are clean: 0 caused solely by a top-up, 0 solely by a reverted blip. It is
+float rounding in converting a runway in hours to an absolute instant, not a
+disagreement about whether the alert should exist.
+
+It is left failing on purpose. Fixing it means either changing the projection
+arithmetic or giving the comparator a tolerance, and a comparator with a
+tolerance is a weaker instrument than one that reports a one millisecond
+disagreement. Both are changes to a file that is frozen at T1. The honest
+artifact is an audit that says exactly what differs, and a document that says
+why that is acceptable, rather than a green tick bought by loosening the check
+that produced it.
 
 One clarification, because "regenerated on a clean window" sounds like more than
 it is: the monitor never writes raw data. The sampler does, and it has not

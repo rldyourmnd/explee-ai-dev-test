@@ -26,12 +26,12 @@ so the document cannot claim a verdict the audit did not produce.
 
 | provenance | |
 |---|---|
-| alert lines audited | 12 |
-| unreconciled | **0** |
+| alert lines audited | 13 |
+| unreconciled | **1** |
 | caused solely by a top-up | **0** |
 | caused solely by a reverted blip | **0** |
-| raw records | 11,888 |
-| repository | `c0dfefe` |
+| raw records | 12,848 |
+| repository | `0005510` |
 | regenerate | `uv run tools/alert_audit_doc.py` |
 
 ## Every line
@@ -50,17 +50,16 @@ so the document cannot claim a verdict the audit did not produce.
 | 10 | 2026-08-23T21:05:41.043Z | `unavailable` | `zerobounce` | 930.5 s | yes |
 | 11 | 2026-08-23T21:08:41.192Z | `burn_anomaly` | `meta_ads` | 7.1 MAD | yes |
 | 12 | 2026-08-23T22:08:44.011Z | `burn_anomaly` | `meta_ads` | 11.7 MAD | yes |
+| 13 | 2026-08-23T22:37:24.129Z | `runway` | `openrouter` | 24.0 h | **no** |
 
 ## State of this audit
 
-**Every one of the 12 lines reconciles.** Each rule was re-run at the instant its line was written, every evidence field compared, and each incident recomputed with any nearby top-up, package reset or reverted blip undone. No line survives only because of one of those events, which is the property the task text requires: a balance being topped up is normal operations, not an incident.
-
-This was not always true. An earlier build shipped a `package_exhaustion` line for `bounceban` that disappeared when either a +3 credit reverted blip or a +3 credit top-up was removed from its estimation window: a 180 hour projection that a 0.04% perturbation of the balance could flip. The uncertainty guard, which requires a projection to survive its own burn estimate recomputed one MAD slower, is what removed it. The audit is what found it.
+**This audit fails: 1 of 13 lines do not reconcile**, 0 caused solely by a top-up and 0 solely by a reverted blip. The failing lines are marked in the table above and detailed below. A failing audit is published rather than hidden, because the alternative is a document that agrees with itself and not with the data.
 
 ## Full reconciliation output
 
 ```
-Reconciling 12 alert lines against the raw window
+Reconciling 13 alert lines against the raw window
 
 [1] 2026-08-23T16:48:58.531Z  warning  package_exhaustion  elevenlabs
      elevenlabs (Deepgram) is projected to exhaust its credits package 44.0 h from now, 199.2 h before the 2026-09-01 refresh; 867,131 of 1,000,000 credits left, bur
@@ -151,6 +150,14 @@ Reconciling 12 alert lines against the raw window
      no top-up, reset or blip in the estimation window, so nothing to attribute the alert to
      reconciled
 
+[13] 2026-08-23T22:37:24.129Z  critical  runway  openrouter
+     openrouter (Groq, prepaid_balance) reaches zero in 24.0 h at the observed burn of 8.50 USD/h; 203.72 USD left, projected 2026-08-24T22:35:31.863Z
+     re-ran runway: 9 evidence fields compared
+     sustained 21206s of 300s required
+     band worsened runway:warning:lt48 -> runway:critical:lt24
+     no top-up, reset or blip in the estimation window, so nothing to attribute the alert to
+     UNRECONCILED: field 'depleted_at': line says '2026-08-24T22:35:31.863Z', re-run gives '2026-08-24T22:35:31.862Z'
+
 Repeat lines, and what each one added
 
   meta_ads / burn_anomaly: 2 lines
@@ -159,11 +166,12 @@ Repeat lines, and what each one added
     + 20.0 min  package_exhaustion:ge168 -> package_exhaustion:lt168  runway 182.0 h -> 157.1 h
     + 13.5 min  package_exhaustion:lt168 -> package_exhaustion:lt72  runway 157.1 h -> 71.8 h
     + 21.5 min  package_exhaustion:lt72 -> package_exhaustion:lt48  runway 71.8 h -> 47.8 h
-  openrouter / runway: 2 lines
+  openrouter / runway: 3 lines
     + 74.6 min  runway:warning:lt72 -> runway:warning:lt48  runway 55.6 h -> 47.9 h
+    +273.9 min  runway:warning:lt48 -> runway:critical:lt24  runway 47.9 h -> 24.0 h
 
-unreconciled lines: 0 of 12
+unreconciled lines: 1 of 13
 
-auditee sha256[:16]: d5b3f6c75913dddb -> d5b3f6c75913dddb  unchanged
-[replay] 11888 records from the raw window
+auditee sha256[:16]: ed2c73f75789dbe3 -> ed2c73f75789dbe3  unchanged
+[replay] 12848 records from the raw window
 ```
