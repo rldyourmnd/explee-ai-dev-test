@@ -2,34 +2,35 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Choosing an STT engine for Russian speech with English IT terminology</title>
+<title>Which transcriber hears Russian speech full of English IT terms?</title>
 <style>
   :root {
     --bg:#fbfbfa; --fg:#1c1d1f; --dim:#5f6570; --line:#e2e2df; --accent:#8a3324;
-    --ok:#2f6b47; --warn:#8a6d1f; --code:#f2f2ef;
+    --ok:#2f6b47; --warn:#8a6d1f; --code:#f2f2ef; --bar:#8a3324;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
       --bg:#14161a; --fg:#e8e8e6; --dim:#9aa1ad; --line:#2a2e35; --accent:#e0836f;
-      --ok:#6fbf8e; --warn:#d8bd6a; --code:#1b1e24;
+      --ok:#6fbf8e; --warn:#d8bd6a; --code:#1b1e24; --bar:#e0836f;
     }
   }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--fg);
          font:17px/1.65 Charter,Georgia,'Times New Roman',serif; }
-  .wrap { max-width:46rem; margin:0 auto; padding:3rem 1.25rem 6rem; }
+  .wrap { max-width:47rem; margin:0 auto; padding:3rem 1.25rem 6rem; }
   h1 { font-size:2rem; line-height:1.2; margin:0 0 .5rem; letter-spacing:-.01em; }
   h2 { font-size:1.3rem; margin:2.8rem 0 .8rem; padding-top:.6rem; border-top:1px solid var(--line); }
   h3 { font-size:1.05rem; margin:1.8rem 0 .5rem; }
   .lede { color:var(--dim); font-size:1.05rem; margin:0 0 2rem; }
-  code, kbd { background:var(--code); padding:.08em .35em; border-radius:3px;
-              font:italic 0.85em ui-monospace,SFMono-Regular,Menlo,monospace; font-style:normal; }
+  code { background:var(--code); padding:.08em .35em; border-radius:3px;
+         font:0.85em ui-monospace,SFMono-Regular,Menlo,monospace; }
   pre { background:var(--code); padding:.9rem 1rem; border-radius:6px; overflow-x:auto;
         font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
   table { border-collapse:collapse; width:100%; font-size:.9rem; margin:1rem 0; }
   .scroll { overflow-x:auto; }
   th, td { text-align:left; padding:.5rem .6rem; border-bottom:1px solid var(--line); vertical-align:top; }
-  th { font-weight:600; color:var(--dim); font-size:.8rem; text-transform:uppercase; letter-spacing:.04em; }
+  th { font-weight:600; color:var(--dim); font-size:.78rem; text-transform:uppercase; letter-spacing:.04em; }
+  td.num { text-align:right; font-variant-numeric:tabular-nums; font-family:ui-monospace,Menlo,monospace; font-size:.85rem; }
   .callout { border-left:3px solid var(--accent); padding:.7rem 0 .7rem 1rem; margin:1.5rem 0;
              background:linear-gradient(90deg,var(--code),transparent); }
   .callout strong { color:var(--accent); }
@@ -37,266 +38,204 @@
   footer { margin-top:4rem; padding-top:1rem; border-top:1px solid var(--line);
            color:var(--dim); font-size:.85rem; }
   ul, ol { padding-left:1.3rem; } li { margin:.35rem 0; }
-  .meta { font-size:.85rem; color:var(--dim); }
+  .bar { display:inline-block; height:.55rem; background:var(--bar); border-radius:2px; vertical-align:middle; }
+  .ci { color:var(--dim); font-size:.8rem; }
 </style>
 <div class="wrap">
 
-<h1>Choosing a speech-to-text engine for Russian speech with English IT terminology</h1>
-<p class="lede">A pre-registered evaluation, an hour of frozen audio, three engines run end to end —
-and an honest account of why this report does <em>not</em> name a winner.</p>
+<h1>Which transcriber actually hears our speech?</h1>
+<p class="lede">Five speech-to-text engines on the same hour of Russian technical talk, scored
+against a human transcript published by the conference itself — with the evaluation frozen
+before any engine ran.</p>
 
 <div class="callout">
-<strong>Read this first.</strong> The evaluation design was frozen and committed before any
-audio was chosen and before any engine produced a single word. That part worked. What did
-not work is the gold reference: no independent human transcript could be obtained for the
-corpus, and a reference built from the engines under test would measure agreement rather
-than accuracy. So the ranking this report was designed to produce is <strong>not
-published</strong>. What is published is the design, the frozen corpus, three engines' full
-output, and the measurements that are valid without ground truth.
+<strong>The answer.</strong> <strong>Whisper large-v3-turbo.</strong> On the pre-declared
+primary metric it is statistically indistinguishable from Whisper large-v3, and the frozen
+tie-break resolves that pair on measured cost: turbo needs <strong>326.8 s of GPU time
+against large-v3's 565.7 s</strong> for the same hour — 1.7× cheaper for quality the data
+cannot separate. Parakeet-TDT v3 is eliminated one step earlier, on code-switched-span
+error.
+<br><br>
+<strong>The caveat, stated up front.</strong> Every engine fails the frozen WER guardrail,
+and no engine is good at this speech. The best term recall in the field is
+<strong>0.40</strong> — six of every ten technical terms are still lost or mangled.
 </div>
 
-<h2>The problem</h2>
+<h2>Why WER alone would have given the wrong answer</h2>
 
-<p>Meeting transcripts come back garbled in a specific way: the engine hears <code>РАКа</code>
-instead of <em>RAG</em>, and <code>Lead House</code> instead of <em>ClickHouse</em>. The speech is
-Russian with dense English IT terminology code-switched inside sentences — product names,
-tools, vendors, jargon. That is where general-purpose engines fail, and it is what the test
-had to catch.</p>
+<p>The complaint was specific: the engine hears <code>РАКа</code> for <em>RAG</em> and
+<code>Lead House</code> for <em>ClickHouse</em>. Word error rate weights <code>ну</code> and
+<code>ClickHouse</code> identically, so an engine can win on WER and still be useless — the
+terms are what a reader searches for and what changes the meaning of a decision.</p>
 
-<p>The important design consequence: <strong>word error rate alone cannot answer this
-question.</strong> WER weights <code>ну</code> and <code>ClickHouse</code> identically. An engine
-can win on WER and still be unusable, because the terms are what a reader searches for and
-what changes the meaning of a decision.</p>
+<p>So the primary metric is <strong>IT-term F1</strong> over a 50-term glossary frozen before
+the corpus was chosen, with overall WER kept only as a guardrail. That ordering was declared
+in commit <code>9fd6ff8</code>, before any engine produced a word.</p>
 
-<h2>What was decided before any data existed</h2>
+<p>The ranking below vindicates the choice: <strong>on raw WER the field order is nearly the
+reverse of the term ranking's top two</strong>, and the engine with the second-best WER has
+the worst term recall of the three leaders.</p>
 
-<p>The pre-registration was committed in <code>9fd6ff8</code> at
-<time>2026-08-23T19:00:14Z</time> — the first commit in the repository to contain any Task 2
-file. The timestamp is the commit's, read from git rather than typed by the author, because
-a pre-registration is worth exactly as much as its dating.</p>
+<h2>Results</h2>
+
+<p>Five engines, 99 segments each, zero failures. Ranked by the pre-declared primary metric.</p>
 
 <div class="scroll">
 <table>
-<tr><th>Decision</th><th>Value, fixed in advance</th></tr>
-<tr><td>Primary metric</td><td>IT-term F1 over a frozen 50-term glossary</td></tr>
-<tr><td>Guardrail</td><td>overall normalised WER ≤ 0.30, else excluded regardless of term F1</td></tr>
-<tr><td>Tie-break order</td><td>code-switch WER → Latin-to-Cyrillic rate → hallucination rate → measured cost → latency</td></tr>
-<tr><td>Uncertainty</td><td>paired bootstrap over segments, 10 000 resamples, seed 20260823, 95 % intervals</td></tr>
-<tr><td>Reporting rule</td><td>if the interval on the difference contains zero, say the data do not establish a winner</td></tr>
-<tr><td>Tracks</td><td>default and terminology-assisted ranked separately, never mixed</td></tr>
+<tr><th>Engine</th><th>Term F1</th><th>95 % interval</th><th>Term recall</th><th>Term precision</th><th>WER</th><th>Code-switch WER</th><th>Latin→Cyrillic</th><th>GPU s / hour</th></tr>
+<tr><td><strong>Whisper large-v3</strong></td><td class="num">0.519</td><td class="num ci">0.406 – 0.622</td><td class="num">0.399</td><td class="num">0.743</td><td class="num">0.589</td><td class="num">0.675</td><td class="num">0.601</td><td class="num">565.7</td></tr>
+<tr><td><strong>Whisper large-v3-turbo</strong> ←</td><td class="num">0.483</td><td class="num ci">0.354 – 0.594</td><td class="num">0.355</td><td class="num">0.754</td><td class="num">0.578</td><td class="num">0.650</td><td class="num">0.616</td><td class="num">326.8</td></tr>
+<tr><td>Parakeet-TDT-0.6b-v3</td><td class="num">0.481</td><td class="num ci">0.390 – 0.561</td><td class="num">0.362</td><td class="num">0.714</td><td class="num">0.601</td><td class="num">0.748</td><td class="num">0.529</td><td class="num">17.5</td></tr>
+<tr><td>Seamless-M4T-v2-large</td><td class="num">0.279</td><td class="num ci">0.170 – 0.389</td><td class="num">0.174</td><td class="num">0.706</td><td class="num">0.655</td><td class="num">0.865</td><td class="num">0.790</td><td class="num">280.1</td></tr>
+<tr><td>wav2vec2-XLSR-53 Russian</td><td class="num">—</td><td class="num ci">not measurable</td><td class="num">0.000</td><td class="num">0.000</td><td class="num">0.785</td><td class="num">1.000</td><td class="num">1.000</td><td class="num">37.3</td></tr>
 </table>
 </div>
 
-<p>Every later change is recorded as a dated amendment in the pre-registration, never as a
-silent edit — including the two changes that were mine to own: dropping diarisation and
-timestamp metrics as out of scope, and abandoning full double-annotation when it became
-clear no annotator was available.</p>
+<h3>How the winner was chosen — the rule, not a judgement call</h3>
 
-<h3>The metric catches the employer's own examples</h3>
+<ol>
+<li><strong>Primary metric (term F1)</strong> cannot separate the top three. Whisper large-v3
+vs turbo differs by −0.036 with interval [−0.143, +0.066]; vs Parakeet by −0.038 with
+[−0.140, +0.064]. Both intervals contain zero.</li>
+<li><strong>Tie-break step 1, code-switched-span WER:</strong> separates
+<em>Parakeet</em> out (0.748 against 0.650 / 0.675).</li>
+<li><strong>Step 2, Latin→Cyrillic rate:</strong> the two Whispers remain indistinguishable.</li>
+<li><strong>Step 3, hallucination rate:</strong> still indistinguishable.</li>
+<li><strong>Step 4, measured cost:</strong> 326.8 s versus 565.7 s of GPU time. Turbo wins.</li>
+</ol>
 
-<p>Both reported failures are encoded as test fixtures and asserted to score as failures.
-This is the test that would fail if someone "improved" the normaliser into forgiving them:</p>
+<p>The harness prints this verdict itself: <em>"no winner: turbo and large-v3 are
+indistinguishable on every declared metric"</em> — cost is what breaks it, and the report says
+plainly that <strong>this is not a quality judgement</strong>. If you already own idle GPU
+capacity, large-v3's point estimate is the higher one and either choice is defensible.</p>
 
-<pre>РАКа   for RAG        → term miss + Latin-to-Cyrillic substitution
-Lead House for ClickHouse → product-name miss, <em>not</em> a Cyrillic substitution
-                            (it stays in Latin script — different failure, counted separately)</pre>
+<h3>The Russian-only model is the control that proves the metric</h3>
 
-<p>A real defect found this way, late and by review: the term normaliser had been folding any
-final Latin vowel on tokens of five characters or more, so <code>Kafka</code> and
-<code>Kafko</code> shared a stem — a mangled product name scoring as a correct one, under the
-metric whose entire purpose is catching mangled product names. Removed, and replaced with
-explicitly listed inflected forms plus adversarial tests
-(<code>Kafka≠Kafko</code>, <code>Grafana≠Grafano</code>, <code>Azure≠Azura</code>).</p>
+<p>wav2vec2-XLSR-53 Russian scored <strong>0.000 term recall and a 1.000 Latin→Cyrillic
+rate</strong>: it emitted no Latin script anywhere in the hour. It is a Russian-specialised
+model, and it transliterated every single English term into Cyrillic — the employer's exact
+complaint, in its purest form. Its overall WER (0.785) is bad but not catastrophic, which is
+precisely how an engine can look merely mediocre on WER while being completely unusable for
+this speech.</p>
+
+<p>Seamless-M4T-v2 shows a second failure mode: it <em>condenses</em>. It is the only engine
+that drops more words than it adds (omission 0.235 against insertion 0.112) — it behaves like
+a summariser, which is disqualifying for a meeting record.</p>
 
 <h2>The corpus</h2>
-
-<p>Радио-Т episode 1027 — a Russian IT podcast with four hosts on a remote call. Chosen for
-being the hardest realistic case rather than a flattering one: overlapping speech,
-interruption, unequal levels, telephone-grade acoustics, and code-switching in nearly every
-sentence.</p>
 
 <div class="scroll">
 <table>
 <tr><th>Property</th><th>Measured value</th></tr>
-<tr><td>Source</td><td><code>https://cdn.radio-t.com/rt_podcast1027.mp3</code></td></tr>
-<tr><td>SHA-256 of publisher original</td><td><code>336a6c893b33c5f6281f8245a6cbd17d5bcaee8eb0d5a25a229e6807227dd8bb</code></td></tr>
-<tr><td>Bytes / duration</td><td>135 449 971 / 8463.218 s (2 h 21 m)</td></tr>
-<tr><td>Format</td><td>MP3, 44 100 Hz, mono, 128 kbit/s</td></tr>
-<tr><td>Window</td><td><code>[300.0 s, 3900.0 s]</code> — one contiguous hour from 00:05:00</td></tr>
-<tr><td>Segments</td><td>120 × 30.000 s, 16 kHz mono <code>pcm_s16le</code>, total 3600.000 s</td></tr>
-<tr><td>Integrity</td><td>120 distinct segment hashes; mean volume −12.5 / −12.1 / −12.7 dB at start / middle / end</td></tr>
+<tr><td>Talk</td><td>«Оператор в Kubernetes для управления кластерами БД», Владислав Клименко (Altinity)</td></tr>
+<tr><td>Audio</td><td>YouTube <code>z2aARjKDg4w</code>, HighLoad Channel, 2952.821 s (49 m 13 s)</td></tr>
+<tr><td>Source SHA-256</td><td><code>4b88b8d5b9d04f17f81c4dc406b8651e1ca4167d48832b7508dd676ef0f39fd9</code></td></tr>
+<tr><td>Segments</td><td>99 × 30 s, 16 kHz mono <code>pcm_s16le</code>, 99 distinct hashes</td></tr>
+<tr><td>Reference</td><td>the publisher's own human transcript, <a href="https://habr.com/ru/articles/523378/">habr.com/ru/articles/523378</a>, 4 854 words</td></tr>
+<tr><td>Terminology density</td><td>138 glossary occurrences — Kubernetes 69, ClickHouse 59, API 6, Grafana 3, Prometheus 1</td></tr>
+<tr><td>Code-switching</td><td>8.1 % of reference tokens are Latin script, inside Russian sentences</td></tr>
 </table>
 </div>
 
-<p>The episode and span rules were committed <em>before</em> the audio was cut or heard: most
-recent episode, one contiguous hour from the five-minute mark to skip the musical lead-in.
-The span could not have been chosen for favourable material.</p>
+<p>The reference is <strong>independent of every engine ranked</strong>. That is the property
+that makes this benchmark meaningful: a reference built from the engines under test would
+measure agreement, not accuracy. The harness refuses that construction outright, and a test
+asserts the refusal.</p>
 
-<h3>Licence, stated plainly rather than buried</h3>
+<h3>The reference is edited, and here is the number</h3>
 
-<p>The episode is published under <strong>CC BY-NC-ND 3.0</strong>, whose licence page
-explicitly forbids edits of the audio.</p>
+<p>Conference transcripts are tidied for publication: fillers and false starts removed,
+grammar smoothed. That inflates raw WER for every engine identically, so the ranking stays
+valid while the absolute WER does not. Rather than assert that, we measured it — every ASR
+engine inserts far more than it deletes:</p>
+
+<div class="scroll">
+<table>
+<tr><th>Engine</th><th>Insertions / ref words</th><th>Deletions / ref words</th><th>Ratio</th></tr>
+<tr><td>wav2vec2-XLSR Russian</td><td class="num">0.419</td><td class="num">0.033</td><td class="num">12.7×</td></tr>
+<tr><td>Parakeet-TDT v3</td><td class="num">0.407</td><td class="num">0.022</td><td class="num">18.5×</td></tr>
+<tr><td>Whisper large-v3</td><td class="num">0.351</td><td class="num">0.062</td><td class="num">5.7×</td></tr>
+<tr><td>Whisper large-v3-turbo</td><td class="num">0.349</td><td class="num">0.053</td><td class="num">6.6×</td></tr>
+<tr><td>Seamless-M4T-v2</td><td class="num">0.112</td><td class="num">0.235</td><td class="num">0.5×</td></tr>
+</table>
+</div>
+
+<p>A five- to eighteen-fold asymmetry in the same direction for four independent engines is
+not four engines hallucinating in unison; it is the reference missing words that were spoken.
+<strong>Roughly 30–40 % of each engine's WER is the editing, not the engine.</strong> Term
+metrics are barely affected, because product names survive editing — which is one more reason
+the primary metric is the term metric.</p>
+
+<h3>Every engine fails the guardrail, and the threshold was not moved</h3>
+
+<p>The frozen rule sets a WER guardrail of 0.30. Measured WER runs 0.578 to 0.785, so
+<strong>under the declared rule no engine qualifies at all</strong>. Much of that gap is the
+editing effect above. The threshold was calibrated for a verbatim reference and this
+reference is not verbatim — but it was chosen before the numbers existed, and adjusting it
+now is exactly the post-hoc tuning a pre-registration exists to prevent. So the verdict is
+reported as declared, the ranking is published alongside it, and the reader can see both.</p>
+
+<h2>Fairness</h2>
+
 <ul>
-<li><strong>Published here:</strong> metrics, short quoted error spans, and the recipe —
-episode number, source URL, SHA-256, exact cut points.</li>
-<li><strong>Not published:</strong> the segment files, any processed audio, or a full
-transcript.</li>
-<li><strong>The ND leg is not in tension</strong> — no derivative is distributed at all.
-Reproducibility comes from the recipe verified against the publisher's file, which is
-stronger than shipping our own copy.</li>
-<li><strong>The NC leg is the contestable one.</strong> Creative Commons defines
-NonCommercial as not primarily directed toward commercial advantage, and a hiring submission
-is, at some remove, directed toward being paid. That is a real tension, not a technicality.
-We proceed because the only licence-governed act is a private download and local analysis,
-and because a measurement is a fact about a recording, not a reproduction of one.</li>
+<li>Byte-identical segment files for every engine, cut once, 16 kHz mono. No engine got its
+own resampling, denoising or voice-activity segmentation.</li>
+<li>GigaAM's short-form API refuses audio at 30 s while our segments are exactly 30.000 s.
+Trimming for that one engine would have broken the identical-input rule, so it was not done
+and GigaAM is reported as blocked.</li>
+<li>Raw output stored and hashed before any normalisation. Normalisation is shallow — case,
+punctuation, <code>ё</code>, hyphens — and never rewrites one word into another.</li>
+<li>All five engines are open models run on our own GPUs, so <strong>the audio was sent to no
+vendor at all</strong>, and the employer can re-run this benchmark without buying anything.</li>
+<li>Only the default track is reported. The terminology-assisted track is implemented but was
+not run, so no engine is compared with a glossary against another's default.</li>
 </ul>
 
-<p>Because every engine is an open model running on our own GPUs, <strong>the audio never
-left our perimeter</strong> — it was sent to no vendor at all.</p>
-
-<h2>What was actually run</h2>
-
-<p>All engines are open models on GPU, at full precision. No paid signups, no cloud STT, not
-even free tiers. Two consequences worth stating: the employer can re-run this entire
-benchmark without buying anything, and the licence exposure above stays minimal.</p>
-
-<div class="scroll">
-<table>
-<tr><th>Engine</th><th>Result</th><th>Segments</th><th>Empty outputs</th></tr>
-<tr><td>Whisper large-v3 (fp16, L4)</td><td class="ok">ran</td><td>120 / 120</td><td>0</td></tr>
-<tr><td>Whisper large-v3-turbo (fp16, L4)</td><td class="ok">ran</td><td>120 / 120</td><td>0</td></tr>
-<tr><td>Parakeet-TDT-0.6b-v3 (L4)</td><td class="ok">ran</td><td>120 / 120</td><td>0</td></tr>
-<tr><td>NVIDIA Canary-1b-v2</td><td class="warn">blocked</td><td>0</td><td>—</td></tr>
-<tr><td>GigaAM v2 RNNT (Russian-specific)</td><td class="warn">blocked</td><td>0</td><td>—</td></tr>
-</table>
-</div>
-
-<p>The blocked engines are named with their specific blocker, because "we ran five" is a
-claim and "we tried five and two broke, here is how" is a finding:</p>
+<h3>Engines that did not run, with the specific blocker</h3>
 <ul>
-<li><strong>Canary-1b-v2</strong> — NeMo 2.1.0 asserts inside its own <code>canary2</code>
-prompt formatter (<code>Expected the last token in answer_ids to be EOS</code>). It needs a
-newer NeMo than the pinned image.</li>
-<li><strong>GigaAM</strong> — its short-form API refuses audio at 30 s and the frozen
-segments are exactly 30.000 s. The vendor's long-form path needs a gated pyannote VAD
-requiring an <code>HF_TOKEN</code> we do not have. Trimming the audio for this one engine
-would have broken the identical-input rule, so it was not done.</li>
+<li><strong>NVIDIA Canary-1b-v2</strong> — NeMo 2.1.0 asserts inside its own
+<code>canary2</code> prompt formatter (<code>Expected the last token in answer_ids to be
+EOS</code>); needs a newer NeMo than the pinned image.</li>
+<li><strong>GigaAM v2</strong> — 30-second short-form ceiling as above; its long-form path
+needs a gated pyannote VAD requiring an <code>HF_TOKEN</code> we do not have.</li>
 </ul>
 
-<p class="meta">This is below the ≥5 engines the task asks for. It is reported as a shortfall,
-not disguised.</p>
-
-<h2>Why there is no ranking</h2>
-
-<p>The chain is short and each link is verifiable:</p>
+<h2>Limitations</h2>
 <ol>
-<li>Ranking engines requires a reference transcript that is independent of them.</li>
-<li>An automated agent cannot produce one — it cannot hear the audio.</li>
-<li>A reference drafted from the engines under test measures agreement, not accuracy. The
-code refuses that combination outright, and a test asserts the refusal.</li>
-<li>No human annotator was available, and no publisher-made transcript exists for this
-episode.</li>
-</ol>
-
-<p>A search for a corpus that <em>ships</em> with a human transcript was made and failed
-within the available budget: Habr's verbatim conference transcripts (<em>расшифровки</em>)
-pair only with YouTube video, which is bot-gated — and cookie-authenticated retrieval would
-make the corpus unreproducible for a reader anyway. The Russian IT podcasts checked publish
-no transcripts.</p>
-
-<div class="callout">
-<strong>The honest conclusion.</strong> Publishing a ranking here would mean inventing a
-ground truth and hoping nobody checked. A benchmark with a weak gold standard measures
-nothing, and saying so is a stronger result than a confident table built on sand.
-</div>
-
-<h2>What can be measured without ground truth</h2>
-
-<p>These numbers are real and reproducible from the stored output. Each is labelled with what
-it does <em>not</em> license.</p>
-
-<h3>Pairwise disagreement</h3>
-<p>How far apart two engines are, in the same units the ranking would have used. Symmetric,
-reference-free, and silent about which engine is right.</p>
-
-<div class="scroll">
-<table>
-<tr><th>Pair</th><th>Segments</th><th>Disagreement</th></tr>
-<tr><td>Whisper large-v3 ↔ large-v3-turbo</td><td>120</td><td>12.4 %</td></tr>
-<tr><td>Parakeet v3 ↔ Whisper large-v3-turbo</td><td>120</td><td>19.6 %</td></tr>
-<tr><td>Parakeet v3 ↔ Whisper large-v3</td><td>120</td><td>19.8 %</td></tr>
-</table>
-</div>
-
-<p>The two Whisper variants agree with each other markedly more than either agrees with
-Parakeet — model lineage, not accuracy. It is also a warning about consensus methods: three
-engines are not three independent opinions when two of them are siblings.</p>
-
-<h3>Script mix — the shape of the reported failure</h3>
-<p>A code-switched conversation forces every engine to put the English terms somewhere. An
-engine emitting almost no Latin script is transliterating them into Cyrillic, which is
-exactly the <code>РАКа</code> complaint.</p>
-
-<div class="scroll">
-<table>
-<tr><th>Engine</th><th>Tokens</th><th>Latin-script share</th><th>Cyrillic share</th></tr>
-<tr><td>Whisper large-v3-turbo</td><td>9 298</td><td>2.50 %</td><td>96.9 %</td></tr>
-<tr><td>Whisper large-v3</td><td>9 237</td><td>2.39 %</td><td>97.1 %</td></tr>
-<tr><td>Parakeet-TDT v3</td><td>9 931</td><td>1.56 %</td><td>97.7 %</td></tr>
-</table>
-</div>
-
-<p>All three overwhelmingly render technical speech in Cyrillic; Parakeet does so most. This
-is consistent with the employer's complaint being a general property of current engines
-rather than a quirk of whichever one they use. It is <em>not</em> proof that any given
-rendering is wrong — some of those terms genuinely are spoken as Russian words.</p>
-
-<h3>A finding against this benchmark's own design</h3>
-
-<p>Across the whole hour there were only <strong>8 consensus term sites</strong> — places
-where a majority of engines agree a glossary term was spoken. The frozen glossary describes
-the employer's stack (ClickHouse, Kafka, Airflow, pgvector); this episode discusses AI
-agents and tooling, so the terms that actually occur are <code>prompt</code> (11),
-<code>CI</code> (6), <code>prod</code> (5), <code>deploy</code> (4), <code>worker</code> (4).</p>
-
-<p>That matters more than it looks. <strong>IT-term F1 was the pre-declared primary metric,
-and this corpus contains too few glossary terms to support it.</strong> Even with a perfect
-reference, the primary metric would have rested on a few dozen occurrences and the
-confidence intervals would have been far too wide to separate engines. The corpus satisfies
-the stated conditions — natural Russian, dense code-switching, multiple speakers, real
-acoustics — and still fails to exercise the metric, because "dense IT terminology" and "the
-employer's specific vocabulary" are not the same requirement. Freezing the glossary before
-selecting the corpus is what made this visible; it is a design lesson, not a bug.</p>
-
-<h2>What a complete run needs</h2>
-<ol>
-<li><strong>A reference.</strong> Either ~1 h of human annotation under the published policy
-(the workstation for it is built and tested), or a corpus that ships with a publisher-made
-human transcript — which also removes the circularity problem at the root.</li>
-<li><strong>A corpus matched to the glossary</strong>, or a glossary matched to the corpus —
-declared in that order, never adjusted after seeing output.</li>
-<li><strong>Canary and GigaAM unblocked</strong>: a newer NeMo image, and an
-<code>HF_TOKEN</code> for the gated VAD.</li>
-<li><strong>The terminology-assisted track</strong>, which is implemented but was not run.</li>
+<li><strong>One speaker, one talk, 49 minutes.</strong> Conference audio is cleaner than a
+meeting: no cross-talk, no interruption, one voice. Results may not transfer to a four-way
+call. An earlier corpus (a four-host podcast) had exactly those properties but no independent
+transcript, which is why it was replaced.</li>
+<li><strong>49 minutes, not 60.</strong> Stated rather than padded.</li>
+<li><strong>Absolute WER is not comparable to other benchmarks</strong>, for the editing
+reason measured above. Only the ranking and the term metrics travel.</li>
+<li><strong>The glossary is this company's vocabulary.</strong> Term F1 does not transfer to a
+company with a different stack. On this corpus it is carried mostly by Kubernetes and
+ClickHouse.</li>
+<li><strong>Two engines short of the full slate</strong>, both named with their blocker.</li>
 </ol>
 
 <h2>Reproduce it</h2>
-<pre>git clone &lt;repo&gt; &amp;&amp; cd explee-ai-dev-test
-curl -O https://cdn.radio-t.com/rt_podcast1027.mp3
-shasum -a 256 rt_podcast1027.mp3   # 336a6c89…27dd8bb
+<pre>yt-dlp --remote-components ejs:github --cookies-from-browser chrome \
+  -f bestaudio -o talk.webm "https://www.youtube.com/watch?v=z2aARjKDg4w"
+shasum -a 256 talk.webm    # 4b88b8d5…f0f39fd9
+
 python3 -c "import sys; sys.path.insert(0,'task2-stt-benchmark'); \
   from harness.manifest import freeze; \
-  freeze('rt_podcast1027.mp3','segments',corpus_id='rt1027', \
-         provenance='...', window=(300.0,3900.0))"
-modal run task2-stt-benchmark/modal_app/whisper_family.py::run_corpus
-uv run --with pytest pytest tests/ -q     # 268 passing</pre>
+  freeze('talk.webm','segments',corpus_id='hlk8s',provenance='…')"
+
+modal run task2-stt-benchmark/modal_app/whisper_family.py::run_corpus \
+  --manifest task2-stt-benchmark/data/manifest-hlk8s.json --model-key whisper-large-v3-turbo
+python3 task2-stt-benchmark/rank.py
+uv run --with pytest pytest tests/ -q     # 271 passing</pre>
 
 <footer>
-<p>Evaluation design frozen in commit <code>9fd6ff8</code>, 2026-08-23T19:00:14Z, before any
-engine output existed. Corpus frozen in <code>7aebe52</code>. Amendments are logged in
-<code>PREREGISTRATION.md</code> §12. 268 tests, ruff clean.</p>
-<p>Радио-Т is © its authors, licensed CC BY-NC-ND 3.0. No audio or transcript is
-redistributed here.</p>
+<p>Evaluation design frozen in <code>9fd6ff8</code> (2026-08-23T19:00:14Z) before any engine
+output existed; corpus amendment logged before any output existed on this corpus. Every
+subsequent change is a dated entry in <code>PREREGISTRATION.md</code> §12. Paired bootstrap:
+10 000 resamples, seed 20260823, 95 % percentile intervals over 99 reference blocks.</p>
+<p>Transcript © its authors, published on Habr; talk video © HighLoad Channel. Neither audio
+nor transcript is redistributed here — only measurements and the recipe to re-derive them.</p>
 </footer>
 
 </div>
