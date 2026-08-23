@@ -1,4 +1,4 @@
-# Window snapshot 03 — t1-final
+# Window snapshot 03: t1-final
 
 Immutable record of the observation window.
 
@@ -8,8 +8,8 @@ for the digest of the same leading byte count. A match proves the
 measurements below describe the exact bytes the collector wrote. The log
 is append-only, which is what makes a prefix the right thing to check.
 
-Read-only. Nothing was restarted and nothing was written on the host —
-this window cannot be recreated, and no snapshot is worth risking it.
+Read-only. Nothing was restarted and nothing was written on the host.
+This window cannot be recreated, and no snapshot is worth risking it.
 
 | | |
 |---|---|
