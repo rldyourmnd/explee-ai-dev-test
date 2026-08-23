@@ -5,7 +5,7 @@ single place that says what is true right now, with the measurement behind each
 claim. Maintained by the orchestrator (`surface:3`); workers report, they do not
 edit this file.
 
-**Last heartbeat: 2026-08-23T17:52Z.**
+**Last heartbeat: 2026-08-23T18:04Z.**
 
 ## ESCALATIONS — open, for the human
 
@@ -48,13 +48,13 @@ endpoint, so an interruption is unrecoverable and cannot be faked.
 |---|---|
 | State | `active` |
 | T0 | `2026-08-23T16:13:26.775Z` (first record, matches the logged T0) |
-| Last record | `2026-08-23T17:51:32.040Z`, 26 s before the check |
-| Lines | 3152 (+384 since 17:39Z) |
-| Growth | 32.0 lines/min over 12.0 min — matches the expected ~32 |
+| Last record | `2026-08-23T18:03:32.807Z`, 28 s before the check |
+| Lines | 3536 (+384 since 17:51Z) |
+| Growth | 31.9 lines/min over 12.1 min — matches the expected ~32 |
 | Gaps > 45 s | **0**, verified across every consecutive record pair |
 | Malformed lines | 0 |
-| Elapsed | 1 h 38 m of the 6 h minimum |
-| 6 h mark | `2026-08-23T22:14Z` — **4 h 22 m remaining** |
+| Elapsed | 1 h 50 m of the 6 h minimum |
+| 6 h mark | `2026-08-23T22:14Z` — **4 h 10 m remaining** |
 
 Task 1 restarted its **monitor** container this cycle and verified the collector
 was `active` before and after; the sampler itself was never touched.
@@ -145,6 +145,11 @@ time, so this does not threaten the 22:14Z window. It does consume the shortest
 path to a published report.
 
 ### Task 3 — harness artifact (`surface:8`, `task3-harness-artifact/`)
+
+**Done and parked, idle ~25 min as of 18:04Z.** This is *not* the "idle after
+finishing without exporting its trace" failure mode: exporting is precisely what
+is blocked on the owner's decision, and its screen is unchanged since 17:39Z with
+no work left that does not depend on that answer. Nothing to nudge.
 
 **Artifact done and clean. Trace quarantined — one open question for the human:
 Task 3 now ships with no trace.**
@@ -281,10 +286,18 @@ before each push, never after:
 |---|---|---|
 | 17:32Z | 84 passed, ruff clean, both exit 0 | `f086fe9..9c11385`, 7 commits |
 | 17:41Z | **93 passed**, ruff clean, both exit 0 | `ae2c7cb..79be7bd`, 2 commits |
-| 17:53Z | **101 passed**, ruff clean, both exit 0 | `dc0125d..`, 4 commits |
+| 17:53Z | **101 passed**, ruff clean, both exit 0 | `dc0125d..6c365f1`, 4 commits |
+| 18:04Z | **114 passed**, ruff clean, both exit 0 | `6c365f1..6ce1e80`, 1 commit |
 
-Test count 84 → 93 → 101 across the session; each rise came with the change it
-covers rather than after it.
+Test count 84 → 93 → 101 → 114 across the session; each rise came with the change
+it covers rather than after it.
+
+**Caveat on the 18:04Z gate, stated rather than glossed:** the working tree held
+Task 1's in-flight edit to `monitor.py`, so the run proves the tree green, not the
+commit in isolation. Isolating it would mean stashing another session's live
+work, which is exactly how a shared tree gets corrupted — not worth the
+precision. Both are green, and the distinction is recorded rather than assumed
+away.
 
 The test count rose 84 → 93 because Task 3 shipped tests with its exporter fix
 rather than asserting it worked.
@@ -326,3 +339,4 @@ entries promptly, at the same time as the `--list` warning.
 | 17:25Z | `active`, 2288 lines, +32.1/min, 0 gaps | T3 quarantined the trace cleanly (`2eeaefc`) and root-caused it to the shared exporter — Tasks 1 and 2 are exposed to the same defect; T1 still holding the DNS menu, unchanged; T2 unchanged |
 | 17:40Z | `active`, 2768 lines, +31.8/min, 0 gaps | T1 unblocked, deploying dashboard, committed `79be7bd`; T3 fixed both exporter defects in `d7c2b24`, verified by running `--list` (0 foreign slugs) — cross-cutting risk **closed**; gates green at 93 passed, pushed to `origin/main`; T2 unchanged |
 | 17:52Z | `active`, 3152 lines, +32.0/min, 0 gaps | T1 withdrew the pool-wide 429 claim against 66 cycles of captured data (`fdd04b8`) and proved restart durability by `sha256`; README status table corrected by this session — it still said Task 3 "not started" and promised a trace for every task; T3 idle, artifact done, parked on the owner's trace decision; T2 unchanged |
+| 18:04Z | `active`, 3536 lines, +31.9/min, 0 gaps | T1 committed `6ce1e80` (alert lines on material change, not cooldown expiry) and is mid-edit on top-up segment cuts; gates 114 passed, pushed; T3 idle 25 min, correctly parked; T2 unchanged. No new blockers |
