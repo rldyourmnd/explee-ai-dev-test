@@ -291,9 +291,34 @@ Over the longer window the 5xx episodes run **10–22 consecutive polls
 one self-healing. The 66-cycle figures above are left as first measured, since
 they are what the design was drawn from.
 
+**Re-measured on the full window, and the absolute does not survive.** Across
+**362** true poll cycles containing a 429, grouped by clustering responses less
+than 10 s apart rather than by wall-clock minute:
+
+| distinct providers 429ing in one cycle | cycles |
+|---|---:|
+| exactly 1 | 361 |
+| 2 | **1** |
+
+The single exception is `findymail` and `tremendous` at 2026-08-23T17:49:01Z,
+0.1 s apart, unambiguously the same cycle. So "always exactly 1" was true of 66
+cycles and is false of 362. The conclusion it supported is unchanged and in fact
+better supported at 361 of 362: 429 is rate limiting applied per provider, and
+two providers can coincide the way two independent events coincide.
+
+It is recorded because a universal negative is a claim about data nobody has
+seen yet, and this one lasted about five hours. The scoped table above is left
+as first measured; what changed is only the word "never".
+
+A first attempt at this re-measurement bucketed by minute and reported 12
+simultaneous cycles. That was wrong: the sampler polls every 30 s, so a
+one-minute bucket holds two cycles and two providers failing in different cycles
+look simultaneous. The instrument has to match the thing being measured.
+
 So availability is evaluated **per provider**. What stops 504 singles from
-becoming spam is the length of the staleness window, not a pool-wide grouping ,
-and grouping pool-wide would have hidden every one of those 15 outages.
+becoming spam is the length of the staleness window rather than a pool-wide
+grouping, and grouping pool-wide would have hidden every one of those 15
+outages.
 
 ### Burn must be robust, and robust is not enough
 
