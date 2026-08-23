@@ -101,6 +101,34 @@ def test_a_final_scrap_is_merged_rather_than_billed_as_a_segment():
     assert bounds == [(0.0, 30.0), (30.0, 62.0)]
 
 
+def test_a_window_keeps_source_absolute_timestamps():
+    """A corpus cut from the middle of a recording must stay re-derivable.
+
+    The cut points published in the report are absolute times in the
+    publisher's original file, so a reader can reproduce the same segments
+    without our copy of the audio.
+    """
+    bounds = fixed_boundaries(3600.0, segment_s=30.0, offset_s=300.0)
+    assert bounds[0] == (300.0, 330.0)
+    assert bounds[-1] == (3870.0, 3900.0)
+    assert len(bounds) == 120
+
+
+def test_a_window_outside_the_recording_is_refused():
+    from harness.manifest import freeze
+    import harness.manifest as manifest_module
+
+    props = AudioProperties(600.0, 16000, 1, "mp3", "mp3")
+    original_probe = manifest_module.probe
+    manifest_module.probe = lambda _path: props
+    try:
+        with pytest.raises(ValueError, match="does not fit"):
+            freeze("x.mp3", "out", corpus_id="c", provenance="test",
+                   window=(300.0, 1200.0))
+    finally:
+        manifest_module.probe = original_probe
+
+
 def test_manifest_round_trips_and_fingerprints(tmp_path):
     manifest = make_manifest(tmp_path=tmp_path)
     path = tmp_path / "manifest.json"

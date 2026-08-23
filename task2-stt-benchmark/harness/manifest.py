@@ -123,6 +123,8 @@ class Manifest:
     speaker_count: int | None = None
     provenance: str = ""
     notes: list[str] = field(default_factory=list)
+    #: `(start_s, end_s)` of the source recording this corpus was taken from.
+    window: tuple[float, float] | None = None
 
     def to_json(self) -> str:
         payload = asdict(self)
@@ -146,19 +148,30 @@ class Manifest:
         data.pop("total_segment_duration_s", None)
         data["source_properties"] = AudioProperties(**data["source_properties"])
         data["segments"] = [Segment(**s) for s in data["segments"]]
+        if data.get("window") is not None:
+            # JSON has no tuple; without this a round-tripped manifest would
+            # differ from the original and its fingerprint check would fail.
+            data["window"] = tuple(data["window"])
         return cls(**data)
 
 
 def fixed_boundaries(
-    duration_s: float, segment_s: float = 30.0, minimum_s: float = 5.0
+    duration_s: float,
+    segment_s: float = 30.0,
+    minimum_s: float = 5.0,
+    offset_s: float = 0.0,
 ) -> list[tuple[float, float]]:
-    """Uniform cut points.
+    """Uniform cut points, in absolute source time.
 
     Uniform, not silence-based, because a voice-activity cut would place the
     boundaries differently for different audio and make the segment count an
     artefact of the tool. A final fragment shorter than `minimum_s` is merged
     into its predecessor so no engine is billed a minimum charge for a scrap of
     audio nobody scores.
+
+    `offset_s` shifts the whole grid, so a corpus taken from the middle of a
+    longer recording still carries source-absolute timestamps — which is what
+    lets a reader re-cut the same segments from the publisher's original file.
     """
     if duration_s <= 0:
         return []
@@ -166,7 +179,7 @@ def fixed_boundaries(
     start = 0.0
     while start < duration_s:
         end = min(start + segment_s, duration_s)
-        bounds.append((round(start, 3), round(end, 3)))
+        bounds.append((round(offset_s + start, 3), round(offset_s + end, 3)))
         start = end
     if len(bounds) > 1 and (bounds[-1][1] - bounds[-1][0]) < minimum_s:
         last = bounds.pop()
@@ -220,17 +233,31 @@ def freeze(
     segment_s: float = 30.0,
     speaker_count: int | None = None,
     notes: Sequence[str] = (),
+    window: tuple[float, float] | None = None,
 ) -> Manifest:
     """Freeze one authorised source file into a hashed segment manifest.
 
     `provenance` is required and free text: who authorised this audio, and
     under what constraint. An unattributed corpus is not usable evidence.
+
+    `window` takes a `(start_s, end_s)` span of a longer recording. The rule
+    that chooses the window must be declared before the audio is heard — see
+    `docs/corpus-freeze.md` — otherwise the span itself becomes a way to pick
+    favourable material.
     """
     if not provenance.strip():
         raise ValueError("provenance is required: record who authorised this audio")
     source = Path(source)
     properties = probe(source)
-    boundaries = fixed_boundaries(properties.duration_s, segment_s=segment_s)
+    offset, span = 0.0, properties.duration_s
+    if window is not None:
+        offset, end = window
+        if offset < 0 or end > properties.duration_s or end <= offset:
+            raise ValueError(
+                f"window {window} does not fit inside {properties.duration_s:.3f}s"
+            )
+        span = end - offset
+    boundaries = fixed_boundaries(span, segment_s=segment_s, offset_s=offset)
     segments = cut_segments(source, out_dir, boundaries, corpus_id=corpus_id)
     return Manifest(
         corpus_id=corpus_id,
@@ -242,4 +269,5 @@ def freeze(
         speaker_count=speaker_count,
         provenance=provenance,
         notes=list(notes),
+        window=(offset, offset + span) if window is not None else None,
     )

@@ -122,8 +122,8 @@ human** — the slate is:
 
 | Engine | Access route under this envelope | Terminology track |
 |---|---|---|
-| Whisper large-v3 (self-hosted, whisper.cpp GGML q5_0) | local inference, no account, fully reproducible | initial-prompt biasing |
-| Parakeet-TDT-0.6b-v3 int8 (self-hosted, ONNX Runtime) | local inference, no account | none |
+| Whisper large-v3, full precision (self-hosted, Modal GPU) | free credits, no new spend, fully reproducible | initial-prompt biasing |
+| Parakeet-TDT-0.6b-v3, full precision (self-hosted, Modal GPU) | free credits, no new spend | none |
 | Deepgram Nova-3 multilingual | free credit on signup | keyterm prompting |
 | OpenAI GPT Transcribe | existing credit | prompt / keyword hints |
 | ElevenLabs Scribe v2 | free tier | keyterm prompting |
@@ -195,4 +195,5 @@ Amendments are recorded, never applied silently.
 
 | When | Change | Reason |
 |---|---|---|
+| after the corpus ruling, 2026-08-23T19:10Z | Self-hosted engines run **full-precision** Whisper large-v3 and Parakeet-TDT-0.6b-v3 on Modal GPU (free credits), replacing the quantised whisper.cpp `q5_0` / ONNX int8 builds adopted from meetily. | The quantisation was a concession to 8 GB arm64, not a design choice. Removing it strengthens the comparison: a local model that loses can no longer be excused as a casualty of quantisation. No metric, guardrail, tie-break or corpus rule changed. |
 | the first Task 2 commit after `9fd6ff8` (`git log --oneline 9fd6ff8..HEAD -- task2-stt-benchmark`) | Replaced hand-written freeze timestamps in this file, `docs/reference-policy.md`, `glossary.json` and `docs/corpus-candidates.md` with the commit that contains them. | The typed times (19:05–19:50Z) were assumed rather than read from a clock, and were later than the work they dated — the freeze commit is 19:00:14Z. No design content changed; only the dating, and only in the direction of being checkable. |
