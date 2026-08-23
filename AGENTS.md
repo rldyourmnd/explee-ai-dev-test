@@ -164,6 +164,12 @@ does not close the window, because the window is the mechanism.
 `git commit -- <paths>` commits working-tree content for those paths in one
 operation with no staging step. No window, no shared state.
 
+**The one exception, because the rule cannot cover it.** `git commit -- <paths>`
+only commits paths git already tracks; it cannot introduce a new file. A new file
+needs `git add <path>` followed immediately by `git commit -- <path>`. That
+reopens the window, so keep it to a single file and commit in the next command —
+and if the lock is lost, re-check what landed rather than assuming.
+
 This bit three times on 2026-08-23: `7a90b2f` carried Task 1's monitor fixes
 under *"Record Task 2 publication"*, `1282ad1` carried Task 1's polling-loop
 tests under *"Task 2: power simulation"*, and one orchestrator change landed
