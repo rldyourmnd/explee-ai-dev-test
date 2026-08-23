@@ -30,8 +30,8 @@ so the document cannot claim a verdict the audit did not produce.
 | unreconciled | **1** |
 | caused solely by a top-up | **0** |
 | caused solely by a reverted blip | **0** |
-| raw records | 12,848 |
-| repository | `0005510` |
+| raw records | 12,992 |
+| repository | `5326be4` |
 | regenerate | `uv run tools/alert_audit_doc.py` |
 
 ## Every line
@@ -173,5 +173,5 @@ Repeat lines, and what each one added
 unreconciled lines: 1 of 13
 
 auditee sha256[:16]: ed2c73f75789dbe3 -> ed2c73f75789dbe3  unchanged
-[replay] 12848 records from the raw window
+[replay] 12992 records from the raw window
 ```
