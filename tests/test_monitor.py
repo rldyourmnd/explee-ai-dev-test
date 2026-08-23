@@ -1326,6 +1326,49 @@ def test_healthz_is_unhealthy_when_every_provider_is_stale(tmp_path):
     assert not any(s.available for s in later), "stale data must not read as fresh"
 
 
+def test_state_as_of_an_instant_does_not_read_the_future(tmp_path):
+    """Evaluating a past moment must not use readings taken after it.
+
+    Live replay never exposed this: there the newest record and the evaluation
+    instant advance together, so nothing later exists yet. Against a fully
+    populated database, `--as-of` and `--audit` were both reading forward — the
+    audit re-derived openrouter at 18:03:32Z as 236.03 when the raw reading at
+    that instant was 243.99.
+    """
+    records = _cycles(
+        lambda _p, i: ('{"balance":%.2f,"currency":"usd"}' % (900 - i), 200), 60)
+    store, _ingestor, _alerts = _pipeline(tmp_path, records)
+
+    midpoint = T0 + timedelta(seconds=30 * 30)
+    bounded = store.readings_since("brightdata", T0, until=midpoint)
+    assert bounded, "expected readings up to the midpoint"
+    assert all(r.ts <= midpoint for r in bounded)
+    assert len(bounded) < len(store.readings_since("brightdata", T0))
+
+    state = {s.provider: s for s in m.build_state(store, midpoint, store.catalog())}["brightdata"]
+    expected = [r.value for r in bounded if r.state == m.STATE_OK][-1]
+    end_of_log = [r.value for r in store.readings_since("brightdata", T0)
+                  if r.state == m.STATE_OK][-1]
+    assert state.value == expected, "state must reflect the instant, not the end of the log"
+    assert expected != end_of_log, "the fixture must actually distinguish the two"
+
+
+def test_the_audit_reconciles_every_line_it_is_given(tmp_path):
+    """The audit must grade the file it was handed, not one its replay extended."""
+    records = _cycles(
+        lambda _p, i: (('{"balance":900.00,"currency":"usd"}', 200) if i < 5
+                       else ('{"error":"upstream 500"}', 500)), 140)
+    store, _ingestor, alerts = _pipeline(tmp_path, records)
+    captured = m.read_alert_lines(str(alerts))
+    assert captured, "expected the pipeline to have written lines"
+
+    report, unreconciled = m.audit_alerts(store, captured)
+    assert unreconciled == 0, report
+    assert f"of {len(captured)}" in report, "audit must grade exactly what it was given"
+    for line in captured:
+        assert line["ts"] in report
+
+
 def test_healthz_returns_503_when_every_provider_is_stale(tmp_path):
     """The case a liveness probe cannot see: process up, every number wrong."""
     store, _ingestor, _alerts = _healthy_pipeline(tmp_path, cycles=40)

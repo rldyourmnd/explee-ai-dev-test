@@ -525,11 +525,26 @@ class Store:
                 ],
             )
 
-    def readings_since(self, provider: str, since: datetime) -> list[Reading]:
-        rows = self.conn().execute(
-            "SELECT * FROM readings WHERE provider=? AND ts>=? ORDER BY ts",
-            (provider, iso(since)),
-        ).fetchall()
+    def readings_since(self, provider: str, since: datetime,
+                       until: datetime | None = None) -> list[Reading]:
+        """Readings in [since, until]. `until` bounds the window at an instant.
+
+        Without an upper bound, evaluating a *historical* moment against a fully
+        populated database silently uses readings from after that moment. Live
+        replay never noticed, because there the newest record and the evaluation
+        instant advance together and nothing later exists yet. Any after-the-fact
+        analysis - `--as-of`, `--audit` - was reading the future.
+        """
+        if until is None:
+            rows = self.conn().execute(
+                "SELECT * FROM readings WHERE provider=? AND ts>=? ORDER BY ts",
+                (provider, iso(since)),
+            ).fetchall()
+        else:
+            rows = self.conn().execute(
+                "SELECT * FROM readings WHERE provider=? AND ts>=? AND ts<=? ORDER BY ts",
+                (provider, iso(since), iso(until)),
+            ).fetchall()
         return [self._row_to_reading(r) for r in rows]
 
     def recent_readings(self, provider: str, limit: int) -> list[Reading]:
@@ -981,7 +996,8 @@ def build_state(store: Store, now: datetime, catalog: dict[str, dict[str, Any]],
     states: list[ProviderState] = []
 
     for provider, meta in catalog.items():
-        readings = store.readings_since(provider, since)
+        # Bounded at `now`: state as of an instant must not see past it.
+        readings = store.readings_since(provider, since, until=now)
         state = ProviderState(
             provider=provider,
             name=meta.get("name") or provider,
@@ -2489,6 +2505,100 @@ def text_report(snap: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def read_alert_lines(alerts_path: str) -> list[dict[str, Any]]:
+    """Parse alerts.jsonl, one JSON object per physical line."""
+    lines: list[dict[str, Any]] = []
+    if os.path.exists(alerts_path):
+        with open(alerts_path, encoding="utf-8") as handle:
+            for raw in handle:
+                if raw.strip():
+                    lines.append(json.loads(raw))
+    return lines
+
+
+def audit_alerts(store: Store, lines: Sequence[dict[str, Any]]) -> tuple[str, int]:
+    """Re-derive every line in alerts.jsonl from the raw window that produced it.
+
+    An alert is a claim. This replays the state at the moment each line was
+    written and checks the claim against it: the value the line quotes, the rate
+    it quotes, the sustain it claims to have held for, and whether a top-up,
+    reset or reverted blip sits close enough to explain the line away. Anything
+    that does not reconcile is reported rather than counted as passing.
+
+    Returns the report and the number of lines that failed to reconcile.
+    """
+    catalog = store.catalog()
+    out = [f"Audit of {len(lines)} alert lines against the raw window", ""]
+    unexplained = 0
+
+    for index, alert in enumerate(lines, 1):
+        provider = alert.get("provider")
+        when = parse_ts(alert["ts"])
+        evidence = alert.get("evidence", {})
+        out.append(f"[{index}] {alert['ts']}  {alert['level']}  {alert['rule']}  {provider}")
+        out.append(f"     text: {alert['text'][:150]}")
+
+        problems: list[str] = []
+
+        # 1. Re-derive the provider's state at the instant the line was written.
+        if provider and provider in catalog:
+            states = {s.provider: s for s in build_state(store, when, catalog)}
+            state = states.get(provider)
+            if state is None:
+                problems.append("provider absent from the catalog at that instant")
+            else:
+                claimed_value = evidence.get("value", evidence.get("remaining"))
+                if claimed_value is not None and state.value is not None:
+                    if abs(state.value - claimed_value) > max(0.01, abs(claimed_value) * 0.02):
+                        problems.append(
+                            f"value {claimed_value} does not match re-derived {state.value}")
+                claimed_runway = evidence.get("runway_h")
+                if claimed_runway is not None and state.runway_h is not None:
+                    if abs(state.runway_h - claimed_runway) > max(0.5, claimed_runway * 0.10):
+                        problems.append(
+                            f"runway {claimed_runway}h vs re-derived {state.runway_h:.2f}h")
+                out.append(f"     re-derived at that instant: value={state.value} "
+                           f"burn={state.spend_rate_per_h} runway_h={state.runway_h}")
+
+                # 2. The raw readings immediately around it.
+                window = store.readings_since(provider, when - timedelta(minutes=3))
+                near = [r for r in window if r.ts <= when + timedelta(minutes=1)][-4:]
+                for reading in near:
+                    out.append(f"       raw {iso(reading.ts)} state={reading.state} "
+                               f"http={reading.http} value={reading.value}")
+
+        # 3. Sustain actually held for what the line claims.
+        held = evidence.get("sustained_s")
+        need = evidence.get("sustain_required_s")
+        if held is not None and need is not None and held + 0.5 < need:
+            problems.append(f"sustained {held}s below the required {need}s")
+
+        # 4. Is there an event close enough that this line is really about it?
+        nearby = [
+            e for e in store.events(limit=200, provider=provider)
+            if abs((parse_ts(e["ts"]) - when).total_seconds()) <= 1800
+        ] if provider else []
+        for event in nearby:
+            out.append(f"     nearby event: {event['kind']} at {event['ts']} "
+                       f"delta={event['detail'].get('delta')}")
+        if nearby and alert["rule"] not in ("burn_anomaly",):
+            kinds = {e["kind"] for e in nearby}
+            if kinds <= {"top_up", "package_reset", "reverted_blip"}:
+                out.append("     note: a normal-operations event sits within 30 min; "
+                           "the line is a projection, not a reaction to it")
+
+        if problems:
+            unexplained += 1
+            for problem in problems:
+                out.append(f"     UNRECONCILED: {problem}")
+        else:
+            out.append("     reconciled")
+        out.append("")
+
+    out.append(f"unreconciled lines: {unexplained} of {len(lines)}")
+    return "\n".join(out), unexplained
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--raw", default=RAW_PATH, help="raw_samples.jsonl to replay and tail")
@@ -2498,6 +2608,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--port", type=int, default=PORT)
     parser.add_argument("--once", action="store_true",
                         help="replay to EOF, print a report, exit (no server, no tail)")
+    parser.add_argument("--audit", action="store_true",
+                        help="replay, then reconcile every alerts.jsonl line against the raw "
+                             "window that produced it; exits non-zero if any line does not "
+                             "reconcile")
     parser.add_argument("--as-of", default=None,
                         help="evaluate the report at this ISO-8601 instant instead of the "
                              "end of the log; only meaningful with --once")
@@ -2505,6 +2619,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     store = Store(args.db)
+
+    # Capture the file to be audited *before* replay. Replaying re-derives the
+    # window and appends, so an audit that read the file afterwards would be
+    # grading a file its own run had just extended.
+    audit_lines = read_alert_lines(args.alerts) if args.audit else []
+
     alerter = Alerter(store, args.alerts)
     ingestor = Ingestor(store, alerter, args.raw)
 
@@ -2515,6 +2635,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         ingestor.maybe_evaluate(ingestor.last_ingest_wall, force=True)
     print(f"[replay] {count} records in {time.monotonic() - started:.1f}s from {args.raw}",
           file=sys.stderr, flush=True)
+
+    if args.audit:
+        report, unreconciled = audit_alerts(store, audit_lines)
+        print(report)
+        return 1 if unreconciled else 0
 
     if args.once:
         # Report as of the end of the log, not the wall clock. Replaying a
