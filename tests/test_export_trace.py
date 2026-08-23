@@ -272,3 +272,63 @@ def test_header_retracts_the_verbatim_claim_when_content_was_lost():
     assert "**This export is not verbatim.**" in md
     # the retraction belongs above the transcript, not buried at the loss site
     assert md.index("not verbatim") < md.index("Tool result")
+
+
+# The leak that quarantined two traces was a project name, not a credential, so
+# the secret scanner never saw it. These assert the direction that matters: a
+# foreign slug must block the export, and the project's own slug must not.
+THIS = "-Users-dev-work-this-project"
+OTHER = "-Users-dev-work-unrelated-client"
+
+
+def test_foreign_project_slug_is_reported():
+    assert et.scan_foreign_slugs(f"listing shows {OTHER} here", THIS) == [
+        f"foreign project slug: {OTHER}"]
+
+
+def test_own_project_slug_is_not_reported():
+    assert et.scan_foreign_slugs(f"exporting from {THIS}/abc.jsonl", THIS) == []
+
+
+def test_a_prefix_of_the_own_slug_is_not_a_foreign_project():
+    # the same project named shorter, e.g. a home directory mentioned on its own
+    assert et.scan_foreign_slugs("-Users-dev-work", THIS) == []
+
+
+def test_hyphenated_prose_is_not_mistaken_for_a_slug():
+    # false positives here would train the operator to reach for the override
+    assert et.scan_foreign_slugs("the -home-page-hero element", THIS) == []
+
+
+def test_scan_without_a_permitted_slug_reports_nothing():
+    assert et.scan_foreign_slugs(f"{OTHER} appears", None) == []
+
+
+def test_build_blocks_on_a_foreign_slug_in_a_tool_result():
+    records = [
+        _turn("user", [{"type": "text", "text": "list the sessions"}]),
+        _turn("assistant", [{"type": "tool_result",
+                             "content": f"2026-08-02 22:12  1410K  aaaa  {OTHER}"}]),
+    ]
+    _, findings = et.build(records, "T", "s", Path("x.jsonl"), None, None, THIS)
+    assert any(f.startswith(f"foreign project slug: {OTHER}") and "turn 2" in f
+               for f in findings), findings
+
+
+def test_build_reports_nothing_for_a_trace_naming_only_this_project():
+    records = [_turn("user", [{"type": "tool_result",
+                               "content": f"2026-08-02 22:12  1410K  aaaa  {THIS}"}])]
+    _, findings = et.build(records, "T", "s", Path("x.jsonl"), None, None, THIS)
+    assert findings == []
+
+
+def test_deep_slug_under_another_account_is_still_reported():
+    # not this operator's home, but far too deep to be prose
+    other = "-home-someone-else-clients-acme-backend"
+    assert et.scan_foreign_slugs(other, THIS) == [f"foreign project slug: {other}"]
+
+
+def test_shallow_slug_under_another_account_is_a_known_miss():
+    # documents the stated limit rather than pretending coverage is total:
+    # a different user's shallow project is indistinguishable from prose here
+    assert et.scan_foreign_slugs("-home-bob-proj", THIS) == []

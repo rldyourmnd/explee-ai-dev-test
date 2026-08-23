@@ -165,6 +165,61 @@ def scan_secrets(text: str) -> list[str]:
     return found
 
 
+# A Claude Code project slug is an absolute path with the separators replaced by
+# dashes, so any slug for a project other than the one being exported names
+# somebody else's directory tree. That is the leak that killed two traces this
+# run, and it is not a credential, so the secret scanner never saw it.
+#
+# A candidate needs a known root and at least two segments after it. That alone
+# still matches ordinary hyphenated prose such as "-home-page-hero", so a match
+# is only treated as foreign when it either sits under the same root and user as
+# the project being exported (the realistic case - another project belonging to
+# this operator, which is what leaked) or is deep enough that prose is an
+# implausible explanation.
+#
+# Roots are enumerated rather than derived, because the permitted slug cannot
+# say what another machine's home directory is called. A slug under an unusual
+# root, or a shallow one belonging to a different user, is missed. That is a
+# stated limit, not a silent one: this check narrows the hazard, it does not
+# eliminate it, and the manual scan in AGENTS.md rule 3 stays.
+FOREIGN_SLUG = re.compile(
+    r"(?<![A-Za-z0-9._-])-(?:Users|home|root)-[A-Za-z0-9._]+(?:-[A-Za-z0-9._]+)+")
+MIN_PROSE_IMPLAUSIBLE_SEGMENTS = 4  # root + user + dir + project
+
+
+def scan_foreign_slugs(text: str, permitted: str | None) -> list[str]:
+    """Report project slugs that are not the project being exported.
+
+    `permitted` comes from the session file's own parent directory, never from
+    listing the projects directory: enumerating it to build an allowlist would
+    reproduce, inside this check, the exact defect the check exists to catch.
+    """
+    if not permitted:
+        return []
+    # "-Users-alice-work-thing" -> "-Users-alice": same machine, same account.
+    home = "-".join(permitted.split("-")[:3])
+    found: list[str] = []
+    for match in FOREIGN_SLUG.finditer(text):
+        slug = match.group(0)
+        # A prefix of the permitted slug is the same project named shorter, not
+        # a different one.
+        if slug == permitted or permitted.startswith(slug):
+            continue
+        same_account = slug.startswith(home + "-")
+        deep = len(slug.split("-")) - 1 >= MIN_PROSE_IMPLAUSIBLE_SEGMENTS
+        if not (same_account or deep):
+            continue
+        ident = f"foreign project slug: {slug}"
+        if ident not in found:
+            found.append(ident)
+    return found
+
+
+def scan_leaks(text: str, permitted: str | None = None) -> list[str]:
+    """Everything that must never reach a published trace: secrets, then slugs."""
+    return scan_secrets(text) + scan_foreign_slugs(text, permitted)
+
+
 def ts_of(record: dict) -> str | None:
     return record.get("timestamp")
 
@@ -181,7 +236,8 @@ def human_ts(raw: str | None) -> str:
 
 
 def build(records: list[dict], title: str, session_id: str, source: Path,
-          max_result: int | None, losses: list[str] | None = None) -> tuple[str, list[str]]:
+          max_result: int | None, losses: list[str] | None = None,
+          permitted_slug: str | None = None) -> tuple[str, list[str]]:
     turns = [r for r in records if r.get("type") in ("user", "assistant")
              and isinstance(r.get("message"), dict)]
     if not turns:
@@ -246,24 +302,24 @@ def build(records: list[dict], title: str, session_id: str, source: Path,
 
             if kind == "text":
                 body = block.get("text", "")
-                findings += [f"{n}  (first seen: turn {index}, text)" for n in scan_secrets(body)]
+                findings += [f"{n}  (first seen: turn {index}, text)" for n in scan_leaks(body, permitted_slug)]
                 out += [body, ""]
 
             elif kind == "thinking":
                 body = block.get("thinking", "")
-                findings += [f"{n}  (first seen: turn {index}, thinking)" for n in scan_secrets(body)]
+                findings += [f"{n}  (first seen: turn {index}, thinking)" for n in scan_leaks(body, permitted_slug)]
                 out += ["<details><summary>Reasoning</summary>", "", fence(body), "",
                         "</details>", ""]
 
             elif kind == "tool_use":
                 payload = json.dumps(block.get("input", {}), ensure_ascii=False, indent=2)
-                findings += [f"{n}  (first seen: turn {index}, tool input)" for n in scan_secrets(payload)]
+                findings += [f"{n}  (first seen: turn {index}, tool input)" for n in scan_leaks(payload, permitted_slug)]
                 out += [f"**Tool call — `{block.get('name')}`**", "",
                         fence(payload, "json"), ""]
 
             elif kind == "tool_result":
                 body = render_tool_result(block.get("content"), losses)
-                findings += [f"{n}  (first seen: turn {index}, tool result)" for n in scan_secrets(body)]
+                findings += [f"{n}  (first seen: turn {index}, tool result)" for n in scan_leaks(body, permitted_slug)]
                 if max_result is not None and len(body) > max_result:
                     dropped = len(body) - max_result
                     if losses is not None:
@@ -359,8 +415,13 @@ def main() -> int:
     source = candidates[0]
 
     losses: list[str] = []
+    # Derived from the session file's own location, never by listing PROJECTS:
+    # enumerating the projects directory to build an allowlist would reproduce
+    # the --list defect inside the fix for it.
+    permitted_slug = source.parent.name
+
     markdown, findings = build(load(source, losses), args.title, args.session, source,
-                               args.max_result, losses)
+                               args.max_result, losses, permitted_slug)
 
     # Fail closed on any lossy path. A trace whose header says "nothing was
     # dropped" while a tool result was truncated, a malformed line was skipped,
@@ -399,11 +460,21 @@ def main() -> int:
         return 4
 
     if blocking and not args.allow_secrets:
-        print("REFUSING to export: credential-shaped strings found.", file=sys.stderr)
+        slugs = [f for f in blocking if f.startswith("foreign project slug:")]
+        creds = [f for f in blocking if not f.startswith("foreign project slug:")]
+        kinds = " and ".join(k for k in (
+            "credential-shaped strings" if creds else "",
+            "project names belonging to other work" if slugs else "") if k)
+        print(f"REFUSING to export: {kinds} found.", file=sys.stderr)
         for finding in blocking:
             print(f"  - {finding}", file=sys.stderr)
-        print("\nIf the source is a real credential, rotate it and stop echoing it.",
-              file=sys.stderr)
+        if creds:
+            print("\nIf the source is a real credential, rotate it and stop echoing it.",
+                  file=sys.stderr)
+        if slugs:
+            print("\nA project slug is a directory path belonging to unrelated work. Fix the "
+                  "turn that produced it - narrow the command so it never reads outside this "
+                  "project - rather than exporting and scrubbing afterwards.", file=sys.stderr)
         print("If you have read the turn and it is a fixture or an example, acknowledge it:",
               file=sys.stderr)
         for finding in blocking:
