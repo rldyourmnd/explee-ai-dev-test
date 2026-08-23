@@ -68,6 +68,11 @@ SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 
 ROLE_LABEL = {"user": "User", "assistant": "Assistant"}
 
+# Whitelist rather than a fall-through chain: a block type this tool has never
+# seen must be reported as lost, not skipped. Add a type here only together with
+# the branch that renders it.
+SUPPORTED_BLOCKS = frozenset({"text", "thinking", "tool_use", "tool_result"})
+
 
 def load(path: Path, losses: list[str] | None = None) -> list[dict]:
     """Parse a session log, recording anything that could not be rendered.
@@ -293,12 +298,30 @@ def build(records: list[dict], title: str, session_id: str, source: Path,
         if isinstance(content, str):
             content = [{"type": "text", "text": content}]
         if not isinstance(content, list):
+            # None, a number, a dict - anything the schema did not promise. The
+            # old code substituted an empty list, so the turn rendered as a
+            # heading with no body and nothing said so.
+            if losses is not None:
+                losses.append(f"turn {index}: message.content was "
+                              f"{type(content).__name__}, not str or list; no blocks rendered")
             content = []
 
         for block in content:
             if not isinstance(block, dict):
+                if losses is not None:
+                    losses.append(f"turn {index}: content block was "
+                                  f"{type(block).__name__}, not an object; skipped")
                 continue
             kind = block.get("type")
+            if kind not in SUPPORTED_BLOCKS:
+                # Claude Code gains block types over time. An unknown one used to
+                # fall off the end of this chain unrendered, leaving a header that
+                # claims nothing was dropped - the exact failure this tool exists
+                # to prevent. Unknown means lost until someone teaches it the type.
+                if losses is not None:
+                    losses.append(f"turn {index}: unsupported content block type "
+                                  f"{kind!r}; not rendered")
+                continue
 
             if kind == "text":
                 body = block.get("text", "")
@@ -395,9 +418,29 @@ def main() -> int:
     parser.add_argument("--allow-lossy", action="store_true",
                         help="write the trace even though content was truncated, skipped "
                              "or replaced; the header declares the export non-verbatim")
+    parser.add_argument("--submission", action="store_true",
+                        help="export for publication: every override is refused, so the "
+                             "result is verbatim and clean or it does not exist")
     parser.add_argument("--list", action="store_true",
                         help="list sessions for this project only (see --project)")
     args = parser.parse_args()
+
+    # One flag the operator can point at, instead of remembering which overrides
+    # are safe today. A submission export has no valid reason to truncate, to
+    # wave through a credential, or to acknowledge a foreign identifier: if any
+    # of those is needed, the fix belongs in the session, not in the flags.
+    if args.submission:
+        forbidden = [name for name, used in (
+            ("--allow-lossy", args.allow_lossy),
+            ("--allow-secrets", args.allow_secrets),
+            ("--allow-finding", bool(args.allow_finding)),
+            ("--max-result", args.max_result is not None),
+        ) if used]
+        if forbidden:
+            print(f"--submission forbids {', '.join(forbidden)}.", file=sys.stderr)
+            print("A published trace is verbatim and clean, or it is not published.",
+                  file=sys.stderr)
+            return 5
 
     if args.list:
         return list_sessions(args.project)
@@ -459,7 +502,15 @@ def main() -> int:
               file=sys.stderr)
         return 4
 
-    if blocking and not args.allow_secrets:
+    # --allow-secrets is scoped to credentials only. A synthetic key in a test
+    # fixture is a routine thing to wave through; another client's directory name
+    # is not, and one flag covering both meant acknowledging the first silently
+    # acknowledged the second. Foreign slugs have no blanket override at all -
+    # they can only be cleared one at a time with --allow-finding, after reading
+    # the turn.
+    waved = args.allow_secrets and not any(
+        f.startswith("foreign project slug:") for f in blocking)
+    if blocking and not waved:
         slugs = [f for f in blocking if f.startswith("foreign project slug:")]
         creds = [f for f in blocking if not f.startswith("foreign project slug:")]
         kinds = " and ".join(k for k in (
@@ -475,6 +526,10 @@ def main() -> int:
             print("\nA project slug is a directory path belonging to unrelated work. Fix the "
                   "turn that produced it - narrow the command so it never reads outside this "
                   "project - rather than exporting and scrubbing afterwards.", file=sys.stderr)
+            if args.allow_secrets:
+                print("--allow-secrets does not cover project slugs, deliberately: waving "
+                      "through a test credential must not also wave through somebody else's "
+                      "directory name.", file=sys.stderr)
         print("If you have read the turn and it is a fixture or an example, acknowledge it:",
               file=sys.stderr)
         for finding in blocking:
