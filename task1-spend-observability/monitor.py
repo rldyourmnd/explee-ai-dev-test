@@ -2222,6 +2222,11 @@ CSS = """
   --paper:#fbfbfa; --surface:#f4f3f0; --rule:#e2e2df;
   --ink:#1c1d1f; --muted:#5f6570;
   --alarm:#8a3324; --warn:#8a6d3a; --ok:#2f6b47;
+  /* Non-status emphasis. Kept separate from the three status colours on
+     purpose: the lead card needs to be marked as the one to read first
+     WITHOUT claiming an alarm, and a status colour spent on decoration is how
+     a palette stops carrying information. */
+  --accent:#2f4f6b;
   --sans:"Söhne","Inter Tight","Helvetica Neue",Helvetica,sans-serif;
   --mono:ui-monospace,"SF Mono",Menlo,monospace;
   /* One spacing scale. No values in between, no one-offs. */

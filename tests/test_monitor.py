@@ -11,6 +11,7 @@ import hashlib
 import importlib.util
 import json
 import statistics
+import re
 import sys
 import threading
 import time
@@ -1825,6 +1826,50 @@ def test_dashboard_renders_and_states_its_limits(tmp_path):
     assert "lower bound" in html, "burn must be labelled a lower bound across top-ups"
     for provider in ("brightdata", "findymail", "vastai", "anthropic"):
         assert provider in html
+
+
+def test_every_css_variable_used_is_defined(tmp_path):
+    """A `var(--x)` with no `--x:` anywhere is invalid at computed-value time.
+
+    CSS does not fail loudly for this. The declaration is dropped and the
+    property falls back to its inherited value, so `border-left: 3px solid
+    var(--undefined)` silently paints the border in `currentColor`. It shipped
+    once: the lead-card rule referenced `--accent` before the palette defined
+    it, and every gate passed. Ruff, Pyright and the test suite cannot see
+    inside a stylesheet, so the check has to live here.
+    """
+    store, _ingestor, _alerts = _healthy_pipeline(tmp_path)
+    html = m.render_dashboard(m.snapshot(store, T0 + timedelta(seconds=80 * 30)))
+    used = set(re.findall(r"var\((--[a-z0-9-]+)\)", html))
+    defined = set(re.findall(r"(--[a-z0-9-]+)\s*:", html))
+    assert used, "the page should be using custom properties at all"
+    assert not (used - defined), (
+        f"CSS variables used but never defined: {sorted(used - defined)}. "
+        "These render as currentColor rather than failing."
+    )
+
+
+def test_status_colours_are_never_spent_on_decoration(tmp_path):
+    """Brick red has to keep meaning "a human must act".
+
+    The lead card is the one a reader should look at first, which is emphasis,
+    not status. It was briefly given an `--alarm` left rule for prominence,
+    which is exactly how a palette stops carrying information: once the alarm
+    colour appears on something that is merely important, it stops being
+    readable as urgent.
+    """
+    store, _ingestor, _alerts = _healthy_pipeline(tmp_path)
+    html = m.render_dashboard(m.snapshot(store, T0 + timedelta(seconds=80 * 30)))
+    lead = re.search(r"\.card\.lead\{[^}]*\}", html)
+    assert lead, "the lead-card rule should exist"
+    assert "var(--accent)" in lead.group(0), (
+        "the lead card marks emphasis and must use --accent, not a status colour"
+    )
+    for status in ("--alarm", "--warn", "--ok"):
+        assert status not in lead.group(0), (
+            f"{status} is a status colour and must not decorate the lead card; "
+            "it may only appear on the qualified .card.lead.crit/.warn rules"
+        )
 
 
 def test_alert_evidence_is_rendered_complete_not_clipped(tmp_path):
