@@ -906,3 +906,54 @@ one it requested. And "verify by running the check" is not sufficient on its
 own: the check ran, it returned a clean-looking image, and the image was of
 something other than what was being tested.
 
+
+## The meta_ads negative baseline, and why my objection to it was wrong
+
+A `burn_anomaly` fired on `meta_ads` reading "trailing-24h cost is now rising at
+27.07 USD/h over the last 30 min, against a window baseline of -14.15 USD/h".
+
+I flagged the negative baseline as a probable defect, and reasoned as follows: a
+trailing-24h total in a window only 5.8 hours old cannot have anything roll out
+of it yet, so it can only accumulate, so its derivative should be non-negative.
+A baseline of minus 14 USD/h therefore looked impossible.
+
+That reasoning contains an error, and the raw data shows it immediately. The
+trailing window is the *vendor's*, not ours. At T0 it already contained a full
+24 hours of history from before observation began, and that history has been
+rolling out continuously ever since. Nothing about our window start constrains
+it.
+
+Measured over the 6.19 h window:
+
+| figure | start | end | net |
+|---|---:|---:|---:|
+| `spend_usd_24h` | 347.72 | 287.10 | **-60.62** |
+| `spend_usd_30d` | 10,431.67 | 8,613.09 | **-1,818.58** |
+
+The 30-day figure is the one that settles it. It fell by 1,818 USD in six hours,
+and money cannot be un-spent. Both are trailing-window totals whose tails leave
+the window, and a negative derivative simply means the spend rolling out exceeds
+the spend coming in. `-14.15 USD/h` is a correct measurement of a real thing:
+current spend running below the rate of a day earlier.
+
+The monitor already had this right. `monitor.py` derives a trailing rate
+separately from a balance burn precisely because `dV/dt = r(t) - r(t-24h)` is
+zero under steady spending, and the alert text reports the derivative
+(`rising at 27.07 USD/h`) and the actual average rate
+(`12.06 USD/h average`) as two labelled quantities rather than conflating them.
+This is the same distinction that earlier corrected `anthropic` from a reported
+32.81 USD/h to 3.40 USD/h.
+
+What is genuinely worth stating, and what I did not appreciate before checking,
+is the limit this places on the alert. A rise in `r(t) - r(t-24h)` can be caused
+by current spend increasing **or** by the spend leaving the window decreasing,
+and with six hours of observation those two cannot be told apart, because
+`r(t-24h)` refers to spend that happened before T0. The alert says the trailing
+total has turned upward, which is true and worth knowing. It does not on its own
+establish that anyone started spending faster.
+
+The finding here is not a bug. It is that a confident derivation from a wrong
+premise produced a plausible objection, and four lines of arithmetic against the
+raw series settled it in under a minute. The premise was never checked because
+it felt obvious.
+
