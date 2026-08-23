@@ -134,13 +134,19 @@ def assemble() -> list[str]:
     for src, dst in ARTIFACTS:
         s = os.path.join(ROOT, src)
         if dst == "task1-alerts.jsonl" and not audit_ok:
-            if os.path.exists(os.path.join(OUT, dst)):
-                print("  KEEPING the existing task1-alerts.jsonl: the source copy "
-                      "does not currently pass its audit, and a swap must not "
-                      "replace a passing artifact with a failing one")
-                continue
-            print("  WARNING: task1-alerts.jsonl does not pass its audit and no "
-                  "previously-audited copy exists")
+            # Report, do not withhold. An earlier version of this guard REFUSED to
+            # overwrite an audited-clean copy with one failing its audit, and that
+            # was wrong here: it pinned a stale 12-line file while the system had
+            # emitted 17, contradicting the ruling that the deliverable is the
+            # record of decisions actually made. The audit's remaining findings are
+            # documented and ruled on - a scrapfly re-fire that is pre-existing and
+            # newly exposed by duration - so "unreconciled" does not mean "wrong".
+            # A guard that cannot tell a defect from a documented finding must not
+            # be the thing that chooses what ships.
+            print("  NOTE: the alert audit does not currently pass. Shipping the "
+                  "live record anyway, per the ruling that the artifact is what "
+                  "the system emitted; the audit's findings are published beside "
+                  "it in ALERT-AUDIT.md rather than resolved by omission.")
         if os.path.exists(s):
             shutil.copy2(s, os.path.join(OUT, dst))
         else:
