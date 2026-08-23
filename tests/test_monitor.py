@@ -11,8 +11,10 @@ import importlib.util
 import json
 import statistics
 import sys
+import threading
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -132,6 +134,139 @@ def _cycles(builder, count, providers=("brightdata",), start=0.0, step=30.0):
             body, http = built
             records.append(_rec(provider, moment + 0.5, body=body, http=http))
     return records
+
+
+# --------------------------------------------------- standalone collection
+
+
+class _FakeAPI(BaseHTTPRequestHandler):
+    """A stand-in for the provider API, so these tests need no network."""
+
+    routes: dict = {}
+
+    def do_GET(self):  # noqa: N802 - BaseHTTPRequestHandler API
+        status, body, content_type = self.routes.get(
+            self.path, (404, '{"error":"no route"}', "application/json"))
+        payload = body.encode()
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, format, *args):  # noqa: A002 - base class name
+        return
+
+
+@pytest.fixture
+def fake_api():
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _FakeAPI)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_standalone_collection_produces_records_the_replay_path_reads(tmp_path, fake_api):
+    """The one-file path must feed the same parser, not a parallel one.
+
+    The deliverable is a single file, so `--poll` collects and derives in one
+    process. That is only safe if collection emits exactly the record shape the
+    ingestor already consumes: two parsers would drift, and the replay path is
+    the one every other test exercises.
+    """
+    _FakeAPI.routes = {
+        "/providers": (200, json.dumps([
+            {"provider": "brightdata", "name": "Oxylabs", "pay_model": "prepaid_balance",
+             "unit": "usd", "endpoint": "/api/brightdata/balance", "note": ""},
+        ]), "application/json"),
+        "/brightdata/balance": (200, '{"balance":947.30,"currency":"usd"}',
+                                "application/json"),
+    }
+    collector = m.Collector(str(tmp_path / "raw.jsonl"), fake_api, interval=1, timeout=5)
+    records = collector.cycle()
+    collector.append(records)
+
+    kinds = [r["kind"] for r in records]
+    assert kinds == ["catalog", "balance"]
+
+    balance = records[1]
+    for key in ("ts", "kind", "provider", "url", "http", "latency_ms", "body", "content_type"):
+        assert key in balance, f"record shape is missing {key}"
+    reading = m.read_sample(balance)
+    assert reading is not None
+    assert reading.state == m.STATE_OK
+    assert reading.value == pytest.approx(947.30)
+    assert reading.shape == "flat_balance"
+
+    # And the file it wrote replays like any other raw log.
+    store = m.Store(str(tmp_path / "m.sqlite"))
+    ingestor = m.Ingestor(store, m.Alerter(store, str(tmp_path / "a.jsonl")),
+                          str(tmp_path / "raw.jsonl"))
+    ingestor.replay()
+    assert store.coverage()["samples"] == 1
+    assert set(store.catalog()) == {"brightdata"}
+
+
+@pytest.mark.parametrize("status,body,expected_state", [
+    (429, '{"error":"rate limited"}', m.STATE_HTTP_ERROR),
+    (500, '{"error":"upstream 500"}', m.STATE_HTTP_ERROR),
+    (503, '{"error":"upstream 503"}', m.STATE_HTTP_ERROR),
+    (504, "<!DOCTYPE html><title>504 Gateway Time-out</title>", m.STATE_UNPARSEABLE),
+    (200, "{}", m.STATE_SCHEMA_MISS),
+])
+def test_standalone_collection_keeps_error_bodies(tmp_path, fake_api, status, body,
+                                                  expected_state):
+    """urllib raises on 4xx/5xx; the body is data and must survive that."""
+    _FakeAPI.routes = {"/x/balance": (status, body, "text/html" if status == 504
+                                      else "application/json")}
+    collector = m.Collector(str(tmp_path / "raw.jsonl"), fake_api, interval=1, timeout=5)
+    record = collector.probe("/x/balance", "balance", "x")
+    assert record["http"] == status
+    assert record["body"] == body
+    assert m.read_sample(record).state == expected_state
+
+
+def test_standalone_collection_records_pre_truncation_length(tmp_path, fake_api):
+    """`body_chars` makes a clip at the 8000 cap detectable after the fact."""
+    long_body = '{"note":"' + "x" * 9000 + '"}'
+    _FakeAPI.routes = {"/big/balance": (200, long_body, "application/json")}
+    collector = m.Collector(str(tmp_path / "raw.jsonl"), fake_api, interval=1, timeout=5)
+    record = collector.probe("/big/balance", "balance", "big")
+    assert record["body_chars"] == len(long_body)
+    assert len(record["body"]) == m.Collector.BODY_CAP
+    assert record["body_chars"] > len(record["body"]), "truncation is now detectable"
+
+
+def test_standalone_collection_survives_an_unreachable_api(tmp_path):
+    """A dead endpoint is data, not a crash: the loop must keep collecting."""
+    collector = m.Collector(str(tmp_path / "raw.jsonl"),
+                            "http://127.0.0.1:9", interval=1, timeout=1)
+    record = collector.probe("/providers", "catalog")
+    assert record["http"] is None
+    assert "error" in record
+    assert m.read_sample(dict(record, kind="balance", provider="x")).state == \
+        m.STATE_TRANSPORT_ERROR
+
+
+def test_standalone_collection_keeps_polling_after_a_bad_catalog(tmp_path, fake_api):
+    """An unparseable catalog must not stop the providers already known."""
+    _FakeAPI.routes = {
+        "/providers": (200, json.dumps([
+            {"provider": "brightdata", "pay_model": "prepaid_balance", "unit": "usd"}]),
+            "application/json"),
+        "/brightdata/balance": (200, '{"balance":900.00,"currency":"usd"}',
+                                "application/json"),
+    }
+    collector = m.Collector(str(tmp_path / "raw.jsonl"), fake_api, interval=1, timeout=5)
+    assert len(collector.cycle()) == 2
+
+    _FakeAPI.routes["/providers"] = (200, "not json at all", "application/json")
+    records = collector.cycle()
+    assert [r["kind"] for r in records] == ["catalog", "balance"], \
+        "a bad catalog must not drop the providers we already had"
 
 
 # ---------------------------------------------------------------- adapters

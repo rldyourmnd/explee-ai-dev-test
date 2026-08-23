@@ -1,31 +1,57 @@
 # Task 1 — Spend Observability
 
-## Files
+**The deliverable is one file: `monitor.py`.** Download it, run
+`python3 monitor.py --poll`, and you have the whole system — it collects from
+the API, derives state, alerts, and serves the dashboard, with no second file,
+no server and no dependencies beyond a Python runtime.
 
-| File | Role |
-|---|---|
-| `raw_sampler.py` | bootstrap collector, live on `server-nddev-amsterdam` since T0 |
-| `monitor.py` | the deliverable: adapters, metrics, alerting, dashboard, `/healthz` |
-| `alerts.jsonl` | one JSON object per line, the alerting deliverable |
-| `POLICY-SENSITIVITY.md` | what each threshold costs on the captured window |
-| `data/` | captured samples, gitignored, authoritative copy lives on the server |
+`raw_sampler.py` is not the other half of the deliverable. It is the twenty-line
+bootstrap that went live at T0, before any dashboard code existed, because the
+task needs six hours of observation and the API has no history endpoint — so the
+window had to start being captured before there was anything to capture it with.
+It is included as the record of what actually ran, not as something you need.
 
 Live at **https://spend.nddev.it.com/** — no login, HTTPS, `/healthz`,
 `/api/state`, `/alerts.jsonl`.
 
-## Shape of the system
+## Files
 
-`raw_sampler.py` is the only client of the third-party API. It writes response
-bodies and parses nothing, so the log is a superset of anything a monitor could
-need.
+| File | Role |
+|---|---|
+| `monitor.py` | **the deliverable**: collection, adapters, metrics, alerting, dashboard, `/healthz` |
+| `alerts.jsonl` | one JSON object per line, the alerting deliverable |
+| `POLICY-SENSITIVITY.md` | what each threshold costs on the captured window |
+| `raw_sampler.py` | the T0 bootstrap that protected the window; superseded by `--poll` |
+| `data/` | captured samples, gitignored, authoritative copy lives on the server |
 
-`monitor.py` **derives** everything from that log: it replays from T0, then
-tails. Three properties follow, and they are the reason for the split:
+## Two ways in, one implementation
+
+`monitor.py` runs in either of two modes, and they share every line of parsing,
+estimation and alerting — the difference is only where the raw records come
+from:
+
+| mode | records come from | used by |
+|---|---|---|
+| `--poll` | the API, polled by this process | a grader running the one file |
+| default | an existing `raw_samples.jsonl` | the deployed instance |
+
+Collection only ever *appends* raw records; everything downstream reads them
+back through the same path. That is deliberate — two parsers would drift, and
+the replay path is the one every test exercises.
+
+**The deployed instance does not use `--poll`.** It derives from the log the
+bootstrap sampler has been writing since T0, because the API should see one
+client and the file should have one writer. Turning `--poll` on next to a
+running sampler would give it two of each.
+
+`monitor.py` **derives** everything from the log rather than holding state in
+memory: it replays from T0, then tails. Three properties follow, and they are
+the reason for the split:
 
 - the dashboard shows history from T0 rather than from process start;
 - a threshold change is applied to the **whole** window by deleting the SQLite
   file and replaying, not just to data arriving afterwards;
-- the API still sees one client, not two.
+- in the deployed configuration the API still sees one client, not two.
 
 Derived state lives in SQLite (WAL). Readings are keyed on `(provider, ts)`,
 events on `(provider, ts)`, fired alerts on a content hash, so replay is
@@ -37,10 +63,12 @@ Stdlib only. The deploy target needs a Python runtime and nothing else.
 
 ### What "verbatim" does and does not cover
 
-Stated because an unqualified claim would be unprovable: the sampler stores
+Stated because an unqualified claim would be unprovable: `raw_sampler.py` stores
 `r.text[:8000]`, so a body longer than 8,000 characters would be silently
 clipped, and it records no original length or hash that would let you detect
-that after the fact.
+that after the fact. `monitor.py --poll` records `body_chars`, the
+pre-truncation length, so on that path a clip is detectable — new code can fix
+the gap without restarting a capture that cannot be restarted.
 
 Measured over the captured window: **0 records at exactly 8,000 characters**,
 largest stored body **6,422** — the HTML gateway page a `504` returns — leaving
@@ -250,11 +278,17 @@ of data would not survive a skeptical read.
 ## Running it
 
 ```bash
+# the whole system from this one file: collect, derive, alert, serve
+python3 monitor.py --poll
+
+# derive from an existing capture instead (what the deployed instance does)
+python3 monitor.py --raw data/raw_samples.jsonl --bind 127.0.0.1 --port 8770
+
 # replay the captured log and print a report, no server, no tail
 python3 monitor.py --once --raw data/raw_samples.jsonl
 
-# replay + tail + serve
-python3 monitor.py --raw data/raw_samples.jsonl --bind 127.0.0.1 --port 8770
+# reconcile every alerts.jsonl line against the raw records behind it
+python3 monitor.py --audit --raw data/raw_samples.jsonl
 ```
 
 `/` dashboard · `/healthz` (503 when every provider is stale) · `/api/state` ·

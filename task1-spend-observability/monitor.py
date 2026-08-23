@@ -2,13 +2,26 @@
 # requires-python = ">=3.11"
 # dependencies = []
 # ///
-"""Spend monitor: derives all state from the raw sampler's append-only log.
+"""Spend monitor: collection, derivation, alerting and dashboard in one file.
 
-The raw sampler is the only client of the third-party API. This process replays
-`raw_samples.jsonl` from T0, then tails it, so three things follow for free: the
-dashboard shows history from T0, any threshold change can be recomputed against
-the whole window by deleting the SQLite file and replaying, and the API still
-sees exactly one client.
+This is the whole system. `monitor.py --poll` collects from the API, derives
+state, alerts and serves, needing nothing but a Python runtime. `raw_sampler.py`
+in this directory is not the other half of it: it is the twenty-line bootstrap
+that went live at T0 because the task needs six hours of observation and the API
+has no history endpoint, so capture had to begin before there was anything to
+capture with.
+
+Both modes reach the same code. Collection only ever appends raw records, and
+everything downstream reads them back through one parser, so the live path and
+the replay path cannot drift apart. Records come either from `--poll` or from an
+existing `raw_samples.jsonl`; the deployed instance uses the latter, because the
+API should see one client and the log should have one writer.
+
+Deriving from an append-only log rather than from memory buys three things: the
+dashboard shows history from T0 rather than from process start, any threshold
+change can be recomputed against the whole window by deleting the SQLite file
+and replaying, and in the deployed configuration the API still sees exactly one
+client.
 
 Every number below is either MEASURED (derived from the captured window and
 recomputable from it) or an ASSUMPTION (operational policy the employer never
@@ -33,6 +46,9 @@ import sys
 import threading
 import time
 import traceback
+import urllib.error
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -47,6 +63,15 @@ BIND = os.environ.get("MONITOR_BIND", "127.0.0.1")
 PORT = int(os.environ.get("MONITOR_PORT", "8770"))
 
 CYCLE_S = 30.0  # MEASURED: sampler cadence, median inter-sample delta is 30.0 s
+
+# Standalone collection (`--poll`). Off by default: the deployed instance derives
+# from the log the bootstrap sampler has been writing since T0, and a second
+# poller would put a second client in front of the API and a second writer into
+# the same file.
+API_BASE = os.environ.get("MONITOR_API",
+                          "https://jobs.explee.com/ai-native-developer/test/api")
+POLL_INTERVAL_S = float(os.environ.get("MONITOR_POLL_INTERVAL", "30"))
+POLL_TIMEOUT_S = float(os.environ.get("MONITOR_POLL_TIMEOUT", "10"))
 
 
 # --------------------------------------------------------------------------
@@ -1755,6 +1780,118 @@ class Ingestor:
             self.stop.wait(poll_s)
 
 
+class Collector:
+    """Polls the API directly and appends verbatim records to the raw log.
+
+    This exists so the deliverable is genuinely one file: `monitor.py --poll`
+    collects, derives, alerts and serves with nothing else installed and no
+    second process. Everything downstream is untouched — the collector writes
+    exactly the record shape the ingestor already reads, so the replay path and
+    the live path share every line of parsing, estimation and alerting rather
+    than having two implementations that can drift apart.
+
+    It is off by default and must stay off wherever the standalone sampler is
+    running. The API should see one client, not two, and a second poller would
+    both double the load and interleave a second writer into the same log.
+
+    One deliberate difference from `raw_sampler.py`: this records `body_chars`,
+    the pre-truncation length. The sampler stores `r.text[:8000]` with no way to
+    tell afterwards whether anything was clipped; nothing in the observed window
+    came within 1,578 characters of that bound, but "verbatim" should be
+    checkable rather than argued, and new code can fix that without restarting
+    the capture.
+    """
+
+    BODY_CAP = 8000
+    USER_AGENT = "explee-spend-monitor/standalone"
+
+    def __init__(self, raw_path: str, base_url: str, interval: float,
+                 timeout: float, concurrency: int = 5) -> None:
+        self.raw_path = raw_path
+        self.base_url = base_url.rstrip("/")
+        self.interval = interval
+        self.timeout = timeout
+        self.concurrency = max(1, concurrency)
+        self.stop = threading.Event()
+        self.cycles = 0
+        self._providers: list[str] = []
+        self._lock = threading.Lock()
+        os.makedirs(os.path.dirname(os.path.abspath(raw_path)) or ".", exist_ok=True)
+
+    # -- one request ------------------------------------------------------
+    def probe(self, path: str, kind: str, provider: str | None = None) -> dict[str, Any]:
+        url = f"{self.base_url}{path}"
+        record: dict[str, Any] = {"ts": iso(now_utc()), "kind": kind,
+                                  "provider": provider, "url": url}
+        started = time.monotonic()
+        request = urllib.request.Request(url, headers={"user-agent": self.USER_AGENT})
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                raw = response.read()
+                status = response.status
+                content_type = response.headers.get("content-type")
+        except urllib.error.HTTPError as exc:
+            # 429/500/503 carry a JSON error envelope and 504 an HTML page.
+            # Both are data about the provider, so the body is kept.
+            raw = exc.read() if hasattr(exc, "read") else b""
+            status = exc.code
+            content_type = exc.headers.get("content-type") if exc.headers else None
+        except Exception as exc:  # noqa: BLE001 - every transport failure is data
+            record["http"] = None
+            record["latency_ms"] = round((time.monotonic() - started) * 1000, 1)
+            record["error"] = f"{type(exc).__name__}: {exc}"
+            return record
+
+        body = raw.decode("utf-8", errors="replace")
+        record["http"] = status
+        record["latency_ms"] = round((time.monotonic() - started) * 1000, 1)
+        record["body_chars"] = len(body)
+        record["body"] = body[:self.BODY_CAP]
+        record["content_type"] = content_type
+        return record
+
+    # -- one cycle --------------------------------------------------------
+    def cycle(self) -> list[dict[str, Any]]:
+        """Fetch the catalog, then every provider it lists, concurrently."""
+        records = [self.probe("/providers", "catalog")]
+        if records[0].get("http") == 200:
+            try:
+                parsed = json.loads(records[0]["body"])
+                fresh = [p["provider"] for p in parsed
+                         if isinstance(p, dict) and p.get("provider")]
+                if fresh:
+                    self._providers = fresh
+            except (ValueError, TypeError, KeyError):
+                # A catalog we cannot parse is not a reason to stop polling the
+                # providers we already know about.
+                pass
+
+        if self._providers:
+            with ThreadPoolExecutor(max_workers=self.concurrency) as pool:
+                futures = [pool.submit(self.probe, f"/{name}/balance", "balance", name)
+                           for name in self._providers]
+                records.extend(future.result() for future in futures)
+        self.cycles += 1
+        return records
+
+    def append(self, records: Sequence[dict[str, Any]]) -> None:
+        with self._lock, open(self.raw_path, "a", encoding="utf-8") as handle:
+            for record in records:
+                handle.write(json.dumps(record, ensure_ascii=False,
+                                        separators=(",", ":")) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+
+    def run(self) -> None:
+        while not self.stop.is_set():
+            started = time.monotonic()
+            try:
+                self.append(self.cycle())
+            except Exception as exc:  # noqa: BLE001 - a bad cycle must not end collection
+                print(f"[collect] {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+            self.stop.wait(max(1.0, self.interval - (time.monotonic() - started)))
+
+
 def _decode(line: str) -> dict[str, Any] | None:
     line = line.strip()
     if not line:
@@ -2618,6 +2755,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="evaluate the report at this ISO-8601 instant instead of the "
                              "end of the log; only meaningful with --once")
     parser.add_argument("--no-serve", action="store_true", help="ingest only, no HTTP server")
+    parser.add_argument("--poll", action="store_true",
+                        help="collect from the API in this process as well as deriving from "
+                             "the log, so this file is the whole system. Leave off wherever a "
+                             "separate sampler is already writing the same log.")
+    parser.add_argument("--api", default=API_BASE, help="API base URL for --poll")
+    parser.add_argument("--poll-interval", type=float, default=POLL_INTERVAL_S,
+                        help="seconds between --poll cycles")
+    parser.add_argument("--poll-timeout", type=float, default=POLL_TIMEOUT_S,
+                        help="per-request timeout for --poll")
     args = parser.parse_args(argv)
 
     store = Store(args.db)
@@ -2655,6 +2801,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(text_report(snapshot(store, as_of)))
         return 0
 
+    collector: Collector | None = None
+    if args.poll:
+        # Collect first, then derive. The collector only appends to the raw log;
+        # the ingestor picks the records up through exactly the same path it
+        # uses for the bootstrap sampler's output, so there is one parsing and
+        # alerting implementation rather than two that can drift.
+        collector = Collector(args.raw, args.api, args.poll_interval, args.poll_timeout)
+        first = collector.cycle()
+        collector.append(first)
+        providers = sum(1 for r in first if r.get("kind") == "balance")
+        print(f"[collect] polling {args.api} every {args.poll_interval:.0f}s "
+              f"-> {args.raw} ({providers} providers in the first cycle)",
+              file=sys.stderr, flush=True)
+        threading.Thread(target=collector.run, name="collect", daemon=True).start()
+
     thread = threading.Thread(target=ingestor.tail, name="ingest", daemon=True)
     thread.start()
 
@@ -2664,6 +2825,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 thread.join(1.0)
         except KeyboardInterrupt:
             ingestor.stop.set()
+            if collector is not None:
+                collector.stop.set()
         return 0
 
     Handler.store = store
@@ -2678,6 +2841,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         pass
     finally:
         ingestor.stop.set()
+        if collector is not None:
+            collector.stop.set()
         httpd.server_close()
     return 0
 
