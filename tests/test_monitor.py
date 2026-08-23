@@ -583,8 +583,13 @@ def test_a_self_healing_five_minute_outage_produces_no_alert(tmp_path):
     assert [a["rule"] for a in _alert_lines(alerts)] == []
 
 
-def test_a_sustained_outage_alerts_exactly_once(tmp_path):
-    """A provider dark far longer than anything measured is worth exactly one line."""
+def test_a_sustained_outage_escalates_by_duration_not_by_cycle(tmp_path):
+    """A dark provider is worth a line when it goes dark and again as it stays dark.
+
+    130 cycles is 65 minutes of outage. One line per cycle would be 120 lines;
+    one line ever would let a 12-hour outage look the same as a 16-minute one.
+    The bands give a handful, each a genuine escalation.
+    """
     def builder(_provider, i):
         if i < 10:
             return ('{"balance":900.00,"currency":"usd"}', 200)
@@ -592,14 +597,163 @@ def test_a_sustained_outage_alerts_exactly_once(tmp_path):
 
     _store, _ingestor, alerts = _pipeline(tmp_path, _cycles(builder, 130))
     fired = [a for a in _alert_lines(alerts) if a["rule"] == "unavailable"]
-    assert len(fired) == 1, f"expected one line, got {len(fired)}"
+    assert 1 <= len(fired) <= 4, f"expected a handful of escalations, got {len(fired)}"
     assert fired[0]["provider"] == "brightdata"
     assert fired[0]["evidence"]["stale_s"] >= m.POLICY.unavailable_alert_s
     assert fired[0]["level"] == "warning"
+    bands = [a["evidence"]["band"] for a in fired]
+    assert len(bands) == len(set(bands)), f"a band was restated: {bands}"
 
 
-def test_a_flapping_provider_produces_one_line_not_hundreds(tmp_path):
-    """Alternating up/down for an hour is the classic alert-storm generator."""
+def _runway_candidate(runway_h, key="runway:openrouter"):
+    return m.Candidate(
+        key=key, rule="runway", level="warning", provider="openrouter",
+        text=f"openrouter reaches zero in {runway_h:.1f} h",
+        evidence={"runway_h": runway_h}, rule_class=m.CLASS_POLICY,
+        sustain_s=0.0,
+        signature=m._signature(
+            *(lambda b: (b[0], f"runway:warning:{b[1]}"))(
+                m._band(runway_h, m.RUNWAY_BUCKETS_H, higher_is_worse=False))),
+    )
+
+
+def test_a_recovering_condition_is_not_announced(tmp_path):
+    """An anomaly easing from 20 MAD to 14 is not something anyone acts on."""
+    store = m.Store(str(tmp_path / "monitor.sqlite"))
+    alerts = tmp_path / "alerts.jsonl"
+    alerter = m.Alerter(store, str(alerts))
+    alerter.process([_runway_candidate(20.0)], T0)                            # sustain tick
+    alerter.process([_runway_candidate(20.0)], T0 + timedelta(seconds=30))    # writes
+    alerter.process([_runway_candidate(200.0)], T0 + timedelta(seconds=1200))  # recovered
+    assert len(_alert_lines(alerts)) == 1, "recovery must not write a line"
+
+
+def test_sliding_back_down_after_a_recovery_speaks_again(tmp_path):
+    """Recovery lowers the stored band so a relapse is still announced."""
+    store = m.Store(str(tmp_path / "monitor.sqlite"))
+    alerts = tmp_path / "alerts.jsonl"
+    alerter = m.Alerter(store, str(alerts))
+    alerter.process([_runway_candidate(20.0)], T0)
+    alerter.process([_runway_candidate(20.0)], T0 + timedelta(seconds=30))
+    alerter.process([_runway_candidate(200.0)], T0 + timedelta(seconds=1200))
+    alerter.process([_runway_candidate(20.0)], T0 + timedelta(seconds=2400))
+    lines = _alert_lines(alerts)
+    assert len(lines) == 2, f"relapse must be announced; got {len(lines)}"
+    assert lines[-1]["evidence"]["runway_h"] == pytest.approx(20.0)
+
+
+@pytest.mark.parametrize("worse,better,edges,higher_is_worse", [
+    (20.0, 200.0, "RUNWAY_BUCKETS_H", False),    # less runway is worse
+    (100.0, 5.0, "DEVIATION_BUCKETS", True),     # bigger deviation is worse
+    (900.0, 10.0, "STALE_BUCKETS_MIN", True),    # longer outage is worse
+])
+def test_band_severity_points_the_right_way(worse, better, edges, higher_is_worse):
+    edge_values = getattr(m, edges)
+    worse_sev, _ = m._band(worse, edge_values, higher_is_worse=higher_is_worse)
+    better_sev, _ = m._band(better, edge_values, higher_is_worse=higher_is_worse)
+    assert worse_sev > better_sev, f"{edges}: {worse} should outrank {better}"
+
+
+def test_drift_inside_a_band_is_not_restated(tmp_path):
+    """The real second round: three of four restatements carried no new fact.
+
+    elevenlabs 44.0 -> 42.7 h, scrapfly 134.9 -> 130.0 h and openrouter
+    55.6 -> 52.1 h are all drift. Writing them again puts three lines a human
+    cannot act on next to the one they must.
+    """
+    store = m.Store(str(tmp_path / "monitor.sqlite"))
+    alerts = tmp_path / "alerts.jsonl"
+    alerter = m.Alerter(store, str(alerts))
+    start = T0
+
+    for offset, runway in [(0, 55.563), (60, 55.0), (3660, 52.086), (7260, 49.0)]:
+        alerter.process([_runway_candidate(runway)], start + timedelta(seconds=offset))
+
+    lines = _alert_lines(alerts)
+    assert len(lines) == 1, \
+        f"55.6 -> 49.0 h never leaves the 48-72 h band; got {len(lines)} lines"
+
+
+def test_crossing_a_band_is_announced_even_long_after_the_first_line(tmp_path):
+    """resend went 182.0 -> 44.9 h in one round. That must produce a line."""
+    store = m.Store(str(tmp_path / "monitor.sqlite"))
+    alerts = tmp_path / "alerts.jsonl"
+    alerter = m.Alerter(store, str(alerts))
+    start = T0
+
+    # The first evaluation only starts the sustain clock; the second writes.
+    alerter.process([_runway_candidate(182.003)], start)
+    alerter.process([_runway_candidate(182.003)], start + timedelta(seconds=60))
+    alerter.process([_runway_candidate(180.0)], start + timedelta(seconds=1800))
+    alerter.process([_runway_candidate(44.857)], start + timedelta(seconds=3600))
+
+    lines = _alert_lines(alerts)
+    assert len(lines) == 2, f"the 4x deterioration must be announced; got {len(lines)}"
+    assert lines[0]["evidence"]["runway_h"] == pytest.approx(182.003)
+    assert lines[1]["evidence"]["runway_h"] == pytest.approx(44.857)
+    assert lines[1]["evidence"]["previous_band"] != lines[1]["evidence"]["band"]
+
+
+def test_a_value_oscillating_across_a_band_edge_is_rate_limited(tmp_path):
+    store = m.Store(str(tmp_path / "monitor.sqlite"))
+    alerts = tmp_path / "alerts.jsonl"
+    alerter = m.Alerter(store, str(alerts))
+    for i in range(40):
+        runway = 47.0 if i % 2 else 49.0          # straddles the 48 h edge
+        alerter.process([_runway_candidate(runway)], T0 + timedelta(seconds=30 * i))
+    lines = _alert_lines(alerts)
+    assert len(lines) <= 3, f"oscillation produced {len(lines)} lines"
+
+
+def test_a_band_change_while_suppressed_is_not_lost(tmp_path):
+    """The stored signature must track the last line WRITTEN, not the last tick.
+
+    If it tracked every evaluation, a condition drifting across a band during
+    the rate-limit window would have its change silently absorbed and never
+    announced.
+    """
+    store = m.Store(str(tmp_path / "monitor.sqlite"))
+    alerts = tmp_path / "alerts.jsonl"
+    alerter = m.Alerter(store, str(alerts))
+    alerter.process([_runway_candidate(100.0)], T0)                              # sustain tick
+    alerter.process([_runway_candidate(100.0)], T0 + timedelta(seconds=30))      # writes
+    alerter.process([_runway_candidate(20.0)], T0 + timedelta(seconds=60))       # changed, too soon
+    alerter.process([_runway_candidate(20.0)], T0 + timedelta(seconds=1200))     # now allowed
+    lines = _alert_lines(alerts)
+    assert len(lines) == 2, "the band change must survive the suppression window"
+    assert lines[0]["evidence"]["runway_h"] == pytest.approx(100.0)
+    assert lines[1]["evidence"]["runway_h"] == pytest.approx(20.0)
+
+
+def _runway_band(value):
+    return m._band(value, m.RUNWAY_BUCKETS_H, higher_is_worse=False)
+
+
+@pytest.mark.parametrize("before,after", [
+    (43.997, 42.703),    # elevenlabs drift, observed 16:48Z -> 17:49Z
+    (134.89, 130.011),   # scrapfly drift
+    (55.563, 52.086),    # openrouter drift
+])
+def test_observed_drift_pairs_share_a_band(before, after):
+    """The three restatements the live log produced that carried no new fact."""
+    assert _runway_band(before) == _runway_band(after)
+
+
+def test_the_observed_deterioration_pair_does_not_share_a_band():
+    """resend 182.0 -> 44.9 h in one round: the one line that mattered."""
+    worse, _ = _runway_band(44.857)
+    better, _ = _runway_band(182.003)
+    assert _runway_band(182.003) != _runway_band(44.857)
+    assert worse > better, "less runway must rank as more severe"
+
+
+def test_a_flapping_provider_produces_one_line_per_episode_not_per_cycle(tmp_path):
+    """Alternating up/down is the classic alert-storm generator.
+
+    400 cycles is 200 minutes containing five distinct 20-minute outages. Five
+    lines is the honest answer — they are five separate incidents — and the
+    number that matters is that it is not 200.
+    """
     def builder(_provider, i):
         if (i // 40) % 2 == 0:
             return ('{"balance":900.00,"currency":"usd"}', 200)
@@ -607,7 +761,8 @@ def test_a_flapping_provider_produces_one_line_not_hundreds(tmp_path):
 
     _store, _ingestor, alerts = _pipeline(tmp_path, _cycles(builder, 400))
     fired = [a for a in _alert_lines(alerts) if a["rule"] == "unavailable"]
-    assert 0 < len(fired) <= 3, f"cooldown failed: {len(fired)} lines"
+    episodes = 5
+    assert 0 < len(fired) <= episodes + 1, f"alert storm: {len(fired)} lines"
 
 
 def test_top_ups_never_reach_alerts_jsonl(tmp_path):

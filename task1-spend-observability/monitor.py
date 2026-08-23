@@ -99,8 +99,21 @@ class Policy:
     pool_error_fraction: float = 0.50
     pool_error_sustain_s: float = 180.0
 
-    # Alert hygiene: one line per rule+provider per hour at most.
-    cooldown_s: float = 3600.0
+    # Alert hygiene. A line is written when a condition starts and when it
+    # materially worsens - never merely because time passed.
+    #
+    # MEASURED: with a plain one-hour cooldown the second round of firing
+    # restated elevenlabs 44.0 -> 42.7 h, scrapfly 134.9 -> 130.0 h and
+    # openrouter 55.6 -> 52.1 h, none of which a human can act on differently,
+    # while resend went 182.0 -> 44.9 h in the same round - a fourfold
+    # deterioration sitting in a block of lines that looked identical. Burying
+    # the one line that mattered among three that did not is how an alert
+    # channel gets ignored.
+    #
+    # Materiality is judged by which bucket the headline number falls in, so
+    # drift inside a bucket is silent and crossing one is not. This floor only
+    # bounds pathological oscillation across a bucket edge.
+    refire_min_gap_s: float = 600.0
 
     # A credits package resets on its refresh date. Projecting a package to
     # exhaust before then is only worth saying if the shortfall is material.
@@ -1066,6 +1079,53 @@ class Candidate:
     signature: str
 
 
+# Bucket edges for judging whether an alert has materially changed. Roughly
+# doubling, because what matters is the order of magnitude of the time left,
+# not its second significant figure: 44 h and 43 h call for the same response,
+# 182 h and 45 h do not.
+RUNWAY_BUCKETS_H = (2.0, 6.0, 12.0, 24.0, 48.0, 72.0, 168.0)
+DEVIATION_BUCKETS = (10.0, 20.0, 50.0, 100.0)
+STALE_BUCKETS_MIN = (30.0, 60.0, 180.0, 720.0)
+
+
+def _band(value: float | None, edges: Sequence[float], *,
+          higher_is_worse: bool) -> tuple[int, str]:
+    """Return `(severity, label)` for `value`, where a higher severity is worse.
+
+    Direction matters. For a runway a *smaller* number is worse; for an anomaly
+    deviation or an outage duration a *larger* one is. Encoding that here is
+    what lets the alerter speak when a condition deteriorates and stay quiet
+    when it recovers — a line saying an anomaly fell from 20 to 14 MAD is not
+    something anyone acts on.
+    """
+    index, label = len(edges), f"ge{edges[-1]:g}"
+    if value is None:
+        index, label = len(edges), "na"
+    else:
+        for position, edge in enumerate(edges):
+            if value < edge:
+                index, label = position, f"lt{edge:g}"
+                break
+    severity = index if higher_is_worse else (len(edges) - index)
+    return severity, label
+
+
+def _signature(severity: int, descriptor: str) -> str:
+    """Pack severity into the signature so the store needs no extra column."""
+    return f"{severity:02d}|{descriptor}"
+
+
+def signature_severity(signature: str | None) -> int:
+    """Severity of a stored signature; -1 when there is none to compare against."""
+    if not signature:
+        return -1
+    head = signature.split("|", 1)[0]
+    try:
+        return int(head)
+    except ValueError:
+        return -1
+
+
 def _fmt(value: float | None, unit: str, digits: int = 2) -> str:
     if value is None:
         return "n/a"
@@ -1091,6 +1151,7 @@ def rule_runway(state: ProviderState, now: datetime) -> Candidate | None:
     if burn.span_s < BASELINE.min_projection_span_s:
         return None
     level = "critical" if runway <= POLICY.runway_critical_h else "warning"
+    runway_severity, runway_label = _band(runway, RUNWAY_BUCKETS_H, higher_is_worse=False)
     floor = 0.0 if state.pay_model == "prepaid_balance" else POLICY.postpaid_floor
     floor_text = "zero" if floor == 0 else _fmt(floor, state.unit)
     return Candidate(
@@ -1119,7 +1180,7 @@ def rule_runway(state: ProviderState, now: datetime) -> Candidate | None:
         },
         rule_class=CLASS_POLICY,
         sustain_s=POLICY.estimate_sustain_s,
-        signature=f"runway:{level}",
+        signature=_signature(runway_severity, f"runway:{level}:{runway_label}"),
     )
 
 
@@ -1142,6 +1203,7 @@ def rule_package_exhaustion(state: ProviderState, now: datetime) -> Candidate | 
     if shortfall <= POLICY.package_shortfall_fraction * package:
         return None
     ratio = state.extrapolation_ratio
+    pkg_severity, pkg_label = _band(runway, RUNWAY_BUCKETS_H, higher_is_worse=False)
     ratio_text = f" (projection extrapolates the observed window {ratio:.0f}x)" if ratio else ""
     return Candidate(
         key=f"package_exhaustion:{state.provider}",
@@ -1170,7 +1232,7 @@ def rule_package_exhaustion(state: ProviderState, now: datetime) -> Candidate | 
         },
         rule_class=CLASS_POLICY,
         sustain_s=POLICY.estimate_sustain_s,
-        signature="package_exhaustion",
+        signature=_signature(pkg_severity, f"package_exhaustion:{pkg_label}"),
     )
 
 
@@ -1203,6 +1265,8 @@ def rule_unavailable(state: ProviderState, now: datetime) -> Candidate | None:
         return None
 
     recent = state.last_reading
+    stale_severity, stale_label = _band(stale_for / 60.0, STALE_BUCKETS_MIN,
+                                        higher_is_worse=True)
     return Candidate(
         key=f"unavailable:{state.provider}",
         rule="unavailable",
@@ -1226,7 +1290,7 @@ def rule_unavailable(state: ProviderState, now: datetime) -> Candidate | None:
         },
         rule_class=CLASS_POLICY,
         sustain_s=0.0,
-        signature="unavailable",
+        signature=_signature(stale_severity, f"unavailable:{stale_label}"),
     )
 
 
@@ -1254,6 +1318,8 @@ def rule_burn_anomaly(state: ProviderState, now: datetime) -> Candidate | None:
     # recorded on the dashboard but is not an incident.
     if delta <= 0:
         return None
+    dev_severity, dev_label = _band(abs(delta) / scale, DEVIATION_BUCKETS,
+                                    higher_is_worse=True)
     factor = recent.rate_per_h / base.rate_per_h if base.rate_per_h else None
     # For a trailing spend report the compared quantity is the rate of change
     # of the reported total, which is an acceleration, not a spend rate. Saying
@@ -1297,7 +1363,7 @@ def rule_burn_anomaly(state: ProviderState, now: datetime) -> Candidate | None:
         },
         rule_class=CLASS_DERIVED,
         sustain_s=POLICY.estimate_sustain_s,
-        signature="burn_anomaly",
+        signature=_signature(dev_severity, f"burn_anomaly:{dev_label}"),
     )
 
 
@@ -1342,7 +1408,7 @@ def rule_collection_health(states: Sequence[ProviderState], now: datetime) -> Ca
         },
         rule_class=CLASS_POLICY,
         sustain_s=POLICY.pool_error_sustain_s,
-        signature="collection_health",
+        signature=_signature(9, "collection_health"),
     )
 
 
@@ -1396,24 +1462,40 @@ class Alerter:
             prior = self.store.alert_state(key)
             since = parse_ts(prior["active_since"]) if prior and prior["active_since"] else None
             last_fired = prior["last_fired"] if prior else None
-            prior_signature = prior["signature"] if prior else None
+            # The signature of the line we last WROTE, not of the last thing we
+            # evaluated. Updating it on every tick would let a condition drift
+            # across a materiality band while suppressed and never announce it.
+            fired_signature = prior["signature"] if prior else None
 
             if since is None:
                 # Condition just became true: start the sustain clock, do not fire.
-                self.store.set_alert_state(key, now, last_fired, candidate.signature)
+                self.store.set_alert_state(key, now, last_fired, fired_signature)
                 continue
 
             held_for = (now - since).total_seconds()
             if held_for < candidate.sustain_s:
-                self.store.set_alert_state(key, since, last_fired, candidate.signature)
+                self.store.set_alert_state(key, since, last_fired, fired_signature)
                 continue
 
-            # Cooldown, unless the situation has materially changed (e.g. a
-            # warning escalating to critical), which is worth a fresh line.
-            escalated = prior_signature is not None and prior_signature != candidate.signature
-            if last_fired and not escalated:
-                if (now - parse_ts(last_fired)).total_seconds() < POLICY.cooldown_s:
+            if last_fired is not None:
+                was = signature_severity(fired_signature)
+                now_severity = signature_severity(candidate.signature)
+                if now_severity < was:
+                    # Recovering. Not worth a line - nobody acts on an anomaly
+                    # easing from 20 to 14 MAD - but the stored band is lowered
+                    # so that sliding back down speaks again.
                     self.store.set_alert_state(key, since, last_fired, candidate.signature)
+                    continue
+                if now_severity == was:
+                    # Same band as the line already written. Restating it would
+                    # tell a human nothing they could act on differently, and
+                    # the dashboard shows the condition as active regardless.
+                    self.store.set_alert_state(key, since, last_fired, fired_signature)
+                    continue
+                if (now - parse_ts(last_fired)).total_seconds() < POLICY.refire_min_gap_s:
+                    # Worse, but too soon: bounds a value oscillating across a
+                    # band edge.
+                    self.store.set_alert_state(key, since, last_fired, fired_signature)
                     continue
 
             payload = {
@@ -1426,7 +1508,9 @@ class Alerter:
                 "evidence": dict(candidate.evidence,
                                  sustained_s=round(held_for, 1),
                                  sustain_required_s=candidate.sustain_s,
-                                 first_observed=iso(since)),
+                                 first_observed=iso(since),
+                                 band=candidate.signature,
+                                 previous_band=fired_signature),
             }
             ident = hashlib.sha256(f"{key}|{iso(now)}".encode()).hexdigest()[:16]
             if self.store.record_fired(ident, now, payload):
@@ -2013,9 +2097,13 @@ measured, so a line means "longer than anything we observed", not "the API is fl
 Freshness above turns amber at {POLICY.stale_display_s:.0f}s so a provider going quiet is
 <em>visible</em> long before it is <em>alerted</em>.<br>
 <strong>Not alerts.</strong> A top-up, a package reset on its refresh date, a postpaid credit
-going negative, and a single timeout are all normal. Estimate-driven rules sustain for
-{POLICY.estimate_sustain_s:.0f}s before firing; every rule then holds a
-{POLICY.cooldown_s / 3600:.0f}h cooldown per provider.<br>
+going negative, a rise that is later handed back, and a single timeout are all normal.
+Estimate-driven rules sustain for {POLICY.estimate_sustain_s:.0f}s before firing.<br>
+<strong>Lines are written on change, not on a timer.</strong> A condition produces a line
+when it starts and again only when it crosses a materiality band &mdash; roughly doubling
+steps of time-to-impact. Drift inside a band is silent, because 44&nbsp;h and 43&nbsp;h call
+for the same response. This table is the live state; <code>alerts.jsonl</code> is the log of
+changes to it.<br>
 <strong>Known measurement limit.</strong> A top-up landing in the same interval as spend is not
 observable: the API exposes a current value only, so the two are seen summed and never
 separately. Burn is a lower bound across such intervals.

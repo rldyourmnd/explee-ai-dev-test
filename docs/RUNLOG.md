@@ -270,3 +270,42 @@ This is the same class of error as reading `{}` as zero: a plausible number in
 the right units that means something else. It survived the unit tests because
 every test asserted the estimator was internally consistent, and none asserted
 the estimate meant what the column header claimed.
+
+### 18:00Z — alert restatement: the live log showed the cooldown was wrong
+
+The watch fired four alerts at 17:49Z and reading them showed the failure mode
+a cooldown creates. Compared against the same four rules an hour earlier:
+
+| Provider | 16:48Z | 17:49Z | new information? |
+|---|---|---|---|
+| `elevenlabs` | 44.0 h | 42.7 h | no — 3% drift |
+| `scrapfly` | 134.9 h | 130.0 h | no — 4% drift |
+| `openrouter` | 55.6 h | 52.1 h | no — 6% drift |
+| `resend` | 182.0 h | **44.9 h** | **yes — fourfold deterioration** |
+
+Three lines a human cannot act on, printed alongside the one they must, and
+formatted identically. That is how an alert channel gets ignored.
+
+Lines are now written when a condition **starts** and when it **crosses a
+materiality band** — roughly doubling steps of time-to-impact, outage duration
+or anomaly deviation — never merely because time passed. Bands carry a
+direction, so a condition that eases lowers its stored band silently instead of
+announcing its own recovery, and a relapse still speaks.
+
+Re-evaluated against the whole window, which is the property the append-only
+design exists for:
+
+```
+before: 10 lines, 4 of them restatements
+after :  9 lines, every one a start or a deterioration
+        resend reads as a narrative: 182.0 -> 157.1 -> 71.8 -> 47.8 h
+```
+
+The `burn_anomaly` line for `resend` easing from 20.4 to 14.0 MAD is gone, which
+is correct: nobody acts on an anomaly getting smaller.
+
+One latent defect fixed alongside it. The stored signature was overwritten on
+every evaluation, so it tracked the last thing *evaluated* rather than the last
+line *written*. A condition drifting across a band while suppressed would have
+had its change absorbed silently and never announced. It now records the band as
+of the last written line.

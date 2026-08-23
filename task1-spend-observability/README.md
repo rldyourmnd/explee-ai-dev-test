@@ -161,7 +161,28 @@ choice, the bound is quoted next to it in `monitor.py`.
 | freshness (display, `/healthz`) | 300 s | a provider going quiet is *visible* long before it is *alerted* |
 | postpaid floor | −500 USD | zero is not the boundary; no credit limit was supplied |
 | pool-wide failure | 50% for 180 s | worst single cycle measured was 4/15 = 27% |
-| cooldown | 1 h per rule per provider | |
+| re-fire floor | 600 s | bounds oscillation across a band edge |
+
+### Lines are written on change, not on a timer
+
+A plain hourly cooldown was tried first and the live log showed why it fails.
+The second round of firing restated `elevenlabs` 44.0 → 42.7 h, `scrapfly`
+134.9 → 130.0 h and `openrouter` 55.6 → 52.1 h — drift nobody can act on — while
+in the same round `resend` went **182.0 → 44.9 h**, a fourfold deterioration,
+sitting in a block of lines that looked identical. Burying the one line that
+mattered among three that did not is how an alert channel gets ignored.
+
+A condition now writes a line when it starts and again only when it crosses a
+**materiality band** — roughly doubling steps of time-to-impact
+(2/6/12/24/48/72/168 h), of outage duration, or of anomaly deviation. Bands
+carry a direction, so a condition that *eases* updates its band silently rather
+than announcing its own recovery; sliding back down speaks again.
+
+Over the same window this turns 10 lines into 9, but the content is what
+changed: every line after the first is now a genuine deterioration, and the
+`resend` story reads as one — 182 h → 157 h → 71.8 h → 47.8 h.
+
+`alerts.jsonl` is the log of changes. The dashboard table is the live state.
 
 **`data_derived`** — computed from the window. Burn anomaly fires at 6 MAD of
 that provider's own pairwise-slope distribution, floored at 10% of the baseline
