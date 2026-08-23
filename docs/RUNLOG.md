@@ -850,3 +850,59 @@ policy says not to commit — while also saying `.serena/` is tracked normally.
 Two of them are already tracked, from an early `git add -A` of mine. That
 tension is a repository-wide decision rather than a Task 1 one, so it is
 recorded here and left alone rather than resolved unilaterally.
+
+## The 390 px "overflow" that was the instrument, not the page
+
+The shared UI spec asks for both public pages to be opened at 1440 px and
+390 px, with neither allowed to scroll horizontally. 1440 was straightforward:
+`scrollWidth == clientWidth == 1440`.
+
+390 was not, and the interesting part is that it looked like a clear defect for
+about ten minutes.
+
+The first attempt went through the browser extension. Two `resize_window` calls
+to 390x844 both reported success, and the page kept reporting a 1440 viewport
+with `outerWidth: 0`. Two failed attempts on the same measurement is the
+no-rabbit-holes threshold, so that path was abandoned rather than retried a
+third time.
+
+The second attempt used headless Chrome with `--window-size=390,900
+--screenshot`. The PNG came out 390 px wide and showed the subtitle running off
+the right edge mid-phrase, the `generated=` line cut at `16:13:27.13`, and
+cards with a left border but no right border. That is what horizontal overflow
+looks like.
+
+It was not overflow. Headless Chrome on macOS clamps the window to a **500 px
+minimum**, so the page was laid out at 500 px and the screenshot was then
+cropped to the 390 px I asked for. A crop and an overflow are pixel-identical
+in a still image, and nothing in the picture distinguishes them. The probe
+caught it only because it printed the viewport it actually got:
+
+```
+PROBE|vw=500|sw=500|over=0|...
+```
+
+The viewport was 500 when 390 had been requested. Everything downstream of that
+number was measuring the wrong page.
+
+The fix is to stop asking the browser for a width it may refuse and instead
+give the page a container of exactly that width: load the saved page in a
+390 px `<iframe>` with `--allow-file-access-from-files`, and measure the
+frame's own `documentElement`.
+
+```
+P|vw=390|sw=390|over=0|TABLE. right=1514 ;; THEAD. right=1514 ;; ...
+```
+
+Zero overflow at a genuine 390 px viewport. The only element wider than the
+viewport is the results table at 1514 px, which sits inside a `.scroll` box
+with `overflow-x: auto`, so the table scrolls and the body does not. That is
+the designed containment.
+
+Two things worth carrying forward. A screenshot taken at a width the browser
+silently refuses to honour is indistinguishable from a rendering bug, so a
+measurement should always report the viewport it actually got rather than the
+one it requested. And "verify by running the check" is not sufficient on its
+own: the check ran, it returned a clean-looking image, and the image was of
+something other than what was being tested.
+
