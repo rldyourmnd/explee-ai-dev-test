@@ -32,6 +32,7 @@ import statistics
 import sys
 import threading
 import time
+import traceback
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -2394,7 +2395,18 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._send(404, b'{"error":"not found"}', "application/json")
         except Exception as exc:  # noqa: BLE001 - never take the server down
-            self._send(500, json.dumps({"error": f"{type(exc).__name__}: {exc}"}).encode(),
+            # Log the traceback where an operator can find it, and tell the
+            # client nothing beyond "it failed".
+            #
+            # This block used to do neither. It returned the exception text to
+            # the caller - which on a public endpoint hands out internal paths
+            # and types - while writing nothing to stderr, so a 500 seen from
+            # outside left no trace on the server at all. A monitoring service
+            # that cannot account for its own errors is not worth much.
+            print(f"[error] {self.command} {self.path}: {type(exc).__name__}: {exc}",
+                  file=sys.stderr, flush=True)
+            traceback.print_exc(file=sys.stderr)
+            self._send(500, b'{"error":"internal error; see server log"}',
                        "application/json")
 
     def _healthz(self) -> tuple[bytes, int]:

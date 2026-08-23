@@ -1028,6 +1028,51 @@ def test_the_anomaly_scale_never_collapses_to_zero():
     assert m.rule_burn_anomaly(state, T0) is None
 
 
+def test_a_handler_error_is_logged_and_not_leaked_to_the_client(tmp_path, capfd, monkeypatch):
+    """A 500 seen from outside must leave a trace inside.
+
+    The external verification run caught a 500 with nothing whatsoever in the
+    container log, because the handler returned the exception text to the caller
+    and wrote nothing to stderr. That is backwards on a public endpoint: the
+    operator gets silence and the internet gets internal type and path names.
+    """
+    import threading
+    import urllib.error
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+
+    store, ingestor, _alerts = _pipeline(tmp_path, _cycles(
+        lambda _p, i: ('{"balance":900.00,"currency":"usd"}', 200), 6))
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("synthetic failure with /secret/internal/path")
+
+    monkeypatch.setattr(m, "snapshot", boom)
+    m.Handler.store = store
+    m.Handler.ingestor = ingestor
+    m.Handler.alerts_path = str(tmp_path / "alerts.jsonl")
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), m.Handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        port = httpd.server_address[1]
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=10)
+            raise AssertionError("expected a 500")
+        except urllib.error.HTTPError as err:
+            assert err.code == 500
+            body = err.read().decode()
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+    assert "internal error" in body
+    assert "/secret/internal/path" not in body, "internals leaked to the client"
+    assert "RuntimeError" not in body
+    err_output = capfd.readouterr().err
+    assert "RuntimeError" in err_output, "the operator got no trace of the failure"
+    assert "/secret/internal/path" in err_output, "the log should carry the detail"
+
+
 def test_alerts_endpoint_serves_the_path_selected_by_the_cli(tmp_path):
     """`--alerts elsewhere.jsonl` wrote one file and served another, silently."""
     import threading

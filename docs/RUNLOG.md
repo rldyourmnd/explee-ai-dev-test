@@ -375,3 +375,98 @@ collector: active
 
 No non-startup lines in the container log. Per-thread connections plus WAL and a
 30 s busy timeout hold up; the writer never blocks a reader.
+
+### 19:06Z — public dashboard live and verified from outside
+
+`https://spend.nddev.it.com/` — no login, no cookies, HTTPS.
+
+The `A` record was created by the human (the OAuth flow was not something to
+automate, and rule 2 forbids a credential entering this trace). The server side
+was mine. The vhost had been configured correctly since 17:11Z — four entries in
+nginx-proxy's generated config — but the certificate attempt at **18:11:27Z had
+failed**:
+
+```
+spend.nddev.it.com: Invalid status. Verification error details:
+DNS problem: NXDOMAIN looking up A for spend.nddev.it.com
+```
+
+The record did not exist yet at that moment. Once it did, re-triggering
+`signal_le_service` issued the certificate in 18 s. `force_renew` was
+deliberately not used: it would have renewed unrelated certificates on the same
+proxy.
+
+**External evidence**, taken from the developer workstation — not from the
+deployment host — with no `--resolve`, no `Host` override, no cookies, no auth
+and no local DNS override:
+
+```
+DNS      system resolver, 8.8.8.8 and 1.1.1.1 all answer
+TLS      subject=CN=spend.nddev.it.com
+         issuer=C=US, O=Let's Encrypt, CN=YR1
+         notBefore=Aug 23 17:55:09 2026 GMT  notAfter=Nov 21 17:55:08 2026 GMT
+         SAN: DNS:spend.nddev.it.com
+GET /            200  53,451 bytes  tls_verify=0  connect 0.104s  tls 0.224s  total 0.691s
+GET /healthz     200  ok, 15/15 fresh, 5,175 samples
+GET /alerts.jsonl 200  11 lines, every one parses standalone
+GET http://      301 -> https://spend.nddev.it.com/
+WWW-Authenticate headers: 0        Set-Cookie headers: 0
+```
+
+`tls_verify=0` is curl reporting that the chain validated against the system
+trust store, so the certificate is trusted rather than merely present. Zero
+`WWW-Authenticate` and zero `Set-Cookie` is what "opens with no login" looks
+like as a measurement instead of a claim.
+
+The collector was `active` before and after; the raw data mount is still
+`rw=false`.
+
+### 19:05Z — two defects the external check found that internal checks had not
+
+**A 500 with no server-side trace.** The first clean external run returned
+`code=500 bytes=53` on `/` and `/healthz`, and the container log contained
+nothing at all. The handler's `except` returned the exception text *to the
+caller* and wrote nothing to stderr — backwards on a public endpoint, which gets
+internal type and path names while the operator gets silence. It now logs the
+traceback and returns `{"error":"internal error; see server log"}`. A test
+asserts both directions: the detail reaches stderr, and it does not reach the
+client.
+
+**A race in the deploy procedure, not in the code.** Derived state was being
+deleted while the container was still running, so the live process's tail thread
+recreated the database before the restart took effect. The evidence was in the
+replay log:
+
+```
+[replay] 16 records in 0.2s      <- resumed from an offset that should not have existed
+[replay] 5456 records in 35.0s   <- after stop, delete, start
+```
+
+A deploy that drops derived state now stops the container first. The result is
+verifiable rather than assumed: 5,160 readings spanning
+`2026-08-23T16:13:27.134Z` to `19:05:05.825Z`, zero `[error]` lines.
+
+### 19:06Z — alerts.jsonl synced into the repository
+
+The Task 1 README listed `alerts.jsonl` as a deliverable while the file existed
+only on the host. A README that names a file the repository does not contain is
+the kind of claim that tells a reader nobody checked. It is now committed, and
+verified rather than asserted: 11 lines, 8,478 bytes, every line parses on its
+own, every timestamp carries an explicit `Z`, and the committed copy is
+byte-identical to what `https://spend.nddev.it.com/alerts.jsonl` serves.
+
+Every line is a start or a deterioration; none is a restatement:
+
+```
+16:48:58  package_exhaustion  elevenlabs   44.0 h
+16:48:58  package_exhaustion  resend      182.0 h
+16:48:58  package_exhaustion  scrapfly    134.9 h
+16:48:58  runway              openrouter   55.6 h
+17:00:29  package_exhaustion  findymail   186.0 h
+17:07:59  burn_anomaly        resend       20.4 MAD-equivalents
+17:08:59  package_exhaustion  resend      157.1 h   <- resend deteriorating
+17:22:30  package_exhaustion  resend       71.8 h
+17:44:01  package_exhaustion  resend       47.8 h
+18:03:32  runway              openrouter   47.9 h
+18:44:34  package_exhaustion  bounceban   180.4 h
+```
