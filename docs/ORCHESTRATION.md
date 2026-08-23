@@ -157,7 +157,24 @@ worth more to a reviewer than an invisible fix.
 Two decisions were waiting on this session and are now made, because both panes
 were parked on them and idle workers cost wall-clock that does not come back:
 
-- **Task 2 corpus: Радио-Т, approved.** Chosen on difficulty and reproducibility
+- **Task 2 corpus: Радио-Т, ruled 19:10Z after the licence objection.** The
+  `ND` leg is not the problem: no derivative is distributed, and the recipe —
+  episode, URL, SHA-256 of the publisher original, cut points — gives a grader
+  *better* reproducibility than shipping our own copy, because they verify
+  against the publisher rather than against us. **`NC` is the contestable leg**
+  and the report must say so: CC defines NonCommercial as not primarily directed
+  toward monetary compensation, and a hiring submission is, at a remove, exactly
+  that. Proceeding anyway because the published artifact carries no licensed
+  content — metrics are facts about a recording, not a reproduction of it — the
+  only licence-governed act is private local analysis, and the alternative trades
+  away the thing being measured: a cleaner-licence corpus without overlapping
+  speakers, remote-call acoustics and in-sentence code-switching would score
+  engines on easy audio and tell the reader nothing about the hard case. The
+  rejected fallback stays documented in `corpus-candidates.md`, because showing
+  the option not taken is evidence of judgement. The publisher invites exception
+  requests; that is outward-facing and therefore the human's, and no one waits on
+  it.
+- **Superseded 19:06Z note: Task 2 corpus approved.** Chosen on difficulty and reproducibility
   rather than convenience — multiple speakers with overlap, telephone-grade
   remote acoustics, code-switching inside almost every sentence, and public MP3s
   so a grader can fetch the same file and check our SHA-256. The `CC BY-NC-ND`
