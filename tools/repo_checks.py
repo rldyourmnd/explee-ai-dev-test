@@ -226,12 +226,35 @@ def check_snapshot(problems: list[str], strict: bool) -> None:
 
 
 def check_engines(problems: list[str], strict: bool) -> None:
-    """`docs/TASK.md`: "a comparison of >=5 STT engines ... on the same audio"."""
-    raw = os.path.join(ROOT, "task2-stt-benchmark/data/raw")
-    engines = sorted(d for d in os.listdir(raw)) if os.path.isdir(raw) else []
-    if len(engines) < 5:
+    """`docs/TASK.md`: "a comparison of >=5 STT engines ... on the same audio".
+
+    Counts the *active* corpus, not a hard-coded directory. The corpus was
+    amended once mid-run to a talk that ships a publisher human transcript, which
+    created `data/raw-<slug>/` alongside the original `data/raw/`. A check still
+    pointed at the old path reported three engines while four had run — a check
+    measuring the wrong thing is worse than no check, because it is believed.
+    """
+    data = os.path.join(ROOT, "task2-stt-benchmark/data")
+    if not os.path.isdir(data):
+        (problems.append if strict else NOTES.append)("no Task 2 data directory")
+        return
+    candidates = []
+    for name in os.listdir(data):
+        if name == "raw" or name.startswith("raw-"):
+            path = os.path.join(data, name)
+            if os.path.isdir(path):
+                engines = sorted(d for d in os.listdir(path)
+                                 if os.path.isdir(os.path.join(path, d)))
+                candidates.append((len(engines), name, engines))
+    if not candidates:
+        (problems.append if strict else NOTES.append)("no engine output directories")
+        return
+    # The active corpus is the one with the most engines: an amended corpus is
+    # only meaningful once engines have actually run against it.
+    count, where, engines = max(candidates)
+    if count < 5:
         (problems.append if strict else NOTES.append)(
-            f"only {len(engines)} engines have raw output, task requires >=5: {engines}")
+            f"only {count} engines have raw output in {where}, task requires >=5: {engines}")
 
 
 def check_report_not_placeholder(problems: list[str], strict: bool) -> None:

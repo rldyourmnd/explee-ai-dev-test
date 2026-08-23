@@ -23,9 +23,32 @@ the same reason. A gate that cannot reach its passing state reads as rigour whil
 proving nothing, and both directions must be tested — against the leak *and*
 against a clean file that merely mentions the pattern.
 
-**Baseline: `410e9c1`**, re-derived automatically; CI fails if this falls behind HEAD.
+**Baseline: `778af57`**, re-derived against the measured tree at 20:38Z; CI fails if deliverables move without this matrix being revisited.
 which `main` had long passed — a matrix that lags the tree is the same defect as
 a stale board, and this is the artifact a grader is handed as proof.
+
+
+## What is still missing — stated first, 20:38Z at `778af57`
+
+Named here so a reviewer does not have to discover them. Naming our own gaps is
+worth more than being caught with them, for the same reason a retraction reads
+better than a claim nobody checked.
+
+| Gap | Row | State |
+|---|---|---|
+| **Task 1 trace not exported** | 1.5 | `task1-spend-observability/TRACE.md` does not exist. Export happens at session end, deliberately — an early export stops the trace before the work does |
+| **Task 2 trace not exported** | 2.8 | same, and for the same reason |
+| **Six-hour snapshot not taken** | 1.4 | due at 22:14Z; the collector is at 4.39 h with max gap 29.661 s and zero malformed lines, so the window is intact but not yet proven |
+| **Task 2 has 4 engines, not 5** | 2.3 | **"≥5 STT engines"** | `task2-stt-benchmark/data/raw-hlk8s/` | `surface:5` | **4 of 5** — Whisper large-v3, large-v3-turbo, Parakeet-TDT-0.6b-v3, SeamlessM4T-v2, all against the amended corpus. One more open model needed; nothing paid | `ls task2-stt-benchmark/data/raw-hlk8s/` → must be ≥5 | at `778af57` |
+| **Task 2 publishes no ranking** | 2.5 | Engine-independent reference | `task2-stt-benchmark/data/reference-hlk8s.json` | `surface:5` | **UNBLOCKED** — verified 20:37Z: `kind = "publisher human transcript, edited for readability"`, carrying `source_url`, `talk`, `speaker`, `video_id`. Produced by the publisher, not by any ranked engine, so ranking is no longer circular. Ranking itself is not yet published | `python3 -c "import json;print(json.load(open(...))['kind'])"` | at `778af57` |
+| **History still contaminated** | X.8 | two quarantined traces remain in git history; the single `filter-repo` rewrite runs last, after every worker stops, and publication is the human's |
+
+**The biggest unblock of the day sits behind that ranking gap.** Task 2 amended
+its corpus to a HighLoad talk that ships a **publisher human transcript**,
+downloaded the audio and built `manifest-hlk8s.json`. That reference is produced
+by the publisher, not by any ranked engine, so the circularity that made ranking
+impossible disappears at the root rather than being bounded by a sampled slice —
+and it cost zero annotation hours. Four engines have already run against it.
 
 ## Requirements common to all three tasks
 
@@ -65,7 +88,7 @@ TRACE.md."*
 | # | Deliverable (task wording) | Path / URL | Owner | Status | Verification | Hash / SHA |
 |---|---|---|---|---|---|---|
 | 2.1 | Task directory | `task2-stt-benchmark/` | `surface:5` | PRESENT — harness, glossary, reference policy, frozen pre-registration | `test -d` | — |
-| 2.2 | **"the same audio (~1 hour)"** | frozen corpus | `surface:5` | **DONE** — 120 hashed segments, exactly 3600.0 s, span rule declared *before* cutting | manifest + SHA-256 of publisher original | — |
+| 2.2 | **"the same audio (~1 hour)"** | `task2-stt-benchmark/data/manifest-hlk8s.json` | `surface:5` | **AMENDED 20:36Z** — corpus moved to a HighLoad talk that ships a publisher human transcript, logged as a dated pre-registration amendment *before* the change. The earlier Радио-Т corpus and its rationale stay recorded rather than deleted | manifest + SHA-256 of the publisher original | `778af57` |
 | 2.3 | **"≥5 STT engines"** | `task2-stt-benchmark/data/raw/` | `surface:5` | **3 of 5 — NON-COMPLIANT on a countable requirement.** Whisper large-v3, large-v3-turbo, Parakeet-TDT-0.6b-v3, full precision, all 120/120 segments, zero empty outputs. Canary-1b-v2 and GigaAM blocked with named causes. Slate extension to two more open models directed 20:32Z | `ls task2-stt-benchmark/data/raw/ \| wc -l` → must be ≥5 | — |
 | 2.4 | **"the eval behind it"** — design frozen before results | `PREREGISTRATION.md` | `surface:5` | **DONE** — `FROZEN` anchored to commit `9fd6ff8`, not a self-declared stamp | `git show 9fd6ff8` | `9fd6ff8` |
 | 2.5 | Reference transcript for ranking | — | `surface:5` | **NOT PRODUCED, deliberately.** No independent reference existed: no annotator, and no publisher transcript for this episode. A reference drafted from engines under test measures agreement, not accuracy — the code refuses it and a test asserts the refusal. **No ranking is published**, which is the honest result rather than a missing one | test asserting `reference.build` fails closed | — |
