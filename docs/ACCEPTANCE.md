@@ -74,6 +74,7 @@ is the honest state, not a formatting placeholder.
 | X.6 | CI attached to the final commit | `.github/workflows/ci.yml` | `surface:3` | **GREEN** at `221c28c` and `95cc83a` — first green runs of this session; every earlier push was red and unread | `gh run list --json headSha,status,conclusion` → `completed success` | pending final SHA |
 | X.7 | Working tree free of third-party identifiers | whole repo | `surface:3` | **DONE** — command run 18:58Z, empty output | `git ls-files -z \| xargs -0 grep -lEi '<client-a>\|<client-b>'` → empty; `grep -lE '^[[:space:]]*HostName[[:space:]]+'` → empty; no public IPs | at this pass |
 | X.8 | **History** free of third-party identifiers | all refs | `surface:3` | **OPEN** — working tree is clean, history is not | `git log -p --all \| grep -ci '<identifier>'` → `0`, after the rewrite | — |
+| X.9 | Raw-log "verbatim" claim bounded at the 8000-char cap | `task1-spend-observability/README.md` | `surface:2` | **DONE** — re-measured independently by `surface:3` at 19:28Z on the host: 6240 records with a body, **max stored length 6422**, **0 records at exactly 8000**, headroom 1578. Nothing in the window was clipped, so the log is verbatim in fact and not only in intent | `python3` over `raw_samples.jsonl`: `max(len(body))`, `count(len(body)==8000)` | at `35df417`+ |
 
 ## Six-hour snapshot procedure — runs at 22:14Z, collection must not stop
 
