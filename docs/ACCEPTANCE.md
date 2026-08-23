@@ -1,120 +1,90 @@
 # Final acceptance matrix
 
-One row per required deliverable. Maintained by the orchestrator (`surface:3`).
+**Derived line by line from [`docs/TASK.md`](TASK.md), which is the authority.**
+Where any other document in this repository paraphrases the task, that document
+is wrong and `TASK.md` is right. This matrix was re-derived from the verbatim
+text at 19:38Z rather than from accumulated understanding, because paraphrase
+drift is how a submission fails a requirement everyone was sure was met.
 
-**The rule that governs this file:** a row is never marked `DONE` because an agent
-reported it done. It is marked `DONE` only when the verification command in its
-row has been run and its output recorded here, against a named SHA on a clean
-tree. The external review's central structural point is that it could not run
-anything, so every machine-level claim in this repository reads to a grader as an
-unverified assertion. This matrix exists so that our evidence survives that
-standard — a reader who trusts nothing we say can re-run column 5 and check.
+**The rule that governs this file:** a row is never `DONE` because an agent
+reported it done. It is `DONE` only when its verification command has been run
+and its output recorded. The external review could not run anything, so every
+machine-level claim here reads to a grader as an unverified assertion; this
+matrix exists so a reader who trusts nothing can re-run column 5.
 
-**Status vocabulary, deliberately narrow:**
+**Status vocabulary:** `DONE` (command run, output recorded) · `EXISTS-UNVERIFIED`
+(present but unproven — not a passing state) · `BLOCKED` (human decision) ·
+`ABSENT`.
 
-- `DONE` — verification command run, output recorded, at the stated SHA.
-- `EXISTS-UNVERIFIED` — the artifact is present but its claim is not yet proven
-  by a command run on a clean tree. Not a passing state.
-- `BLOCKED` — waiting on a decision only the human can make (see Part 4).
-- `ABSENT` — not in the repository.
+**A verification command must be satisfiable.** Row X.3's first version checked
+`grep -c 'max-result 6000'` → `0`, which can never pass because the removal note
+quotes the flag. The `AGENTS.md` `HostName` gate needed **three** revisions for
+the same reason. A gate that cannot reach its passing state reads as rigour while
+proving nothing, and both directions must be tested — against the leak *and*
+against a clean file that merely mentions the pattern.
 
-**A verification command must be satisfiable.** The first version of row X.3
-checked `grep -c 'max-result 6000' docs/HANDOFF.md` → `0`, which can never pass:
-the removal note itself quotes the old flag, so the word survives its own
-deletion. It now greps only inside fenced `bash` blocks, testing the runnable
-instruction rather than the prose. This is the same defect Task 3 found in the
-`AGENTS.md` `HostName` gate, and it is easy to write twice — a gate that cannot
-reach its passing state is worse than no gate, because it reads as rigour.
+**Baseline: `d3963d6`**, re-derived 19:38Z. The previous baseline said `479187b`,
+which `main` had long passed — a matrix that lags the tree is the same defect as
+a stale board, and this is the artifact a grader is handed as proof.
 
-**Baseline SHA for this pass: `479187b`** (working tree carries only `.serena/`
-tooling churn and the docs added in this pass). No row below is `DONE` yet, which
-is the honest state, not a formatting placeholder.
+## Requirements common to all three tasks
+
+Verbatim: *"Export that conversation as a TRACE.md per task… It must be the REAL
+conversation — exported or copy-pasted as-is, every message and every correction,
+verbatim. A hand-made 'trace' tells us nothing."*
+
+| # | Requirement | Owner | Status | Verification | Hash / SHA |
+|---|---|---|---|---|---|
+| A.1 | TRACE.md per task, real, verbatim, tool-exported | all | 1 of 3 present | tool header present; `grep -c 'not verbatim\|truncated'` → `0`; leak scans | — |
+| A.2 | Every conclusion backed by data | all | ongoing | each claim carries its measurement | — |
 
 ## Task 1 — spend observability
 
-| # | Deliverable | Path / URL | Owner | Status | Verification command | Final SHA / hash |
+Verbatim send list: *"the code (a file), your alerts.jsonl, a publicly deployed
+dashboard link (opens without login), and TRACE.md."*
+
+| # | Deliverable (task wording) | Path / URL | Owner | Status | Verification | Hash / SHA |
 |---|---|---|---|---|---|---|
-| 1.1 | Monitor source | `task1-spend-observability/monitor.py` | `surface:2` | EXISTS-UNVERIFIED | `git ls-files --error-unmatch task1-spend-observability/monitor.py && sha256sum $_` | — |
-| 1.2 | Alert output | `task1-spend-observability/alerts.jsonl` | `surface:2` | **DONE** — verified by `surface:3` at 19:15Z: 11 lines, 0 unparseable, **0 timezone-naive**, **0 future-dated**, no row missing a required key; `package_exhaustion` ×8, `runway` ×2, `burn_anomaly` ×1, all `warning`, spanning 16:48:58Z → 18:44:34Z | `python3` parse every line, assert each `ts` carries an offset and is not in the future, assert `ts/level/rule/provider/text` present on every row | at `7aebe52`+ |
-| 1.3 | Public dashboard, no login | `https://spend.nddev.it.com/` | `surface:2` | **DONE** — verified by the human from outside the deployment host, 19:07Z: HTTP 200, 53461 bytes, valid Let's Encrypt certificate for that exact hostname, `/healthz` 15/15 providers fresh, replay complete. No `Host` override, no `--resolve`, no auth | `curl -sS -o /dev/null -w '%{http_code} %{ssl_verify_result}\n' https://spend.nddev.it.com/` from an external network + `openssl s_client` for cert subject/issuer | at serving commit |
-| 1.4 | ≥6 h observation proof | `docs/SNAPSHOT-22-14Z.md` (to be created) | `surface:3` | pending 22:14Z | see "Six-hour snapshot procedure" below | — |
-| 1.5 | Task 1 trace | `task1-spend-observability/TRACE.md` | `surface:2` | **ABSENT** | `uv run tools/export_trace.py` without `--max-result`; then scan | — |
-| 1.6 | Task 1 README | `task1-spend-observability/README.md` | `surface:2` | EXISTS-UNVERIFIED | `git ls-files --error-unmatch $_` | — |
+| 1.1 | **"the code (a file)"** — singular | `task1-spend-observability/monitor.py` | `surface:2` | **GAP** — we ship `monitor.py` *and* `raw_sampler.py`. Fix is self-sufficiency, not merging: `monitor.py` must poll the API directly so one file is the whole system. Merging would mean stopping the collector | run `monitor.py` alone against the live API, with no other file present | — |
+| 1.2 | **"your alerts.jsonl"** | `task1-spend-observability/alerts.jsonl` | `surface:2` | **DONE** 19:15Z — 11 lines, 0 unparseable, **0 timezone-naive**, 0 future-dated, every row has `ts`/`text`/`provider` | parse every line; assert `ts` carries an offset; assert required keys | at `7aebe52`+ |
+| 1.2a | Task text: *"Required keys: ts … and text. Recommended: provider"* | same | `surface:2` | **DONE** — all three present on all 11 rows | included above | — |
+| 1.2b | 5 of 11 lines are `package_exhaustion` resends — must read as justified refiring, not spam | same | `surface:2` | **open** — line-by-line audit against raw records | each line traced to raw records around its `ts` | — |
+| 1.3 | **"a publicly deployed dashboard link (opens without login)"** | `https://spend.nddev.it.com/` | `surface:2` | **DONE** — HTTP 200, 53461 bytes, valid Let's Encrypt cert for that exact hostname, `/healthz` 15/15 fresh; verified externally, no `Host` override, no `--resolve`, no auth | `curl` from outside the host + `openssl s_client` | — |
+| 1.4 | **"Run your monitor for at least 6 hours"** | `docs/SNAPSHOT-22-14Z.md` | `surface:3` | pending **22:14Z** — the one unrecoverable deliverable | six-hour snapshot procedure below | — |
+| 1.5 | **TRACE.md** | `task1-spend-observability/TRACE.md` | `surface:2` | **ABSENT** — export only when the session ends, never with `--max-result` | tool header; lossy/leak scans | — |
+| 1.6 | *"a dashboard where one glance tells you what is happening"* | served at 1.3 | `surface:2` | EXISTS-UNVERIFIED | one-glance judgement, not mechanical | — |
+| 1.7 | Unavailable rule has **never fired**; 900 s threshold sits above every observed outage | `POLICY-SENSITIVITY.md` | `surface:2` | **open** — sound reasoning, currently an assertion. Sensitivity table turns it into a defended policy | recompute the window at 5/10/15/20 min thresholds; report missed known outages | — |
 
 ## Task 2 — STT benchmark
 
-| # | Deliverable | Path / URL | Owner | Status | Verification command | Final SHA / hash |
+Verbatim: *"a comparison of ≥5 STT engines of your choice on the same audio
+(~1 hour), and the eval behind it"*; *"Send: a published comparison report (host
+it anywhere, send the link) — **the report is the main artifact** — plus
+TRACE.md."*
+
+| # | Deliverable (task wording) | Path / URL | Owner | Status | Verification | Hash / SHA |
 |---|---|---|---|---|---|---|
-| 2.1 | Task directory | `task2-stt-benchmark/` | `surface:5` | **PRESENT** as of 18:54Z — `surface:5` active, writing metric tests | `test -d task2-stt-benchmark` | — |
-| 2.2 | Brief | `docs/briefs/task2.md` | `surface:3` | present, committed this pass | `git ls-files --error-unmatch docs/briefs/task2.md` | — |
-| 2.3 | Corpus manifest + frozen audio hash | TBD | `surface:5` | ABSENT | `sha256sum <audio>` recorded before any engine is run | — |
-| 2.4 | Gold reference transcript | TBD | `surface:5` | ABSENT | two annotators + adjudication, policy pre-registered | — |
-| 2.5 | Raw engine outputs (≥6 engines) | TBD | `surface:5` | ABSENT | hash each raw output before normalisation | — |
-| 2.6 | Eval code + result table | TBD | `surface:5` | ABSENT | re-run eval, compare to published table | — |
-| 2.7 | Published no-login report | *no URL yet* | `surface:5` | **BLOCKED** — decisions 4 and 5 | `curl` from external network, clean profile | — |
-| 2.8 | Task 2 trace | TBD | `surface:5` | ABSENT | export without truncation, then scan | — |
+| 2.1 | Task directory | `task2-stt-benchmark/` | `surface:5` | PRESENT — harness, glossary, reference policy, frozen pre-registration | `test -d` | — |
+| 2.2 | **"the same audio (~1 hour)"** | frozen corpus | `surface:5` | **DONE** — 120 hashed segments, exactly 3600.0 s, span rule declared *before* cutting | manifest + SHA-256 of publisher original | — |
+| 2.3 | **"≥5 STT engines"** | — | `surface:5` | **ABSENT** — 6 planned so one failure cannot drop below 5 | count engines with raw output on disk | — |
+| 2.4 | **"the eval behind it"** — design frozen before results | `PREREGISTRATION.md` | `surface:5` | **DONE** — `FROZEN` anchored to commit `9fd6ff8`, not a self-declared stamp | `git show 9fd6ff8` | `9fd6ff8` |
+| 2.5 | Gold reference transcript | — | `surface:5` | **ABSENT — critical path**, two annotators + adjudication. Nothing can be scored without it | policy pre-registered; adjudication recorded | — |
+| 2.6 | Raw engine outputs, hashed before normalisation | — | `surface:5` | ABSENT | hash each raw output | — |
+| 2.7 | **"a published comparison report … host it anywhere, send the link"** | *no URL yet* | `surface:3` decides host, `surface:5` writes | **PLANNED, unbuilt** — see hosting decision below | `curl` from outside, no auth | — |
+| 2.8 | **TRACE.md** | — | `surface:5` | ABSENT | tool header; lossy/leak scans | — |
+| 2.9 | Licence posture stated, `NC` named as the contestable leg | report | `surface:5` | **required** — not a footnote | report text | — |
 
 ## Task 3 — harness artifact
 
-| # | Deliverable | Path / URL | Owner | Status | Verification command | Final SHA / hash |
+Verbatim: *"One file, plus 2-3 lines on where it lives and what it does."*
+*"Send: the file."*
+
+| # | Deliverable (task wording) | Path / URL | Owner | Status | Verification | Hash / SHA |
 |---|---|---|---|---|---|---|
-| 3.1 | Harness artifact | `task3-harness-artifact/reviewer-protocol.md` | `surface:8` | **DONE** — verified independently by `surface:3` at 18:55Z, all three copies agree | `shasum -a 256 task3-harness-artifact/reviewer-protocol.md`; same on the installed plugin copy; and `gh api repos/nddev-it-com/rldyour-claudecode/contents/…?ref=33c9185 --jq .content \| base64 -d \| shasum -a 256` | `f4f1424b2f5b75a62e7e9864d5cfd3a4150d16aee6760d270911abbb2e816e04` |
-| 3.2 | 2–3 line explanation | `task3-harness-artifact/README.md` | `surface:8` | EXISTS-UNVERIFIED | `git ls-files --error-unmatch $_` | — |
-| 3.3 | Clean trace | `task3-harness-artifact/TRACE.md` | `surface:8` | **BLOCKED** — decision 2 | export without truncation, then scan | — |
-
-## Cross-cutting
-
-| # | Deliverable | Path / URL | Owner | Status | Verification command | Final SHA / hash |
-|---|---|---|---|---|---|---|
-| X.1 | Gates green on a **clean tree at the final SHA** | — | `surface:3` | pending final | see "Final gate procedure" below | — |
-| X.2 | Lossless export + foreign-slug guard | `tools/export_trace.py` | `surface:8` | **guard landed** in `1ee633e`, fail-closed, 44 tests pass — `--list` scoping already fixed in `d7c2b24`; lossy-path refusal in `ca27622` | `uv run --with pytest pytest tests/test_export_trace.py -q` → `44 passed`; guard refuses a trace naming another project and writes one naming only this project | — |
-| X.3 | `--max-result` removed from handoff instructions | `docs/HANDOFF.md` | `surface:3` | **DONE** — command run 18:46Z, output `0` | `awk '/^\`\`\`bash/{f=1;next} /^\`\`\`/{f=0} f' docs/HANDOFF.md \| grep -c -- '--max-result'` → **`0`** | at `479187b`+this pass |
-| X.4 | Delivery route: history rewrite + publish | this repo | `surface:3` | **procedure written, NOT RUN** — runs once, after 22:14Z and after workers finish | see "Publication procedure" below | — |
-| X.5 | Type check clean | `pyright` | `surface:8` | **18 errors at `8111af1`** — reported by CI, non-blocking until 0 | `uv run --with pyright --with pytest pyright` → `0 errors` | — |
-| X.6 | CI attached to the final commit | `.github/workflows/ci.yml` | `surface:3` | **GREEN** at `221c28c` and `95cc83a` — first green runs of this session; every earlier push was red and unread | `gh run list --json headSha,status,conclusion` → `completed success` | pending final SHA |
-| X.7 | Working tree free of third-party identifiers | whole repo | `surface:3` | **DONE** — command run 18:58Z, empty output | `git ls-files -z \| xargs -0 grep -lEi '<client-a>\|<client-b>'` → empty; `grep -lE '^[[:space:]]*HostName[[:space:]]+'` → empty; no public IPs | at this pass |
-| X.8 | **History** free of third-party identifiers | all refs | `surface:3` | **OPEN** — working tree is clean, history is not | `git log -p --all \| grep -ci '<identifier>'` → `0`, after the rewrite | — |
-| X.9 | Raw-log "verbatim" claim bounded at the 8000-char cap | `task1-spend-observability/README.md` | `surface:2` | **DONE** — re-measured independently by `surface:3` at 19:28Z on the host: 6240 records with a body, **max stored length 6422**, **0 records at exactly 8000**, headroom 1578. Nothing in the window was clipped, so the log is verbatim in fact and not only in intent | `python3` over `raw_samples.jsonl`: `max(len(body))`, `count(len(body)==8000)` | at `35df417`+ |
-
-## Six-hour snapshot procedure — runs at 22:14Z, collection must not stop
-
-Written ahead of time so it is executed, not improvised at the deadline. The
-sampler is **not** restarted, stopped, or reconfigured to take this snapshot.
-
-```bash
-ssh server-nddev-amsterdam '
-  set -e
-  D=/opt/explee-spend-monitor/data/raw_samples.jsonl
-  S=/opt/explee-spend-monitor/snapshots
-  systemctl is-active explee-raw-sampler          # BEFORE
-  mkdir -p $S
-  cp -a "$D" "$S/raw_samples.6h.jsonl"            # copy, never move
-  sha256sum "$S/raw_samples.6h.jsonl"
-  stat -c "%s bytes" "$S/raw_samples.6h.jsonl"
-  wc -l < "$S/raw_samples.6h.jsonl"
-  python3 - "$S/raw_samples.6h.jsonl" <<EOF
-import json,sys,datetime
-ts=[];bad=0
-for ln in open(sys.argv[1]):
-    ln=ln.strip()
-    if not ln: continue
-    try: ts.append(json.loads(ln)["ts"])
-    except Exception: bad+=1
-p=sorted(datetime.datetime.fromisoformat(t.replace("Z","+00:00")) for t in set(ts))
-span=(p[-1]-p[0]).total_seconds()
-gaps=[(b-a).total_seconds() for a,b in zip(p,p[1:])]
-print("first",p[0].isoformat()); print("last",p[-1].isoformat())
-print("span_s",int(span),">=21600:",span>=21600)
-print("max_gap_s",max(gaps) if gaps else 0)
-print("malformed",bad)
-EOF
-  systemctl is-active explee-raw-sampler          # AFTER
-'
-```
-
-Every number that comes back is recorded in `docs/SNAPSHOT-22-14Z.md` and its
-SHA-256 becomes the hash in row 1.4. Collection continues past the mark; longer
-is better, and the snapshot is a copy, not a stopping point.
+| 3.1 | **"One file"** | `task3-harness-artifact/flow-memory-sync.md` | `surface:8` | **DONE** — re-verified 19:37Z after the artifact *changed* from `reviewer-protocol.md`; submitted copy is byte-identical to the installed source | `shasum -a 256` on submitted and installed copies | `26d0ed17…f607a04` |
+| 3.2 | **"plus 2-3 lines on where it lives and what it does"** | `task3-harness-artifact/README.md` | `surface:8` | **DONE** — states path, what dispatches it, what it does, and names its own tradeoff (two of seven steps call helper scripts, so it is not fully standalone) | read | — |
+| 3.3 | **TRACE.md** | `task3-harness-artifact/TRACE.md` | `surface:8` | **DONE** — decision 2 closed by the human: *nothing is withheld*. Genuine fresh session 19:30:50Z→19:34:27Z, tool-exported, 2140 lines. Scans: 0 truncation markers, 0 foreign slugs, 0 public IPs, 0 credentials, 0 real `HostName` lines | header check + four scans | — |
+| 3.4 | **"nothing more"** — package contains exactly the file, the lines, the trace | `task3-harness-artifact/` | `surface:3` | **DONE** — directory holds exactly those three. `PROVENANCE.md` and the quarantine record now live in `docs/` as internal | `ls task3-harness-artifact/` → 3 entries | — |
 
 ## DNS evidence for row 1.3, 18:59Z
 
