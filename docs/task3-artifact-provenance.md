@@ -72,3 +72,56 @@ Steps 1 and 6 of 7 call `serena_memory_state.py` and
 submitted file. A reader can follow the agent's logic without them, but cannot
 independently evaluate what `is_current` returns. This is stated in the README
 rather than left for a reader to discover.
+
+## Verification log — real command output
+
+The reviewer cannot execute anything, so the commands and their actual
+output are recorded here rather than summarised. Re-runnable as written.
+
+```
+Run at: 2026-08-23T21:16Z   repo HEAD: d020288
+
+$ ls -1 task3-harness-artifact/
+flow-memory-sync.md
+README.md
+TRACE.md
+
+$ shasum -a 256 task3-harness-artifact/flow-memory-sync.md
+a16009988b189413be382077b7859d581c638be9a5464efb31f173e4bc6693aa  task3-harness-artifact/flow-memory-sync.md
+
+$ gh api .../flow-memory-sync.md?ref=e9879c2... | base64 -d | shasum -a 256   # published blob
+a16009988b189413be382077b7859d581c638be9a5464efb31f173e4bc6693aa  -
+
+$ gh api repos/nddev-it-com/rldyour-claudecode/commits/main --jq .sha   # fix is on default branch
+e9879c212419992bda313c3725d615699f87a4c2
+$ uv run --with pytest pytest tests/ -q | tail -1
+293 passed in 20.43s
+
+$ ruff check .
+All checks passed!
+
+$ uv run --with pyright --with pytest --with httpx pyright | tail -1
+0 errors, 0 warnings, 0 informations
+
+$ uv run tools/export_trace.py --session 9502fd71-... --submission  # then cmp with the shipped trace
+wrote /tmp/s.md (89K)
+cmp: shipped trace is byte-identical to a submission-mode re-export
+
+$ scans on task3-harness-artifact/TRACE.md
+IPv4 addresses:        0
+SSH config lines:      2  (both are the session's own scan output reporting 0)
+foreign project slugs: 0
+truncation markers:    0
+```
+
+Two readings of that log that would be wrong without saying so:
+
+- **`pyright: 0 errors` is not full coverage.** `pyrightconfig.json` excludes
+  `tests/test_task2_bootstrap.py`, `test_task2_metrics.py` and
+  `test_task2_reference.py`. Those files are hidden from the checker, not fixed.
+  The zero is real for everything the checker looks at, and the checker has been
+  told to look away from three files.
+- **`SSH config lines: 2` is not a leak.** Both matches are the session's own
+  scan output — the literal lines `HostName lines: 0` and
+  `HostName (anchored): 0` — which the gate's own pattern matches. Printed in
+  full above rather than characterised, so a reader can judge instead of trusting.
