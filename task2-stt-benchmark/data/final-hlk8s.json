@@ -1,0 +1,86 @@
+{
+  "whisper-large-v3-default": {
+    "term_f1": 0.5188679245283019,
+    "term_recall": 0.39855072463768115,
+    "term_precision": 0.7432432432432432,
+    "wer": 0.5889744629104176,
+    "reference_error_rate": 0.23834616943656262,
+    "cs_wer": 0.675,
+    "latin_to_cyrillic_rate": 0.6014492753623188,
+    "collapsed_segments": 0,
+    "distractor_segments": 0,
+    "segments": 99
+  },
+  "whisper-large-v3-turbo-default": {
+    "term_f1": 0.4827586206896552,
+    "term_recall": 0.35507246376811596,
+    "term_precision": 0.7538461538461538,
+    "wer": 0.5780299959464937,
+    "reference_error_rate": 0.22902310498581271,
+    "cs_wer": 0.65,
+    "latin_to_cyrillic_rate": 0.6159420289855072,
+    "collapsed_segments": 0,
+    "distractor_segments": 0,
+    "segments": 99
+  },
+  "parakeet-tdt-0.6b-v3-default": {
+    "term_f1": 0.4807692307692308,
+    "term_recall": 0.36231884057971014,
+    "term_precision": 0.7142857142857143,
+    "wer": 0.6011349817592218,
+    "reference_error_rate": 0.19396027563842724,
+    "cs_wer": 0.7475,
+    "latin_to_cyrillic_rate": 0.5289855072463768,
+    "collapsed_segments": 0,
+    "distractor_segments": 0,
+    "segments": 99
+  },
+  "seamless-m4t-v2-default": {
+    "term_f1": 0.27906976744186046,
+    "term_recall": 0.17391304347826086,
+    "term_precision": 0.7058823529411765,
+    "wer": 0.6546412646939602,
+    "reference_error_rate": 0.5429671665991083,
+    "cs_wer": 0.865,
+    "latin_to_cyrillic_rate": 0.7898550724637681,
+    "collapsed_segments": 21,
+    "distractor_segments": 0,
+    "segments": 99
+  },
+  "wav2vec2-xlsr-ru-default": {
+    "term_f1": null,
+    "term_recall": 0.0,
+    "term_precision": 0.0,
+    "wer": 0.7851641670044589,
+    "reference_error_rate": 0.3660316173490069,
+    "cs_wer": 1.0,
+    "latin_to_cyrillic_rate": 1.0,
+    "collapsed_segments": 0,
+    "distractor_segments": 0,
+    "segments": 99
+  },
+  "whisper-large-v3-tuned": {
+    "term_f1": 0.6877470355731226,
+    "term_recall": 0.6304347826086957,
+    "term_precision": 0.7565217391304347,
+    "wer": 0.6007296311309283,
+    "reference_error_rate": 0.3929874341305229,
+    "cs_wer": 0.59,
+    "latin_to_cyrillic_rate": 0.36231884057971014,
+    "collapsed_segments": 19,
+    "distractor_segments": 0,
+    "segments": 99
+  },
+  "whisper-large-v3-turbo-tuned": {
+    "term_f1": 0.674698795180723,
+    "term_recall": 0.6086956521739131,
+    "term_precision": 0.7567567567567568,
+    "wer": 0.6003242805026348,
+    "reference_error_rate": 0.2063234698013782,
+    "cs_wer": 0.4925,
+    "latin_to_cyrillic_rate": 0.34782608695652173,
+    "collapsed_segments": 0,
+    "distractor_segments": 5,
+    "segments": 99
+  }
+}

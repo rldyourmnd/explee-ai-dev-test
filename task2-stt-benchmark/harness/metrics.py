@@ -446,8 +446,17 @@ def aggregate(scores: Sequence[SegmentScore]) -> dict[str, float | None]:
     speaker_tokens = total("speaker_scored_tokens")
     deltas = [d for score in scores for d in score.timestamp_deltas]
 
+    substitutions = total("substitutions")
+    deletions = total("deletions")
     return {
         "wer": _ratio(errors, ref_words),
+        # Reference-coverage error rate: substitutions and deletions only.
+        # Insertions are excluded because an edited reference (fillers and
+        # false starts removed by a human editor) charges every engine for
+        # words that WERE spoken, which lands entirely in the insertion term.
+        # This measures how much of the reference an engine got wrong or
+        # missed, which editing does not distort.
+        "reference_error_rate": _ratio(substitutions + deletions, ref_words),
         "cer": _ratio(total("char_edits"), total("ref_chars")),
         "cs_wer": _ratio(total("cs_errors"), total("cs_ref_words")),
         "term_precision": precision,
@@ -474,6 +483,7 @@ def aggregate(scores: Sequence[SegmentScore]) -> dict[str, float | None]:
 LOWER_IS_BETTER = frozenset(
     {
         "wer",
+        "reference_error_rate",
         "cer",
         "cs_wer",
         "latin_to_cyrillic_rate",

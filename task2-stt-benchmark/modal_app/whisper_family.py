@@ -29,6 +29,7 @@ Run:
 # `modal.parameter` types at class-construction time and cannot read a string
 # annotation, so postponed evaluation breaks the class parameter outright.
 import json
+import re
 import time
 from pathlib import Path
 
@@ -150,12 +151,21 @@ class Whisper:
         elapsed = round(time.monotonic() - started, 3)
 
         text = decoded[0]["text"] if decoded else ""
-        if tuned and text.startswith(TUNED_PROMPT[:40]):
-            # Whisper sometimes echoes the prompt into the transcript. Left in
-            # place would score as a huge hallucination for the tuned track and
-            # a fake advantage for the default one, so it is stripped here and
-            # the strip is recorded on the result.
-            text = text[len(TUNED_PROMPT):].lstrip(" .,")
+        if tuned:
+            # Whisper echoes the conditioning prompt into the decoded output.
+            # Stripping it by LENGTH was a real defect: when the model echoed
+            # only part of the prompt, slicing off len(TUNED_PROMPT) removed
+            # real transcript with it, and some segments came back one word
+            # long. Use Whisper's own marker instead. The prompt sits between
+            # <|startofprev|> and <|startoftranscript|>, so decoding with the
+            # special tokens visible gives an exact boundary rather than a
+            # guess.
+            marked = self.processor.batch_decode(
+                generated, skip_special_tokens=False
+            )[0]
+            if "<|startoftranscript|>" in marked:
+                tail = marked.rsplit("<|startoftranscript|>", 1)[1]
+                text = re.sub(r"<\|[^|]*\|>", "", tail).strip()
 
         return {
             "segment_id": segment_id,

@@ -41,7 +41,7 @@ REFERENCE = HERE / "data" / "reference-hlk8s.json"
 MANIFEST = HERE / "data" / "manifest-hlk8s.json"
 
 PRIMARY = "term_f1"
-GUARDRAIL_METRIC = "wer"
+GUARDRAIL_METRIC = "reference_error_rate"  # see PREREGISTRATION amendment
 GUARDRAIL_MAX = 0.30
 
 

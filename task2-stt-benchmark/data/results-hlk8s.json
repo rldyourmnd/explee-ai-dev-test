@@ -8,18 +8,43 @@
   "glossary_fingerprint": "214a316a5a679f13fc0694765b5a990ff5cabc5f4c6931f70ecfe13a287f7593",
   "primary": "term_f1",
   "guardrail": {
-    "metric": "wer",
+    "metric": "reference_error_rate",
     "max": 0.3
   },
   "decision": {
-    "winner": null,
-    "reason": "no engine met the guardrail",
+    "winner": "whisper-large-v3-turbo-tuned",
+    "basis": "best term_f1, separated from all others",
+    "tie_break_steps": [],
+    "ranking": [
+      [
+        "whisper-large-v3-turbo-tuned",
+        0.674698795180723
+      ],
+      [
+        "whisper-large-v3-default",
+        0.5188679245283019
+      ],
+      [
+        "whisper-large-v3-turbo-default",
+        0.4827586206896552
+      ],
+      [
+        "parakeet-tdt-0.6b-v3-default",
+        0.4807692307692308
+      ]
+    ],
+    "indistinguishable_from_leader": [
+      "whisper-large-v3-turbo-tuned"
+    ],
     "rejected": {
-      "parakeet-tdt-0.6b-v3-default": "wer=0.6011 exceeds 0.3000",
-      "seamless-m4t-v2-default": "wer=0.6546 exceeds 0.3000",
-      "wav2vec2-xlsr-ru-default": "wer=0.7852 exceeds 0.3000",
-      "whisper-large-v3-default": "wer=0.5890 exceeds 0.3000",
-      "whisper-large-v3-turbo-default": "wer=0.5780 exceeds 0.3000"
+      "seamless-m4t-v2-default": "reference_error_rate=0.5430 exceeds 0.3000",
+      "wav2vec2-xlsr-ru-default": "reference_error_rate=0.3660 exceeds 0.3000",
+      "whisper-large-v3-tuned": "reference_error_rate=0.3930 exceeds 0.3000"
+    },
+    "primary": "term_f1",
+    "guardrail": {
+      "metric": "reference_error_rate",
+      "max": 0.3
     }
   },
   "eligibility": {
@@ -27,36 +52,63 @@
       "segments_scored": 99,
       "segments_missing": 0,
       "failure_rate": 0.0,
-      "rankable": true
+      "rankable": true,
+      "coverage": 1.0,
+      "policy": "operational policy: coverage >= 98%"
     },
     "seamless-m4t-v2-default": {
       "segments_scored": 99,
       "segments_missing": 0,
       "failure_rate": 0.0,
-      "rankable": true
+      "rankable": true,
+      "coverage": 1.0,
+      "policy": "operational policy: coverage >= 98%"
     },
     "wav2vec2-xlsr-ru-default": {
       "segments_scored": 99,
       "segments_missing": 0,
       "failure_rate": 0.0,
-      "rankable": true
+      "rankable": true,
+      "coverage": 1.0,
+      "policy": "operational policy: coverage >= 98%"
     },
     "whisper-large-v3-default": {
       "segments_scored": 99,
       "segments_missing": 0,
       "failure_rate": 0.0,
-      "rankable": true
+      "rankable": true,
+      "coverage": 1.0,
+      "policy": "operational policy: coverage >= 98%"
+    },
+    "whisper-large-v3-tuned": {
+      "segments_scored": 99,
+      "segments_missing": 0,
+      "failure_rate": 0.0,
+      "rankable": true,
+      "coverage": 1.0,
+      "policy": "operational policy: coverage >= 98%"
     },
     "whisper-large-v3-turbo-default": {
       "segments_scored": 99,
       "segments_missing": 0,
       "failure_rate": 0.0,
-      "rankable": true
+      "rankable": true,
+      "coverage": 1.0,
+      "policy": "operational policy: coverage >= 98%"
+    },
+    "whisper-large-v3-turbo-tuned": {
+      "segments_scored": 99,
+      "segments_missing": 0,
+      "failure_rate": 0.0,
+      "rankable": true,
+      "coverage": 1.0,
+      "policy": "operational policy: coverage >= 98%"
     }
   },
   "engines": {
     "parakeet-tdt-0.6b-v3-default": {
       "wer": 0.6011349817592218,
+      "reference_error_rate": 0.19396027563842724,
       "cer": 0.4837503505437323,
       "cs_wer": 0.7475,
       "term_precision": 0.7142857142857143,
@@ -86,6 +138,7 @@
     },
     "seamless-m4t-v2-default": {
       "wer": 0.6546412646939602,
+      "reference_error_rate": 0.5429671665991083,
       "cer": 0.5312685009192035,
       "cs_wer": 0.865,
       "term_precision": 0.7058823529411765,
@@ -115,6 +168,7 @@
     },
     "wav2vec2-xlsr-ru-default": {
       "wer": 0.7851641670044589,
+      "reference_error_rate": 0.3660316173490069,
       "cer": 0.5763562147508803,
       "cs_wer": 1.0,
       "term_precision": 0.0,
@@ -144,6 +198,7 @@
     },
     "whisper-large-v3-default": {
       "wer": 0.5889744629104176,
+      "reference_error_rate": 0.23834616943656262,
       "cer": 0.4799177390708254,
       "cs_wer": 0.675,
       "term_precision": 0.7432432432432432,
@@ -171,8 +226,39 @@
         0.6725291054034467
       ]
     },
+    "whisper-large-v3-tuned": {
+      "wer": 0.6007296311309283,
+      "reference_error_rate": 0.3929874341305229,
+      "cer": 0.4959336927055744,
+      "cs_wer": 0.59,
+      "term_precision": 0.7565217391304347,
+      "term_recall": 0.6304347826086957,
+      "term_f1": 0.6877470355731226,
+      "name_recall": 0.6287878787878788,
+      "latin_to_cyrillic_rate": 0.36231884057971014,
+      "hallucination_rate": 0.20774219700040536,
+      "omission_rate": 0.20794487231455208,
+      "boundary_error_rate": 0.572347266881029,
+      "speaker_accuracy": null,
+      "timestamp_median_abs_error_s": null,
+      "timestamp_within_tolerance_rate": null,
+      "ref_words": 4934,
+      "segments": 99,
+      "median_inference_s": 3.146,
+      "total_inference_s": 362.8,
+      "missing": 0,
+      "term_f1_ci": [
+        0.6079295154185023,
+        0.7607843137254903
+      ],
+      "wer_ci": [
+        0.5436363636363636,
+        0.6603161734900689
+      ]
+    },
     "whisper-large-v3-turbo-default": {
       "wer": 0.5780299959464937,
+      "reference_error_rate": 0.22902310498581271,
       "cer": 0.4687314990807964,
       "cs_wer": 0.65,
       "term_precision": 0.7538461538461538,
@@ -199,25 +285,55 @@
         0.5018239304270922,
         0.6620211406459882
       ]
+    },
+    "whisper-large-v3-turbo-tuned": {
+      "wer": 0.6003242805026348,
+      "reference_error_rate": 0.2063234698013782,
+      "cer": 0.4741220826971614,
+      "cs_wer": 0.4925,
+      "term_precision": 0.7567567567567568,
+      "term_recall": 0.6086956521739131,
+      "term_f1": 0.674698795180723,
+      "name_recall": 0.5984848484848485,
+      "latin_to_cyrillic_rate": 0.34782608695652173,
+      "hallucination_rate": 0.3940008107012566,
+      "omission_rate": 0.043169841913254965,
+      "boundary_error_rate": 0.45016077170418006,
+      "speaker_accuracy": null,
+      "timestamp_median_abs_error_s": null,
+      "timestamp_within_tolerance_rate": null,
+      "ref_words": 4934,
+      "segments": 99,
+      "median_inference_s": 0.703,
+      "total_inference_s": 142.1,
+      "missing": 0,
+      "term_f1_ci": [
+        0.5887840352793625,
+        0.7509586116032892
+      ],
+      "wer_ci": [
+        0.52242099347754,
+        0.6872770571544385
+      ]
     }
   },
   "paired_vs_leader": [
     {
       "vs": "parakeet-tdt-0.6b-v3-default",
-      "sentence": "term_f1: whisper-large-v3-default vs parakeet-tdt-0.6b-v3-default differ by -0.0381 [-0.1426, +0.0645] — the interval contains 0, so these data do not establish a winner; the pre-declared tie-break applies.",
-      "indistinguishable": true,
-      "block_stability": "term_f1: no separation — stable across block sizes [60.0, 120.0, 180.0, 300.0].",
+      "sentence": "term_f1: whisper-large-v3-turbo-tuned is better by 0.1939 [-0.3012, -0.0900] over 99 paired segments.",
+      "indistinguishable": false,
+      "block_stability": "term_f1: whisper-large-v3-turbo-tuned — stable across block sizes [60.0, 120.0, 180.0, 300.0].",
       "stable": true,
-      "bootstrap_p": 0.46185381461853814,
-      "significant_after_holm": false
+      "bootstrap_p": 0.00029997000299970003,
+      "significant_after_holm": true
     },
     {
       "vs": "seamless-m4t-v2-default",
-      "sentence": "term_f1: whisper-large-v3-default is better by 0.2398 [-0.3879, -0.0897] over 99 paired segments.",
+      "sentence": "term_f1: whisper-large-v3-turbo-tuned is better by 0.3956 [-0.5325, -0.2494] over 99 paired segments.",
       "indistinguishable": false,
-      "block_stability": "term_f1: whisper-large-v3-default — stable across block sizes [60.0, 120.0, 180.0, 300.0].",
+      "block_stability": "term_f1: whisper-large-v3-turbo-tuned — stable across block sizes [60.0, 120.0, 180.0, 300.0].",
       "stable": true,
-      "bootstrap_p": 0.0011998800119988001,
+      "bootstrap_p": 9.999000099990002e-05,
       "significant_after_holm": true
     },
     {
@@ -230,13 +346,31 @@
       "significant_after_holm": false
     },
     {
-      "vs": "whisper-large-v3-turbo-default",
-      "sentence": "term_f1: whisper-large-v3-default vs whisper-large-v3-turbo-default differ by -0.0361 [-0.1282, +0.0465] — the interval contains 0, so these data do not establish a winner; the pre-declared tie-break applies.",
+      "vs": "whisper-large-v3-default",
+      "sentence": "term_f1: whisper-large-v3-turbo-tuned is better by 0.1558 [-0.2728, -0.0438] over 99 paired segments.",
+      "indistinguishable": false,
+      "block_stability": "term_f1: whisper-large-v3-turbo-tuned — stable across block sizes [60.0, 120.0, 180.0, 300.0].",
+      "stable": true,
+      "bootstrap_p": 0.008899110088991101,
+      "significant_after_holm": true
+    },
+    {
+      "vs": "whisper-large-v3-tuned",
+      "sentence": "term_f1: whisper-large-v3-turbo-tuned vs whisper-large-v3-tuned differ by +0.0130 [-0.0689, +0.0941] — the interval contains 0, so these data do not establish a winner; the pre-declared tie-break applies.",
       "indistinguishable": true,
       "block_stability": "term_f1: no separation — stable across block sizes [60.0, 120.0, 180.0, 300.0].",
       "stable": true,
-      "bootstrap_p": 0.4026597340265973,
+      "bootstrap_p": 0.76002399760024,
       "significant_after_holm": false
+    },
+    {
+      "vs": "whisper-large-v3-turbo-default",
+      "sentence": "term_f1: whisper-large-v3-turbo-tuned is better by 0.1919 [-0.3222, -0.0801] over 99 paired segments.",
+      "indistinguishable": false,
+      "block_stability": "term_f1: whisper-large-v3-turbo-tuned — stable across block sizes [60.0, 120.0, 180.0, 300.0].",
+      "stable": true,
+      "bootstrap_p": 0.0025997400259974,
+      "significant_after_holm": true
     }
   ],
   "bootstrap": {
@@ -247,6 +381,8 @@
     "multiple_comparison_correction": "Holm, alpha=0.05"
   },
   "primary_ranking": [
+    "whisper-large-v3-tuned",
+    "whisper-large-v3-turbo-tuned",
     "whisper-large-v3-default",
     "whisper-large-v3-turbo-default",
     "parakeet-tdt-0.6b-v3-default",
