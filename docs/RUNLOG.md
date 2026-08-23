@@ -811,3 +811,42 @@ saying so is cheaper than being caught saying otherwise.
 The false claim never reached a committed file — it was in my status messages
 only — but recording it here is the point. A correction that lives only in chat
 is a correction the next reader never sees.
+
+### 21:36Z — post-task sync, and a fourth gate I had not been running
+
+Sync run. Serena memories current for HEAD; instruction docs reviewed;
+`origin/main` == local; branch cleanup advisory with no candidates.
+
+**`.claude/CLAUDE.md` needed no change**, and it is worth saying why rather than
+just recording "no change": it deliberately does not restate the rules in
+`AGENTS.md`, on the grounds that two instruction files carrying the same rules
+drift apart and a rule contradicting its twin is worse than one living in a
+single place. That is the same defect class this task has spent the day fixing
+in prose, applied to the instruction files themselves. It is correct as written.
+
+**It also documents four gates, and I had been running three.** Every "all gates
+green" I have reported covered pytest, ruff and pyright but not
+`uv run tools/repo_checks.py consistency`. Run now: `consistency: ok`, exit 0.
+
+No harm done — the gate passes and would have passed all along — but the claim
+was imprecise in exactly the way "pyright 0 repo-wide" was imprecise a few
+entries above. Both are the same failure: reporting a check as complete when
+what was actually run was a subset of it. The fix is the same too, which is to
+name what was run rather than summarise it as "the gates".
+
+All four, at this commit:
+
+```
+uv run --with pytest pytest tests/ -q                          293 passed
+uv run --with 'ruff==0.15.17' ruff check .                     All checks passed
+uv run --with pyright==1.1.411 ... pyright                     0 errors (configured paths)
+uv run tools/repo_checks.py consistency                        consistency: ok
+```
+
+**Remaining dirty, and deliberately not committed:** `.serena/.auto_sync_head`,
+`.serena/.serena_sync_state.json`, `.serena/.flow_post_task_state.json`,
+`.serena/.flow_sync_marker`. These are tooling runtime markers, which the sync
+policy says not to commit — while also saying `.serena/` is tracked normally.
+Two of them are already tracked, from an early `git add -A` of mine. That
+tension is a repository-wide decision rather than a Task 1 one, so it is
+recorded here and left alone rather than resolved unilaterally.
