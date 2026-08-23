@@ -27,6 +27,27 @@ It is included as the record of what actually ran, not as something you need.
 Live at **https://spend.nddev.it.com/** — no login, HTTPS, `/healthz`,
 `/api/state`, `/alerts.jsonl`.
 
+## "Run your monitor for at least 6 hours" — which six hours
+
+Two clocks exist here and they start at different times, so both are stated
+rather than letting a reader pick the flattering one:
+
+| | |
+|---|---|
+| **Observation window** — what the monitor's picture covers | from **T0 = 2026-08-23T16:13:26.775Z** |
+| `monitor.py` process on the host | started 2026-08-23T17:10:59Z |
+
+The window is the one that matters, and it is the reason the replay design
+exists. `monitor.py` derives from an append-only log rather than from memory, so
+the dashboard, every metric and every alert cover the whole window from T0 —
+not from whenever the process last started. `/healthz` and `/api/state` report
+`first_ts` as T0 for exactly that reason, and restarting the process does not
+shorten the picture.
+
+Six hours of observation is reached at **2026-08-23T22:14Z**. If the stricter
+reading is wanted — the deliverable process itself having run six hours — that
+is 23:11Z.
+
 ## Files
 
 | File | Role |
