@@ -77,3 +77,40 @@ def test_a_complete_engine_has_full_coverage():
     status = eligibility({"complete": scores_for("complete", 99)}, corpus_size=99)
     assert status["complete"]["coverage"] == 1.0
     assert status["complete"]["rankable"] is True
+
+
+# --- coverage measured from raw files, not from scored blocks -----------------
+
+def test_a_missing_segment_is_invisible_to_block_scores_but_caught_by_raw_coverage():
+    """The defect this closes: scored units cannot detect a dropped segment.
+
+    The document scorer emits one score per reference block regardless of what
+    the engine returned, so an engine that dropped a quarter of the audio still
+    yields a full-length score list and a flattering average over what it did
+    manage. Only counting raw returned files against the manifest sees it.
+    """
+    from harness.runner import raw_coverage
+
+    manifest_ids = [f"seg-{i:04d}" for i in range(99)]
+    complete = manifest_ids
+    dropped = manifest_ids[:70]          # returned 70 of 99
+
+    # Scored blocks look identical for both: 99 units either way.
+    scored_complete = scores_for("complete", 99)
+    scored_dropped = scores_for("dropped", 99)
+    assert len(scored_complete) == len(scored_dropped)
+    assert eligibility({"dropped": scored_dropped}, corpus_size=99)["dropped"]["rankable"] is True
+
+    status = raw_coverage({"complete": complete, "dropped": dropped}, manifest_ids)
+    assert status["complete"]["rankable"] is True
+    assert status["complete"]["coverage"] == 1.0
+    assert status["dropped"]["rankable"] is False
+    assert status["dropped"]["segments_missing"] == 29
+
+
+def test_raw_coverage_ignores_ids_not_in_the_manifest():
+    from harness.runner import raw_coverage
+    manifest_ids = ["seg-0000", "seg-0001"]
+    status = raw_coverage({"e": ["seg-0000", "seg-0001", "seg-9999"]}, manifest_ids)
+    assert status["e"]["segments_returned"] == 2
+    assert status["e"]["coverage"] == 1.0
