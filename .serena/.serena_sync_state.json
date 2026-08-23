@@ -3,11 +3,12 @@
     "areas": [
       {
         "area": "other",
-        "count": 3,
+        "count": 4,
         "files": [
-          "task3-harness-artifact/README.md",
-          "task3-harness-artifact/TRACE.md",
-          "task3-harness-artifact/reviewer-protocol.md"
+          "task1-spend-observability/snapshots/01-six-hour.json",
+          "task1-spend-observability/snapshots/01-six-hour.md",
+          "task1-spend-observability/snapshots/02-six-hour.json",
+          "task1-spend-observability/snapshots/02-six-hour.md"
         ],
         "priority": "low"
       }
@@ -26,11 +27,12 @@
       "TECHDEBT-01-NOW.md"
     ],
     "changed_files": [
-      "task3-harness-artifact/README.md",
-      "task3-harness-artifact/TRACE.md",
-      "task3-harness-artifact/reviewer-protocol.md"
+      "task1-spend-observability/snapshots/01-six-hour.json",
+      "task1-spend-observability/snapshots/01-six-hour.md",
+      "task1-spend-observability/snapshots/02-six-hour.json",
+      "task1-spend-observability/snapshots/02-six-hour.md"
     ],
-    "file_count": 3,
+    "file_count": 4,
     "impact_signature": {
       "areas_count": 1,
       "high_impact_count": 0,
@@ -102,19 +104,21 @@
     "schema_version": 2
   },
   "changed_files": [
-    "task3-harness-artifact/README.md",
-    "task3-harness-artifact/TRACE.md",
-    "task3-harness-artifact/reviewer-protocol.md"
+    "task1-spend-observability/snapshots/01-six-hour.json",
+    "task1-spend-observability/snapshots/01-six-hour.md",
+    "task1-spend-observability/snapshots/02-six-hour.json",
+    "task1-spend-observability/snapshots/02-six-hour.md"
   ],
-  "created_at": 1787504564,
-  "head_full": "f9ef23bb16bc239f258e41c8e09b1d1bc8fe6f9f",
-  "head_sha": "f9ef23b",
+  "created_at": 1787523327,
+  "head_full": "0530326fca05cc54f5918d36af04ca366f766fe0",
+  "head_sha": "0530326",
   "non_knowledge_changed_files": [
-    "task3-harness-artifact/README.md",
-    "task3-harness-artifact/TRACE.md",
-    "task3-harness-artifact/reviewer-protocol.md"
+    "task1-spend-observability/snapshots/01-six-hour.json",
+    "task1-spend-observability/snapshots/01-six-hour.md",
+    "task1-spend-observability/snapshots/02-six-hour.json",
+    "task1-spend-observability/snapshots/02-six-hour.md"
   ],
-  "previous_head_full": "bc6b89fb35f29dd81a6849cd7634d48120410d71",
+  "previous_head_full": "f9b1728f5d82ce07fd5a5b5833cea87352b3eef0",
   "reason": "git change touched non-Serena-knowledge files",
   "required": true,
   "version": 1

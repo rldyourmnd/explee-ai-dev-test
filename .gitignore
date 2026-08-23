@@ -39,3 +39,6 @@ task2-stt-benchmark/data/reference/
 # the corpus reproducible from the publisher's original instead of from our copy.
 task2-stt-benchmark/data/raw-*/
 task2-stt-benchmark/data/reference-*.json
+
+# Serena tooling cache: churns constantly and is not a deliverable.
+.serena/

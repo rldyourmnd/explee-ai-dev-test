@@ -242,13 +242,33 @@ def check_snapshot(problems: list[str], strict: bool) -> None:
     later renamed is worse than no check, because it is believed.
     """
     import glob
-    metas = sorted(glob.glob(os.path.join(ROOT, "snapshots", "*.json")))
+    # Search every plausible location rather than one hard-coded directory. The
+    # tool writes into task1-spend-observability/snapshots/, not repo-root
+    # snapshots/, and a check pointed at the wrong path would have reported the
+    # six-hour artifact missing while it sat on disk — the fifth instance of that
+    # class in this run.
+    metas = sorted(glob.glob(os.path.join(ROOT, "**", "snapshots", "*.json"),
+                             recursive=True))
     if not metas:
         (problems.append if strict else NOTES.append)(
             "no snapshot in snapshots/ — the six-hour window is the one "
             "unrecoverable deliverable")
         return
-    latest = metas[-1]
+    # "Latest" must mean the one that actually closes the requirement, not the
+    # highest number. Snapshot 01 was taken 14 s after the six-hour instant by
+    # wall clock but spans only 21587.8 s, because the span is measured between
+    # the first and last RECORD and the last record precedes the snapshot by up
+    # to one sample interval. Taking a snapshot at T0+6h does not guarantee a
+    # six-hour span.
+    qualifying = []
+    for m in metas:
+        try:
+            d = json.load(open(m, encoding="utf-8"))
+        except Exception:
+            continue
+        if isinstance(d.get("span_seconds"), (int, float)) and d["span_seconds"] >= 21600:
+            qualifying.append(m)
+    latest = qualifying[-1] if qualifying else metas[-1]
     rel = os.path.relpath(latest, ROOT)
     try:
         meta = json.load(open(latest, encoding="utf-8"))
