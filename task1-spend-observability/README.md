@@ -5,30 +5,186 @@
 | File | Role |
 |---|---|
 | `raw_sampler.py` | bootstrap collector, live on `server-nddev-amsterdam` since T0 |
-| `monitor.py` | full monitor: adapters, metrics, alerting, dashboard *(in progress)* |
+| `monitor.py` | the deliverable: adapters, metrics, alerting, dashboard, `/healthz` |
 | `alerts.jsonl` | one JSON object per line, the alerting deliverable |
 | `data/` | captured samples, gitignored, authoritative copy lives on the server |
 
-## Bootstrap collector
+## Shape of the system
 
-`raw_sampler.py` deliberately does no parsing. It records `ts`, `provider`,
-`http`, `latency_ms` and the verbatim response body for all 15 providers every
-30 seconds. Because it interprets nothing, later decisions about schema
-adapters, burn-rate windows and alert thresholds can be replayed against data
-captured before those decisions existed.
+`raw_sampler.py` is the only client of the third-party API. It writes verbatim
+response bodies and parses nothing, so the log is a superset of anything a
+monitor could need. `monitor.py` **derives** everything from that log: it
+replays from T0, then tails. Three properties follow, and they are the reason
+for the split:
 
-Started **2026-08-23T16:14Z**; earliest valid 6-hour mark **2026-08-23T22:14Z**.
+- the dashboard shows history from T0 rather than from process start;
+- a threshold change is applied to the **whole** window by deleting the SQLite
+  file and replaying, not just to data arriving afterwards;
+- the API still sees one client, not two.
+
+Derived state lives in SQLite (WAL). Readings are keyed on `(provider, ts)`,
+events on `(provider, ts)`, fired alerts on a content hash, so replay is
+idempotent rather than duplicate-generating. Sustain periods are evaluated
+against the **data** clock, not the process clock, which is what makes a replay
+reproduce the alerts a live run would have produced.
+
+Stdlib only. The deploy target needs a Python runtime and nothing else.
 
 ## Provider taxonomy
 
-Four pay models, which are never aggregated together:
+Four pay models, never aggregated together:
 
 | Pay model | Providers | Value means |
 |---|---|---|
 | `prepaid_balance` | brightdata, evomi, twocaptcha, openai, openrouter, tremendous | money left (USD, except tremendous in GBP) |
-| `credits_package` | scrapfly, zerobounce, findymail, bounceban, elevenlabs, resend | quota left until `refresh` date |
+| `credits_package` | scrapfly, zerobounce, findymail, bounceban, elevenlabs, resend | quota left until `refresh` |
 | `spend_report` | anthropic, meta_ads | trailing cost, no balance at all |
 | `postpaid` | vastai | credit that may legitimately go negative |
 
 Provider IDs are opaque keys: `brightdata` reports as "Oxylabs", `meta_ads` as
-"Google Ads", `openrouter` as "Groq". Nothing is inferred from the ID.
+"Google Ads", `openrouter` as "Groq". Nothing is inferred from an ID — including
+which schema adapter to use, which is chosen by **the shape that came back**.
+
+Aggregation is keyed on `(pay_model, unit)`. USD balance, GBP balance, credits,
+trailing USD spend and postpaid USD credit are five different quantities; a
+single "total spend" across them would be fiction.
+
+## What the captured window actually shows
+
+Everything below is measured over the observation window and recomputable from
+`raw_samples.jsonl`. Where a number is a policy choice instead, it says so.
+
+### Seven response shapes, not one
+
+```
+{"balance":947.3,"currency":"usd"}                        brightdata, openai, openrouter, twocaptcha
+{"ok":true,"data":{"wallet":{"amount":304.38,"ccy":"usd"}}} evomi
+{"gbp":1992.17}                                            tremendous
+{"package":12000,"refresh":"2026-09-01","remaining":10306} the six credits providers
+{"credit":49.66,"unit":"usd"}                              vastai
+{"object":"cost_report","amount_cents":3940,"window":"trailing_24h"}  anthropic
+{"spend_usd_30d":10431.67,"spend_usd_24h":347.72}          meta_ads
+```
+
+### Four sample states, because `{}` is not a value and not an error
+
+| State | Trigger | Count in first 66 cycles |
+|---|---|---|
+| `ok` | 200 with a recognised shape | 870 |
+| `schema_miss` | 200 with `{}` or an unknown shape | 20 |
+| `http_error` | 429/500/503 with `{"error": …}` | 85 |
+| `unparseable` | 504, which returns an **HTML** gateway page | 15 |
+
+`{}` arrived on HTTP 200 across 11 of 15 providers and never twice in a row.
+Reading it as `0` would fabricate a balance collapse and a critical alert.
+
+### 429 is per-provider, not pool-wide
+
+The repository README originally recorded 429 as injected pool-wide, from
+`tremendous` and `findymail` both returning 429 at 16:01Z. **That reading does
+not survive the window.** 16:01Z is twelve minutes before T0, so it is not in
+the captured data at all, and across 66 exact cycles:
+
+| Code | Providers hit in the *same* cycle | Which providers | Run length |
+|---|---|---|---|
+| 429 | **always exactly 1**, never 2 | tremendous ×16, findymail ×12 | 1–2 cycles |
+| 500 | 1–3 | meta_ads, bounceban, findymail, zerobounce | **11–16 cycles** |
+| 503 | 1 | vastai | 6 cycles |
+| 504 | 1–2 | 10 different providers | 1–2 cycles, ~3.1 s latency |
+
+So availability is evaluated **per provider**. What stops 504 singles from
+becoming spam is the length of the staleness window, not a pool-wide grouping —
+and grouping pool-wide would have hidden the four genuine multi-minute outages.
+
+### Burn must be robust, and robust is not enough
+
+`findymail` took a +1994 credit top-up inside the window. A first/last
+difference reports it **burning −3623 credits/h** — that is, gaining credits.
+Theil–Sen reports −55 credits/h, the rate it was actually consuming at.
+
+A median of *adjacent* differences is no better: `anthropic` is flat between
+batch charges, so half its adjacent deltas are zero and the median is
+meaningless.
+
+Theil–Sen alone is still not sufficient. It survives a jump only while fewer
+than half the pairwise slopes straddle it; with the jump at the exact midpoint
+of the window, 900 of 1770 pairs cross it and the median flips sign. So the
+series is **segmented** at genuine top-ups and Theil–Sen is fitted within the
+latest segment. Both the limit and the fix are asserted in the test suite.
+
+### A rise that is handed back is not a top-up
+
+`twocaptcha` returned +10.00 USD for exactly eight polls at 17:26Z, then went
+back to 72.63. Cutting the series at the rise left the reversion inside the
+estimation window and produced **133 USD/h and a 0.5 h runway** for a provider
+burning 0.28 USD/h with ~250 h of runway. `bounceban` did the same with +3.0
+credits held for 690 s.
+
+Reverted blips are detected by pairing a rise with a matching fall inside a
+15-minute window, recorded as `reverted_blip`, and never used to cut the series.
+An **unmatched** fall stays in the burn rate: a large one-off charge is spend,
+and excluding it would under-report risk.
+
+## Alerting
+
+Two classes, labelled honestly on every line and on the dashboard.
+
+**`operational_policy`** — choices nobody specified. No SLA, no balance floor
+and no runway lead time were ever supplied. Where a measurement can *bound* a
+choice, the bound is quoted next to it in `monitor.py`.
+
+| Setting | Value | Why |
+|---|---|---|
+| runway critical / warning | 24 h / 72 h | pure policy, no SLA given |
+| unavailability tolerance | 900 s | above the longest outage measured (480 s); 15× the longest transient (60 s) |
+| freshness (display, `/healthz`) | 300 s | a provider going quiet is *visible* long before it is *alerted* |
+| postpaid floor | −500 USD | zero is not the boundary; no credit limit was supplied |
+| pool-wide failure | 50% for 180 s | worst single cycle measured was 4/15 = 27% |
+| cooldown | 1 h per rule per provider | |
+
+**`data_derived`** — computed from the window. Burn anomaly fires at 6 MAD of
+that provider's own pairwise-slope distribution, floored at 10% of the baseline
+because MAD is exactly zero for the steadiest providers.
+
+This one caught a real event: `resend` accelerated from ~240 to ~700 credits/h
+at 16:52Z, a 19.1 MAD deviation. No fixed threshold would have caught it — its
+runway was still 170 h — and `elevenlabs`, burning 80× more in absolute terms,
+correctly stayed silent because it was steady.
+
+### Not alerts
+
+A top-up, a package reset on its refresh date, a postpaid credit going negative,
+a reverted blip, and a single timeout are all normal. They are recorded as
+events. Projections additionally refuse to fire below 30 minutes of evidence and
+carry their `extrapolation_ratio`, because an 8-day projection from five minutes
+of data would not survive a skeptical read.
+
+## Known measurement limits
+
+- **A top-up landing in the same interval as spend is not observable.** The API
+  exposes a current value only, so the two are seen summed and never separately.
+  Burn is a lower bound across such intervals.
+- **A package reset has not been observed.** All six credits providers refresh on
+  `2026-09-01`, outside the window. The reset rule is exercised by unit test
+  against synthetic data, not by live observation, and this is stated rather
+  than glossed.
+- **Projections extrapolate.** A projection to the 2026-09-01 refresh from a
+  six-hour window is a ~33× extrapolation. Every projection alert carries the
+  ratio so the reader can discount it.
+
+## Running it
+
+```bash
+# replay the captured log and print a report, no server, no tail
+python3 monitor.py --once --raw data/raw_samples.jsonl
+
+# replay + tail + serve
+python3 monitor.py --raw data/raw_samples.jsonl --bind 127.0.0.1 --port 8770
+```
+
+`/` dashboard · `/healthz` (503 when every provider is stale) · `/api/state` ·
+`/alerts.jsonl`
+
+```bash
+uv run --with pytest pytest tests/ -q && ruff check .
+```
