@@ -83,7 +83,7 @@ POLL_TIMEOUT_S = float(os.environ.get("MONITOR_POLL_TIMEOUT", "10"))
 
 @dataclass(frozen=True)
 class Policy:
-    """Operational policy — ASSUMPTIONS, not derivable from the captured data.
+    """Operational policy, ASSUMPTIONS, not derivable from the captured data.
 
     No SLA, no balance floor and no runway lead time were ever supplied. These
     are therefore choices, stated here so a reader can disagree with a number
@@ -1035,7 +1035,7 @@ def state_from_readings(provider: str, meta: dict[str, Any],
     """Derive one provider's state from a supplied series.
 
     Split out from `build_state` so the same derivation can be run against a
-    series that did not come from the store — which is what lets the audit
+    series that did not come from the store, which is what lets the audit
     recompute an alert with a top-up removed and check the alert survives it.
     """
     state = ProviderState(
@@ -1201,7 +1201,7 @@ def _band(value: float | None, edges: Sequence[float], *,
     Direction matters. For a runway a *smaller* number is worse; for an anomaly
     deviation or an outage duration a *larger* one is. Encoding that here is
     what lets the alerter speak when a condition deteriorates and stay quiet
-    when it recovers — a line saying an anomaly fell from 20 to 14 MAD is not
+    when it recovers, a line saying an anomaly fell from 20 to 14 MAD is not
     something anyone acts on.
     """
     index, label = len(edges), f"ge{edges[-1]:g}"
@@ -1476,7 +1476,7 @@ def rule_burn_anomaly(state: ProviderState, now: datetime) -> Candidate | None:
         window = state.trailing_window_h or DEFAULT_TRAILING_H
         # State the rate, the baseline and the change as three separate numbers.
         # An earlier version read "climbing 12.50 USD/h faster than usual", which
-        # attached "faster than usual" to the recent *rate* — the actual change
+        # attached "faster than usual" to the recent *rate*, the actual change
         # was +27.82/h, so the line understated the move by more than half. An
         # alert that misstates its own headline number is worse than silence.
         direction = "rising" if recent.rate_per_h >= 0 else "falling"
@@ -1484,7 +1484,7 @@ def rule_burn_anomaly(state: ProviderState, now: datetime) -> Candidate | None:
             f"{state.provider} ({state.name}) trailing-{window:.0f}h cost is now "
             f"{direction} at {_fmt(recent.rate_per_h, state.unit)}/h over the last "
             f"{recent.span_s / 60:.0f} min, against a window baseline of "
-            f"{_fmt(base.rate_per_h, state.unit)}/h — a change of "
+            f"{_fmt(base.rate_per_h, state.unit)}/h, a change of "
             f"{'+' if delta >= 0 else ''}{_fmt(delta, state.unit)}/h; reported cost now "
             f"{_fmt(state.value, state.unit)} per {window:.0f} h "
             f"({_fmt(state.trailing_rate_per_h, state.unit)}/h average)"
@@ -1494,7 +1494,7 @@ def rule_burn_anomaly(state: ProviderState, now: datetime) -> Candidate | None:
             f"{state.provider} ({state.name}) burn accelerated to "
             f"{_fmt(recent.rate_per_h, state.unit)}/h over the last "
             f"{recent.span_s / 60:.0f} min against a window baseline of "
-            f"{_fmt(base.rate_per_h, state.unit)}/h — a change of "
+            f"{_fmt(base.rate_per_h, state.unit)}/h, a change of "
             f"{'+' if delta >= 0 else ''}{_fmt(delta, state.unit)}/h"
             + (f", {factor:.1f}x" if factor else "")
         )
@@ -1907,7 +1907,7 @@ class Collector:
 
     This exists so the deliverable is genuinely one file: `monitor.py --poll`
     collects, derives, alerts and serves with nothing else installed and no
-    second process. Everything downstream is untouched — the collector writes
+    second process. Everything downstream is untouched, the collector writes
     exactly the record shape the ingestor already reads, so the replay path and
     the live path share every line of parsing, estimation and alerting rather
     than having two implementations that can drift apart.
@@ -2213,48 +2213,75 @@ def snapshot(store: Store, now: datetime | None = None) -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 CSS = """
-:root{--bg:#0d1117;--panel:#161b22;--line:#272e38;--fg:#e6edf3;--dim:#8b949e;
---crit:#f85149;--warn:#d29922;--ok:#3fb950;--info:#58a6ff;--accent:#a371f7}
+/* Shared with the Task 2 report: same token names, same values, so a reader
+   moving between the two pages meets one system rather than two designs.
+   Warm paper rather than a dark ground: #0d1117 is recognisably GitHub and
+   reads as a template, and a light surface scans better in daylight, which is
+   when someone checks spend. Every colour is tinted; no pure black or white. */
+:root{
+  --paper:#fbfbfa; --surface:#f4f3f0; --rule:#e2e2df;
+  --ink:#1c1d1f; --muted:#5f6570;
+  --alarm:#8a3324; --warn:#8a6d3a; --ok:#2f6b47;
+  --sans:"Söhne","Inter Tight","Helvetica Neue",Helvetica,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,monospace;
+  /* One spacing scale. No values in between, no one-offs. */
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s6:24px; --s8:32px; --s12:48px;
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);
-font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-a{color:var(--info)}
-header{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;
-flex-wrap:wrap;gap:16px;align-items:baseline;justify-content:space-between}
-h1{font-size:16px;margin:0;letter-spacing:.02em}
-h2{font-size:13px;margin:0 0 10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
-.wrap{padding:20px;max-width:1600px;margin:0 auto}
-.meta{color:var(--dim);font-size:12px}
-.grid{display:grid;gap:16px;margin-bottom:20px}
+body{margin:0;background:var(--paper);color:var(--ink);
+font-family:var(--sans);font-size:14px;line-height:1.55}
+a{color:var(--alarm)}
+header{padding:var(--s4) var(--s6);border-bottom:1px solid var(--rule);display:flex;
+flex-wrap:wrap;gap:var(--s4);align-items:baseline;justify-content:space-between}
+h1{font-size:17px;margin:0;letter-spacing:.01em;font-weight:600}
+h2{font-size:12px;margin:0 0 var(--s3);color:var(--muted);text-transform:uppercase;
+letter-spacing:.07em;font-weight:600}
+.wrap{padding:var(--s6);max-width:1600px;margin:0 auto}
+.meta{color:var(--muted);font-size:12px}
+.grid{display:grid;gap:var(--s4);margin-bottom:var(--s6)}
 .cols{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px}
-.card .big{font-size:20px;margin:4px 0}
+/* Cards never nest. A group inside a card gets a hairline and a heading. */
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:4px;
+padding:var(--s4) var(--s4)}
+.card .big{font-size:21px;margin:var(--s1) 0;font-family:var(--mono);
+font-variant-numeric:tabular-nums}
+/* Wide content scrolls inside its own box so the page body never does. */
+.scroll{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13px}
-th{text-align:left;color:var(--dim);font-weight:600;font-size:11px;
-text-transform:uppercase;letter-spacing:.06em;padding:8px 10px;border-bottom:1px solid var(--line)}
-td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
-tr:hover td{background:#1b222c}
-.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
-.pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;border:1px solid}
-.p-crit{color:var(--crit);border-color:var(--crit)}
+th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;
+text-transform:uppercase;letter-spacing:.06em;padding:var(--s2) var(--s3);
+border-bottom:1px solid var(--rule);background:var(--surface)}
+td{padding:var(--s3);border-bottom:1px solid var(--rule);vertical-align:middle}
+tr:hover td{background:var(--surface)}
+/* Numbers a reader compares down a column: monospace, tabular figures. */
+.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;
+white-space:nowrap}
+.pill{display:inline-block;padding:1px var(--s2);border-radius:3px;font-size:11px;
+border:1px solid;font-family:var(--mono)}
+.p-crit{color:var(--alarm);border-color:var(--alarm)}
 .p-warn{color:var(--warn);border-color:var(--warn)}
 .p-ok{color:var(--ok);border-color:var(--ok)}
-.p-dim{color:var(--dim);border-color:var(--line)}
-.p-info{color:var(--info);border-color:var(--info)}
-.p-acc{color:var(--accent);border-color:var(--accent)}
-.dim{color:var(--dim)}
-.crit{color:var(--crit)}.warn{color:var(--warn)}.ok{color:var(--ok)}
-.alert{border-left:3px solid var(--line);padding:8px 12px;margin-bottom:8px;background:var(--panel);
-border-radius:0 4px 4px 0}
-.alert.critical{border-left-color:var(--crit)}
+.p-dim{color:var(--muted);border-color:var(--rule)}
+.p-info{color:var(--muted);border-color:var(--rule)}
+.p-acc{color:var(--ink);border-color:var(--ink)}
+.dim{color:var(--muted)}
+.crit{color:var(--alarm)}.warn{color:var(--warn)}.ok{color:var(--ok)}
+.alert{border-left:3px solid var(--rule);padding:var(--s3);margin-bottom:var(--s2);
+background:var(--surface);border-radius:0 3px 3px 0}
+.alert.critical{border-left-color:var(--alarm)}
 .alert.warning{border-left-color:var(--warn)}
-.alert .t{font-size:12px}
-.alert .e{color:var(--dim);font-size:11px;margin-top:3px;word-break:break-word}
-.rowsub{color:var(--dim);font-size:11px}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.alert .t{font-size:12.5px}
+.alert .e{color:var(--muted);font-size:11px;margin-top:var(--s1);
+word-break:break-word;font-family:var(--mono)}
+.rowsub{color:var(--muted);font-size:11px;font-family:var(--mono)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:var(--s6)}
 @media(max-width:1100px){.two{grid-template-columns:1fr}}
-code{background:#21262d;padding:1px 5px;border-radius:3px;font-size:12px}
-.foot{color:var(--dim);font-size:11px;margin-top:24px;line-height:1.7}
+code{background:var(--surface);padding:1px var(--s1);border-radius:3px;
+font-size:12px;font-family:var(--mono)}
+/* Prose capped at 68ch: a measure a reader can track without losing the line. */
+.foot{color:var(--muted);font-size:12px;margin-top:var(--s8);line-height:1.65;
+max-width:68ch}
+.foot strong{color:var(--ink)}
 """
 
 
@@ -2359,8 +2386,8 @@ def render_dashboard(snap: dict[str, Any]) -> str:
             else:
                 cls = "dim"
                 left = a["sustain_remaining_s"]
-                title = (f'pending — {left:.0f}s of sustain left'
-                         if left > 0 else 'pending — writes on the next evaluation')
+                title = (f'pending, {left:.0f}s of sustain left'
+                         if left > 0 else 'pending, writes on the next evaluation')
                 mark = "&hellip;"
             pills.append(f'<span class="pill p-{cls}" title="{escape(title)}">'
                          f'{escape(a["rule"])}{mark}</span> ')
@@ -2407,13 +2434,13 @@ def render_dashboard(snap: dict[str, Any]) -> str:
                 cls = "crit" if hours <= POLICY.runway_critical_h else (
                     "warn" if hours <= POLICY.runway_warning_h else "")
             else:
-                lead, sub, cls = "&mdash;", "no projection yet", "dim"
+                lead, sub, cls = ",", "no projection yet", "dim"
             group_cards.append(f"""<div class="card">
 <h2>{escape(group["pay_model"])} &middot; {escape(unit)}</h2>
 <div class="big {cls}">{lead}</div>
 <div class="meta">{sub}</div>
 <div class="big" style="font-size:15px">{group["measurable"]}/{group["providers"]} packages</div>
-<div class="meta">not summed &mdash; one vendor's credit is not another's</div>{note}
+<div class="meta">not summed: one vendor's credit is not another's</div>{note}
 </div>""")
             continue
 
@@ -2422,7 +2449,7 @@ def render_dashboard(snap: dict[str, Any]) -> str:
             rate_note = "window average, not a balance"
         else:
             head = "value on hand"
-            rate_note = f"summed burn &mdash; {escape(unit.upper())} is fungible across vendors"
+            rate_note = f"summed burn, {escape(unit.upper())} is fungible across vendors"
         group_cards.append(f"""<div class="card">
 <h2>{escape(group["pay_model"])} &middot; {escape(unit)}</h2>
 <div class="big">{escape(_fmt(group["value"], unit))}</div>
@@ -2465,14 +2492,14 @@ def render_dashboard(snap: dict[str, Any]) -> str:
                      else '<span class="pill p-warn">firing</span>')
             when = f'line written {escape(str(cond["last_fired"]))}'
             if cond["deteriorated"]:
-                when += " &middot; <strong>worsened since</strong>, next evaluation writes again"
+                when += " &middot; <strong>worsened since</strong>; the next evaluation writes again"
         else:
             badge = '<span class="pill p-dim">pending</span>'
             left = cond["sustain_remaining_s"]
             when = (f'held {cond["held_s"]:.0f}s of {cond["sustain_s"]:.0f}s required '
-                    f'&mdash; {left:.0f}s before a line is written'
+                    f', {left:.0f}s before a line is written'
                     if left > 0 else
-                    'sustain met &mdash; a line is written on the next evaluation')
+                    'sustain met: a line is written on the next evaluation')
         condition_blocks.append(f"""<div class="alert {escape(cond["level"])}">
 <div class="t">{badge}
 <span class="pill p-dim">{escape(cond["rule"])}</span>
@@ -2494,7 +2521,7 @@ def render_dashboard(snap: dict[str, Any]) -> str:
 <div class="e">{escape(str(detail.get("from")))} &rarr; {escape(str(detail.get("to")))}
 ({"+" if isinstance(delta, (int, float)) and delta > 0 else ""}{escape(str(delta))}
 {escape(str(detail.get("unit", "")))}), gap {escape(str(detail.get("gap_s")))}s,
-{escape(str(detail.get("ratio_to_typical")))}x typical decline &mdash;
+{escape(str(detail.get("ratio_to_typical")))}x typical decline ,
 recorded as an event, never alerted</div></div>""")
     if not event_blocks:
         event_blocks.append('<div class="alert"><div class="t dim">'
@@ -2529,16 +2556,16 @@ T0 {escape(coverage["first_ts"] or "-")} &middot; last {escape(coverage["last_ts
 <div class="grid cols">{"".join(group_cards)}</div>
 
 <h2>Providers, sorted by risk</h2>
-<table><thead><tr>
+<div class="scroll"><table><thead><tr>
 <th>provider</th><th>pay model</th><th class="num">value</th><th class="num">burn</th>
 <th class="num">time to impact</th><th>window</th><th class="num">freshness</th>
 <th class="num">poll health</th><th>alerts</th><th>events</th>
-</tr></thead><tbody>{"".join(rows)}</tbody></table>
+</tr></thead><tbody>{"".join(rows)}</tbody></table></div>
 
 <div class="two" style="margin-top:24px">
 <div><h2>Conditions holding now ({len(snap["conditions"])})</h2>
 <div class="meta" style="margin:-4px 0 10px">Live state. <em>pending</em> means the condition is
-holding but nothing has been written yet &mdash; nobody has been told.</div>
+holding but nothing has been written yet, so nobody has been told.</div>
 {"".join(condition_blocks)}</div>
 <div><h2>Lines written to alerts.jsonl ({len(snap["alerts"])})</h2>
 <div class="meta" style="margin:-4px 0 10px">The record of what a human was actually told, newest
@@ -2546,7 +2573,7 @@ first. A line appears when a condition starts and when it crosses a materiality 
 {"".join(alert_blocks)}</div>
 </div>
 
-<h2 style="margin-top:24px">Events &mdash; top-ups, resets and reverted blips</h2>
+<h2 style="margin-top:24px">Events, top-ups, resets and reverted blips</h2>
 <div class="two">{"".join(event_blocks)}</div>
 
 <h2 style="margin-top:24px">Collection health</h2>
@@ -2558,7 +2585,7 @@ first. A line appears when a condition starts and when it crosses a materiality 
 ({100 * coverage["ok_samples"] / max(1, coverage["samples"]):.1f}%)</div></div>
 <div class="card"><h2>sample states</h2>
 <div class="meta">{"<br>".join(f"{escape(k)}: {v:,}" for k, v in sorted(coverage["by_state"].items()))}</div>
-<div class="meta" style="margin-top:6px">schema_miss is <code>{{}}</code> on HTTP 200 &mdash;
+<div class="meta" style="margin-top:6px">schema_miss is <code>{{}}</code> on HTTP 200 ,
 a third state, never read as zero</div></div>
 <div class="card"><h2>stale providers</h2>
 <div class="big {"crit" if stale else "ok"}">{len(stale)}</div>
@@ -2567,16 +2594,16 @@ a third state, never read as zero</div></div>
 </div>
 
 <div class="foot">
-<strong>How to read this.</strong> Burn is a Theil&ndash;Sen slope over the readings since the
+<strong>How to read this.</strong> Burn is a Theil-Sen slope over the readings since the
 last top-up, not a first/last difference: in this window a first/last estimate reports
 <code>findymail</code> burning &minus;3623 credits/h, because a +1994 top-up lands inside it.
 Time to impact is hours, the only quantity comparable across every provider.<br>
 <strong>What is and is not added up.</strong> A card shows a total only when its unit is
 fungible across vendors, which here means a currency: a dollar of <code>openai</code> credit
 and a dollar of <code>brightdata</code> credit are both a dollar. The six providers whose unit
-is called &ldquo;credits&rdquo; are <em>not</em> summed &mdash; <code>elevenlabs</code> credits are
-TTS characters, <code>resend</code> credits are emails, <code>scrapfly</code> credits are API
-calls. They share a label, not a unit, so that card reports how many packages there are and
+is called &ldquo;credits&rdquo; are <em>not</em> summed. <code>elevenlabs</code> credits are
+TTS characters, <code>resend</code> credits are emails, and <code>scrapfly</code> credits are
+API calls. They share a label, not a unit, so that card reports how many packages there are and
 which one runs out first.<br>
 <strong>Alert classes.</strong> <span class="pill p-info">operational_policy</span> rules encode
 choices nobody specified (runway lead time {POLICY.runway_critical_h:.0f}h critical /
@@ -2585,9 +2612,9 @@ choices nobody specified (runway lead time {POLICY.runway_critical_h:.0f}h criti
 <span class="pill p-acc">data_derived</span> rules compute their threshold from the observed
 window ({BASELINE.anomaly_k:.0f} MAD of the provider's own slope distribution).<br>
 <strong>Why {POLICY.unavailable_alert_s / 60:.0f} minutes.</strong> In the reference window
-transient 504/429 failures lasted 1&ndash;2 polls (30&ndash;60s) and self-healing 5xx episodes
-lasted 10&ndash;22 polls (300&ndash;630s) &mdash; 15 of them across 10 providers in under three
-hours, every one self-healing. The tolerance sits above the longest outage actually measured,
+transient 504/429 failures lasted 1-2 polls (30-60s) and self-healing 5xx episodes
+lasted 10 to 22 polls (300 to 630s). There were 15 of them across 10 providers in
+under three hours, and every one healed itself. The tolerance sits above the longest outage actually measured,
 so a line means "longer than anything we observed", not "the API is flaky again".
 Freshness above turns amber at {POLICY.stale_display_s:.0f}s so a provider going quiet is
 <em>visible</em> long before it is <em>alerted</em>.<br>
@@ -2595,8 +2622,8 @@ Freshness above turns amber at {POLICY.stale_display_s:.0f}s so a provider going
 going negative, a rise that is later handed back, and a single timeout are all normal.
 Estimate-driven rules sustain for {POLICY.estimate_sustain_s:.0f}s before firing.<br>
 <strong>Lines are written on change, not on a timer.</strong> A condition produces a line
-when it starts and again only when it crosses a materiality band &mdash; roughly doubling
-steps of time-to-impact. Drift inside a band is silent, because 44&nbsp;h and 43&nbsp;h call
+when it starts, and again only when it crosses a materiality band (roughly doubling
+steps of time-to-impact). Drift inside a band is silent, because 44&nbsp;h and 43&nbsp;h call
 for the same response. This table is the live state; <code>alerts.jsonl</code> is the log of
 changes to it.<br>
 <strong>Known measurement limit.</strong> A top-up landing in the same interval as spend is not
