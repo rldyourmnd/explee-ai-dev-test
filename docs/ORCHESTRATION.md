@@ -5,7 +5,7 @@ single place that says what is true right now, with the measurement behind each
 claim. Maintained by the orchestrator (`surface:3`); workers report, they do not
 edit this file.
 
-**Last heartbeat: 2026-08-23T19:15Z.**
+**Last heartbeat: 2026-08-23T19:29Z.**
 
 ## STATE CHANGE 18:54Z — all three workers active for the first time
 
@@ -144,6 +144,49 @@ that orchestrator changes are recorded under an unrelated message.
 history rewrite under live sessions destroys uncommitted work. Rewriting to fix a
 commit message would contradict that for cosmetics. Recorded here instead, and
 both sessions have moved to explicit `git add <paths>`.
+
+## Heartbeat 19:29Z — two panes were idle on unsent input
+
+**The stall was not a decision this time; it was a keystroke.** `surface:5` and
+`surface:8` were both parked at `Worked for Nm` with **text sitting unsubmitted
+in their input buffers** — instructions typed for them that never reached the
+agent. Task 2's reference transcript is the critical path's long pole, so this
+was wall-clock burning on the most expensive item in the run.
+
+Pressed `Enter` on both rather than sending fresh text. `cmux send` *appends* to
+whatever is already in the buffer, so typing my own message into a buffer I could
+only partly read would have submitted a spliced instruction neither author
+intended. Submitting the text someone deliberately wrote for that pane is the
+lower-risk move. Both resumed within seconds.
+
+Worth generalising: a pane showing recent output and a free prompt looks
+identical whether it is thinking, waiting on a human, or holding unsent input.
+Only the third is silently recoverable, and only by looking at the buffer.
+
+**Row X.9 → DONE, and it closes the last open review finding for Task 1.** The
+sampler stores `r.text[:8000]`, so "verbatim" was unproven at the boundary. Task 1
+measured it and said so in its README instead of leaving the claim unqualified;
+this session re-measured on the host independently:
+
+| | |
+|---|---|
+| Records carrying a body | 6240 |
+| Largest stored body | **6422** characters |
+| Records at exactly 8000 | **0** |
+| Headroom | 1578 |
+
+Nothing in the window was clipped, so the log is verbatim in fact as well as in
+intent. The README also states why the sampler is *not* being changed to record
+an original length and hash — that would restart it and end the observation
+window. Correct trade, stated in the right place.
+
+**A lint-red file was held back rather than pushed.** `tools/policy_sensitivity.py`
+is untracked and fails `F541`, so the gate refused it. Its two parent commits
+went to the remote without it: a green subset reaching the round-2 reviewer beats
+a red whole. The defect is back with `surface:2`, with the exact line — and it
+matters beyond lint, because `POLICY-SENSITIVITY.md` names that script as the way
+to regenerate its table, which is a report citing a command the reader cannot
+find.
 
 ## Heartbeat 19:15Z — the commit order worked; two rows verified DONE
 
@@ -324,12 +367,12 @@ endpoint, so an interruption is unrecoverable and cannot be faked.
 | State | `active` |
 | T0 | `2026-08-23T16:13:26.775Z` (first record, matches the logged T0) |
 | First record | `2026-08-23T16:13:26.775Z` |
-| Last record | `2026-08-23T19:14:06.425Z`, 20 s before the check |
-| Lines | 5792 |
-| **Max consecutive gap** | **29.661 s** — unchanged across 15 checks, below the 30 s interval |
+| Last record | `2026-08-23T19:27:36.952Z`, 18 s before the check |
+| Lines | 6224 |
+| **Max consecutive gap** | **29.661 s** — unchanged across sixteen checks |
 | Malformed lines | 0 |
-| Span | 10839 s = **3 h 01 m**; `>= 21600 s`: **False** |
-| 6 h mark | `2026-08-23T22:14Z` — **2 h 59 m remaining**, now under three hours |
+| Span | 11650 s = **3 h 14 m**; `>= 21600 s`: **False** |
+| 6 h mark | `2026-08-23T22:14Z` — **2 h 46 m remaining** |
 
 Now reporting **max consecutive gap** rather than only a count over a threshold,
 per the review. It is the stronger statement: a count of zero gaps over 45 s is
