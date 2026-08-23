@@ -195,6 +195,30 @@ Press Enter on what is there instead.
 The framing this repository uses everywhere else applies to messaging too:
 **an unverified send is an assumption, and an assumption is not evidence.**
 
+## A text sweep over source is a code change
+
+On 2026-08-23 an em-dash sweep — a presentation change — rewrote a `&mdash;`
+placeholder inside a tuple assignment in `monitor.py`, producing
+`lead, sub, cls = ",", ...`. It clobbered the loop's CSS-class variable. A
+provider group with no projection would have rendered `<div class="card,">`
+with the figure unbound.
+
+**Pyright caught the unbound half. Nothing caught the clobbered half.** It stayed
+invisible through every gate and only surfaced later, when card ranking happened
+to introduce a variable named `lead`.
+
+The lesson is not "be careful with `sed`". It is that a mechanical rewrite over
+source can change **semantics** while looking like typography, and a type checker
+only sees the damage that leaves a name unbound. Treat a presentation sweep over
+code as a logic change: read the diff hunk by hunk, and diff the **rendered
+output** before and after, not just the source.
+
+The same shape has appeared twice more here. A redaction filter written with
+`\b` on macOS `sed` matched nothing and printed the text it was meant to hide.
+A `--max-result` flag truncated tool output while the generated header claimed
+nothing had been dropped. In all three the tool reported success while doing the
+opposite of its purpose.
+
 ## Committing in a shared worktree
 
 **Use `git commit -- <paths>`. Never `git add` then `git commit`.**
