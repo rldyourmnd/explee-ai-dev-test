@@ -31,7 +31,7 @@ so the document cannot claim a verdict the audit did not produce.
 | caused solely by a top-up | **0** |
 | caused solely by a reverted blip | **0** |
 | raw records | 11,888 |
-| repository | `f461895` |
+| repository | `c0dfefe` |
 | regenerate | `uv run tools/alert_audit_doc.py` |
 
 ## Every line
@@ -165,5 +165,5 @@ Repeat lines, and what each one added
 unreconciled lines: 0 of 12
 
 auditee sha256[:16]: d5b3f6c75913dddb -> d5b3f6c75913dddb  unchanged
-[replay] 11888 records in 52.4s from /Users/rldyourmnd/Developer/rldyourmnd/explee-ai-dev-test/task1-spend-observability/data/raw_samples.jsonl
+[replay] 11888 records from the raw window
 ```

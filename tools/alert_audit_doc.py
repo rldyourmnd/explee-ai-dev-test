@@ -87,6 +87,12 @@ def main() -> int:
          "--raw", args.raw, "--alerts", args.alerts],
         capture_output=True, text=True)
     audit = (proc.stdout or "") + (proc.stderr or "")
+    # A generated document must be deterministic given the same inputs, or it
+    # churns on every run and produces diffs that say nothing. Two things in the
+    # audit output are not: how long the replay took, and where the raw log
+    # lives on the machine that ran it. Neither is evidence about the alerts.
+    audit = re.sub(r"(\[replay\] \d+ records) in [\d.]+s from \S+",
+                   r"\1 from the raw window", audit)
 
     m = re.search(r"unreconciled lines:\s*(\d+) of (\d+)", audit)
     if not m:
