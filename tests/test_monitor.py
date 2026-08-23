@@ -1414,6 +1414,77 @@ def test_a_condition_inside_its_sustain_window_reads_as_pending(tmp_path):
     assert len(_alert_lines(alerts)) == 1
 
 
+def test_a_recurrence_reads_as_pending_until_its_own_line_is_written(tmp_path):
+    """The UI must not inherit a `firing` from a previous episode.
+
+    Full sequence: appears, fires, disappears, reappears, stays pending through
+    the sustain period, fires again. Reading `last_fired` without comparing it
+    to `active_since` showed the second episode as firing from the moment it
+    reappeared, while alerts.jsonl contained no line for it — the dashboard
+    claiming an incident had been raised that nobody had been told about.
+    """
+    store = m.Store(str(tmp_path / "monitor.sqlite"))
+    alerts = tmp_path / "alerts.jsonl"
+    alerter = m.Alerter(store, str(alerts))
+    candidate = m.Candidate(
+        key="runway:openrouter", rule="runway", level="warning", provider="openrouter",
+        text="openrouter reaches zero in 50 h", evidence={"runway_h": 50.0},
+        rule_class=m.CLASS_POLICY, sustain_s=300.0, signature="02|runway:warning:lt72")
+
+    def status_at(when):
+        return m.condition_status(store, candidate, when)
+
+    # 1. appears — pending, sustain running
+    alerter.process([candidate], T0)
+    assert status_at(T0)["status"] == "pending"
+
+    # 2. sustain elapses and it fires
+    fired_at = T0 + timedelta(seconds=400)
+    alerter.process([candidate], fired_at)
+    assert status_at(fired_at)["status"] == "firing"
+    assert len(_alert_lines(alerts)) == 1
+
+    # 3. disappears
+    gone = T0 + timedelta(seconds=700)
+    alerter.process([], gone)
+
+    # 4. reappears, well past the forget window so it is a genuine new incident
+    back = gone + timedelta(seconds=m.POLICY.incident_forget_s + 600)
+    alerter.process([candidate], back)
+    reappeared = status_at(back)
+    assert reappeared["status"] == "pending", \
+        "a new episode must not inherit firing from the previous one"
+    assert reappeared["last_fired_this_episode"] is False
+    assert len(_alert_lines(alerts)) == 1, "and no line has been written for it yet"
+
+    # 5. still pending part-way through the sustain period
+    midway = back + timedelta(seconds=120)
+    alerter.process([candidate], midway)
+    assert status_at(midway)["status"] == "pending"
+    assert status_at(midway)["sustain_remaining_s"] > 0
+
+    # 6. fires again once sustained, and now reads as firing
+    refired = back + timedelta(seconds=400)
+    alerter.process([candidate], refired)
+    assert len(_alert_lines(alerts)) == 2, "the new episode must produce its own line"
+    final = status_at(refired)
+    assert final["status"] == "firing"
+    assert final["last_fired_this_episode"] is True
+
+
+def test_the_dashboard_and_the_alerter_agree_about_firing(tmp_path):
+    """Whatever the UI calls firing must be backed by a line in the file."""
+    store, _ingestor, alerts = _condition_pipeline(tmp_path, 140)
+    at = T0 + timedelta(seconds=140 * 30)
+    snap = m.snapshot(store, at)
+    written = _alert_lines(alerts)
+    keys_with_lines = {(x["rule"], x["provider"]) for x in written}
+    for condition in snap["conditions"]:
+        if condition["status"] == "firing":
+            assert (condition["rule"], condition["provider"]) in keys_with_lines, \
+                f"UI says firing but no line exists: {condition['rule']}/{condition['provider']}"
+
+
 def test_a_deteriorating_condition_is_flagged_before_the_line_is_written(tmp_path):
     store = m.Store(str(tmp_path / "monitor.sqlite"))
     alerter = m.Alerter(store, str(tmp_path / "alerts.jsonl"))

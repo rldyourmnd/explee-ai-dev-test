@@ -125,3 +125,59 @@ def test_no_engine_meeting_the_guardrail_is_reported_not_papered_over():
     )
     assert outcome["winner"] is None
     assert outcome["reason"] == "no engine met the guardrail"
+
+
+# --- the declared tie-break order ---------------------------------------------
+
+def rich(engine, wer_errors, cs_errors, ref_words=20, cs_words=5):
+    """Segments with independently controllable overall and code-switch error."""
+    return [
+        SegmentScore(
+            segment_id=f"s{i}", engine=engine, ref_words=ref_words,
+            substitutions=w, hits=ref_words - w,
+            cs_ref_words=cs_words, cs_errors=c,
+        )
+        for i, (w, c) in enumerate(zip(wer_errors, cs_errors))
+    ]
+
+
+def test_a_tie_on_the_primary_metric_goes_to_code_switch_wer_not_cost():
+    """Cost is step 4 of the frozen rule, not step 1."""
+    n = 10
+    a = rich("a", [2, 3] * (n // 2), [0, 0] * (n // 2))   # clean on code-switch
+    b = rich("b", [3, 2] * (n // 2), [4, 5] * (n // 2))   # bad on code-switch
+    outcome = decide(
+        {"a": a, "b": b}, primary="wer", guardrail_metric="wer",
+        guardrail_max=0.5, cost_usd={"a": 9.99, "b": 0.01}, resamples=RESAMPLES,
+    )
+    assert set(outcome["indistinguishable_from_leader"]) == {"a", "b"}
+    # b is far cheaper; the declared order must still pick a on code-switch WER.
+    assert outcome["winner"] == "a"
+    assert any("cs_wer" in step for step in outcome["tie_break_steps"])
+    assert "cost" not in outcome["basis"]
+
+
+def test_cost_is_reached_only_after_every_quality_metric_ties():
+    n = 8
+    a = rich("pricey", [2, 3] * (n // 2), [1, 1] * (n // 2))
+    b = rich("cheap", [3, 2] * (n // 2), [1, 1] * (n // 2))
+    outcome = decide(
+        {"pricey": a, "cheap": b}, primary="wer", guardrail_metric="wer",
+        guardrail_max=0.5, cost_usd={"pricey": 4.10, "cheap": 0.90},
+        resamples=RESAMPLES,
+    )
+    assert outcome["winner"] == "cheap"
+    assert "not a quality judgement" in outcome["basis"]
+    assert any("cs_wer" in step for step in outcome["tie_break_steps"])
+
+
+def test_no_winner_when_everything_ties_and_no_cost_is_supplied():
+    n = 8
+    a = rich("a", [2, 3] * (n // 2), [1, 1] * (n // 2))
+    b = rich("b", [3, 2] * (n // 2), [1, 1] * (n // 2))
+    outcome = decide(
+        {"a": a, "b": b}, primary="wer", guardrail_metric="wer",
+        guardrail_max=0.5, resamples=RESAMPLES,
+    )
+    assert outcome["winner"] is None
+    assert "indistinguishable on every declared metric" in outcome["basis"]

@@ -332,3 +332,62 @@ def test_shallow_slug_under_another_account_is_a_known_miss():
     # documents the stated limit rather than pretending coverage is total:
     # a different user's shallow project is indistinguishable from prose here
     assert et.scan_foreign_slugs("-home-bob-proj", THIS) == []
+
+
+# A block type this exporter has never seen must be reported as lost. The old
+# if/elif chain had no else, so a future Claude Code block type would vanish
+# while the header still claimed nothing was dropped.
+def test_unknown_block_type_is_recorded_as_a_loss():
+    records = [_turn("assistant", [{"type": "server_tool_use", "id": "x"}])]
+    losses = []
+    et.build(records, "T", "s", Path("x.jsonl"), None, losses)
+    assert any("unsupported content block type 'server_tool_use'" in x for x in losses), losses
+
+
+def test_non_dict_block_is_recorded_as_a_loss():
+    records = [_turn("assistant", ["a bare string", 42])]
+    losses = []
+    et.build(records, "T", "s", Path("x.jsonl"), None, losses)
+    assert sum("not an object" in x for x in losses) == 2, losses
+
+
+def test_scalar_message_content_is_recorded_as_a_loss():
+    records = [_turn("assistant", [])]
+    records[0]["message"]["content"] = 7
+    losses = []
+    et.build(records, "T", "s", Path("x.jsonl"), None, losses)
+    assert any("message.content was int" in x for x in losses), losses
+
+
+def test_null_message_content_is_recorded_as_a_loss():
+    records = [_turn("assistant", [])]
+    records[0]["message"]["content"] = None
+    losses = []
+    et.build(records, "T", "s", Path("x.jsonl"), None, losses)
+    assert any("message.content was NoneType" in x for x in losses), losses
+
+
+def test_mixed_valid_and_invalid_blocks_renders_the_valid_and_records_the_rest():
+    records = [_turn("assistant", [
+        {"type": "text", "text": "kept"},
+        None,
+        {"type": "future_kind"},
+    ])]
+    losses = []
+    md, _ = et.build(records, "T", "s", Path("x.jsonl"), None, losses)
+    assert "kept" in md, "a valid block must still render"
+    assert any("not an object" in x for x in losses)
+    assert any("future_kind" in x for x in losses)
+    assert "**This export is not verbatim.**" in md
+
+
+def test_known_block_types_are_not_reported_as_unsupported():
+    records = [_turn("assistant", [
+        {"type": "thinking", "thinking": "t"},
+        {"type": "tool_use", "name": "Bash", "input": {}},
+        {"type": "tool_result", "content": "ok"},
+        {"type": "text", "text": "done"},
+    ])]
+    losses = []
+    et.build(records, "T", "s", Path("x.jsonl"), None, losses)
+    assert losses == [], losses

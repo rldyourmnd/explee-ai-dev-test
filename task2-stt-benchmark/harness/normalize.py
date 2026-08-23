@@ -63,39 +63,27 @@ def characters(text: str) -> list[str]:
     return list(normalize_for_wer(text))
 
 
-#: Latin vowels dropped from a stem of at least this many characters. Russian
-#: declension does not append to a Latin noun, it *replaces* its final vowel:
-#: `Kafka` -> `Kafkу`, `Grafana` -> `Grafanе`. Comparing `Kafka` with `Kafkу`
-#: therefore needs a stem, not a suffix rule. The length floor keeps short
-#: names such as `RAG` and `API` intact.
-_STEM_MIN_LENGTH = 5
-_LATIN_VOWELS = "aeiouy"
-
-
-def stem_latin(token: str) -> str:
-    """Fold a Latin token to the stem shared by its Russian-inflected forms.
-
-    Applied identically to the reference, to every engine's output and to the
-    glossary, so it can neither favour nor penalise any engine. It is a term
-    *matching* aid only and never touches word-error scoring.
-    """
-    if len(token) >= _STEM_MIN_LENGTH and token[-1] in _LATIN_VOWELS:
-        return token[:-1]
-    return token
-
-
 def normalize_term(text: str) -> str:
-    """Term-matching form: scoring normalisation, tail stripping, Latin stem."""
+    """Term-matching form: scoring normalisation plus Cyrillic-tail stripping.
+
+    An earlier version also dropped a final Latin vowel from any token of five
+    characters or more, to make `Kafka` match `Kafkу`. That was wrong in the
+    most damaging way available: it folded `Kafka` and `Kafko` to the same
+    stem, so a mangled product name scored as a correct one — under a primary
+    metric whose entire purpose is catching mangled product names. The rule is
+    removed. Inflection is handled by stripping the *Cyrillic* tail, which
+    cannot merge two Latin spellings, and by listing genuine variants
+    explicitly in `glossary.json` where a term needs them.
+    """
     parts = []
     for token in tokens(text):
         if LATIN.search(token):
-            # Strip a Cyrillic tail glued to a Latin stem (`Workerа`), then fold
-            # the Latin stem so a replaced final vowel (`Kafkу`) still matches.
+            # `Workerа` -> `worker`. Only a Cyrillic tail is stripped, so no
+            # Latin character is ever discarded and no two distinct Latin
+            # spellings can collapse into one.
             stripped = _RU_TAIL.sub("", token)
             if stripped and LATIN.search(stripped):
                 token = stripped
-            if not CYRILLIC.search(token):
-                token = stem_latin(token)
         parts.append(token)
     return " ".join(parts)
 

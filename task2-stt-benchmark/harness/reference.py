@@ -214,6 +214,16 @@ class Adjudication:
     note: str = ""
 
 
+#: Violations that must stop a reference from being built at all, rather than
+#: being reported and ignored. R9 is absent on purpose: an over-unintelligible
+#: segment is *excluded*, which is a defined outcome, not a broken pass.
+BLOCKING_RULES = frozenset({"R10", "production-step-1"})
+
+
+class ReferenceRejected(RuntimeError):
+    """Raised when a pass violates a rule that invalidates the reference."""
+
+
 @dataclass
 class ReferenceBuild:
     reference: dict[str, Transcript]
@@ -275,6 +285,16 @@ def build(
             reference[segment_id] = b.transcript
         else:
             excluded[segment_id] = f"adjudication named unknown annotator {decision.chosen!r}"
+
+    blocking = [v for v in violations if v.rule in BLOCKING_RULES]
+    if blocking:
+        # Fail closed. Returning a reference alongside a list of rule breaches
+        # invites a caller to use the reference and log the breaches, which is
+        # how a benchmark ends up scored against a transcript nobody validated.
+        detail = "; ".join(f"{v.rule} {v.segment_id}: {v.detail}" for v in blocking[:5])
+        raise ReferenceRejected(
+            f"{len(blocking)} blocking policy violation(s); no reference built: {detail}"
+        )
 
     origins = tuple(
         {(x.kind, x.engine): x for x in

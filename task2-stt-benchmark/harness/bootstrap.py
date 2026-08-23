@@ -26,6 +26,14 @@ from typing import Callable, Sequence
 
 from .metrics import LOWER_IS_BETTER, SegmentScore, aggregate
 
+#: The tie-break order from `PREREGISTRATION.md` §4, as data. Cost and latency
+#: come after all three, and are applied in `_apply_tie_break`, not here.
+TIE_BREAK_METRICS = (
+    "cs_wer",
+    "latin_to_cyrillic_rate",
+    "hallucination_rate",
+)
+
 DEFAULT_RESAMPLES = 10_000
 DEFAULT_SEED = 20260823
 DEFAULT_CONFIDENCE = 0.95
@@ -257,22 +265,84 @@ def decide(
 
     winner = leader
     basis = f"best {primary}, separated from all others"
+    steps: list[str] = []
     if len(tied) > 1:
-        if cost_usd:
-            winner = min(tied, key=lambda n: (cost_usd.get(n, float("inf")), n))
-            basis = f"{primary} statistically indistinguishable across {tied}; cheapest chosen"
-        elif tie_break:
-            winner = tie_break(tied)
-            basis = f"{primary} indistinguishable across {tied}; explicit tie-break applied"
-        else:
-            basis = f"{primary} indistinguishable across {tied}; no tie-break supplied"
-            winner = None
+        winner, basis, steps = _apply_tie_break(
+            tied, eligible, cost_usd, tie_break, resamples, seed
+        )
     return {
         "winner": winner,
         "basis": basis,
+        "tie_break_steps": steps,
         "ranking": [(n, i.point) for n, i in ordered],
         "indistinguishable_from_leader": tied,
         "rejected": rejected,
         "primary": primary,
         "guardrail": {"metric": guardrail_metric, "max": guardrail_max},
     }
+
+
+def _apply_tie_break(
+    tied: list[str],
+    engines: dict[str, Sequence[SegmentScore]],
+    cost_usd: dict[str, float] | None,
+    explicit: Callable[[list[str]], str] | None,
+    resamples: int,
+    seed: int,
+) -> tuple[str | None, str, list[str]]:
+    """Walk the pre-declared tie-break order, one metric at a time.
+
+    Jumping straight from the primary metric to "cheapest wins" — which an
+    earlier version did — silently discarded the three quality metrics the
+    pre-registration promised to consult first, and cost is the *fourth* step,
+    not the first. The order is data here so it cannot drift from the frozen
+    document again.
+    """
+    steps: list[str] = []
+    remaining = list(tied)
+    for metric in TIE_BREAK_METRICS:
+        if len(remaining) <= 1:
+            break
+        ordered = rank(
+            {n: engines[n] for n in remaining}, metric, resamples=resamples, seed=seed
+        )
+        measured = [(n, i) for n, i in ordered if i.measured]
+        if not measured:
+            steps.append(f"{metric}: not measurable, skipped")
+            continue
+        leader = measured[0][0]
+        still_tied = [leader]
+        for name, _ in measured[1:]:
+            comparison = paired_bootstrap(
+                metric, engines[leader], engines[name], resamples=resamples, seed=seed
+            )
+            if comparison.indistinguishable:
+                still_tied.append(name)
+        if len(still_tied) < len(remaining):
+            steps.append(f"{metric}: separated {leader} from {len(remaining) - len(still_tied)} engine(s)")
+            remaining = still_tied
+        else:
+            steps.append(f"{metric}: all {len(remaining)} still indistinguishable")
+
+    if len(remaining) == 1:
+        return remaining[0], f"resolved by tie-break: {'; '.join(steps)}", steps
+
+    # Every quality metric in the declared order failed to separate them. Cost
+    # is step 4 of the frozen rule and is reached only here.
+    if cost_usd:
+        cheapest = min(remaining, key=lambda n: (cost_usd.get(n, float("inf")), n))
+        steps.append(f"cost: {cheapest} cheapest of {remaining}")
+        return (
+            cheapest,
+            "quality metrics could not separate these engines; chosen on measured "
+            "cost, which is not a quality judgement: " + "; ".join(steps),
+            steps,
+        )
+    if explicit:
+        return explicit(remaining), "explicit tie-break applied: " + "; ".join(steps), steps
+    return (
+        None,
+        f"no winner: {remaining} are indistinguishable on every declared metric "
+        "and no cost data was supplied",
+        steps,
+    )

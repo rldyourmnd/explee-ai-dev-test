@@ -104,6 +104,30 @@ def test_russian_inflection_on_a_latin_stem_is_still_the_same_term(ref, hyp, glo
     assert s.term_hits == s.term_ref_occurrences
 
 
+@pytest.mark.parametrize(
+    "ref,hyp,term_id",
+    [
+        ("подняли Kafka", "подняли Kafko", "kafka"),
+        ("смотрим Grafana", "смотрим Grafano", "grafana"),
+        ("живём в Azure", "живём в Azura", "azure"),
+        ("перенесли в ClickHouse", "перенесли в ClickHause", "clickhouse"),
+    ],
+)
+def test_a_mangled_product_name_is_never_folded_onto_the_correct_one(
+    ref, hyp, term_id, glossary
+):
+    """The stem fold must not rescue a misheard name.
+
+    An earlier normaliser dropped any final Latin vowel on tokens of five
+    characters or more, so `Kafko` and `Kafka` shared a stem and a mangled
+    product name scored as a correct one — under the metric whose whole job is
+    catching mangled product names.
+    """
+    s = score(ref, hyp, glossary)
+    assert term_id in s.missed_terms
+    assert s.term_hits == 0
+
+
 def test_normalisation_never_rewrites_one_word_into_another():
     """The scoring normaliser must not map `РАКа` onto `rag`."""
     assert normalize_term("РАКа") != "rag"

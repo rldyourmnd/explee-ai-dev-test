@@ -266,3 +266,35 @@ def test_annotation_pass_round_trips(tmp_path):
     assert reloaded[0].words[1].start == 0.3
     assert reloaded[0].notes == "clean audio"
     assert reloaded[0].transcript.has_speakers
+
+
+# --- fail closed --------------------------------------------------------------
+
+def test_build_refuses_to_return_a_reference_with_a_blocking_violation():
+    """Reported-and-ignored violations are how an unvalidated reference ships."""
+    from harness.metrics import Word
+    from harness.reference import ReferenceRejected
+
+    bad = Annotation("s0", "ann1", words=[Word(text="привет", speaker="speaker_0")])
+    good = ann("s0", "ann2", "привет", speaker="S1")
+    with pytest.raises(ReferenceRejected, match="R10"):
+        build([bad], [good])
+
+
+def test_build_refuses_a_draft_from_an_engine_under_test():
+    from harness.reference import DraftOrigin, ReferenceRejected
+
+    draft = DraftOrigin(kind="engine", engine="whisper", excluded_from_ranking=False)
+    with pytest.raises(ReferenceRejected, match="production-step-1"):
+        build([ann("s0", "a", "раз два", draft=draft)], [ann("s0", "b", "раз два")])
+
+
+def test_an_excluded_segment_is_not_a_blocking_violation():
+    """R9 exclusion is a defined outcome, so the build still succeeds."""
+    text = " ".join([UNINTELLIGIBLE] * 3 + ["слово"] * 7)
+    result = build(
+        [ann("s0", "a", text), ann("s1", "a", "мы подняли Kafka")],
+        [ann("s0", "b", text), ann("s1", "b", "мы подняли Kafka")],
+    )
+    assert "s0" in result.excluded
+    assert result.coverage() == 1

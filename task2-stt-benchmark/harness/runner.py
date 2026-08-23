@@ -212,21 +212,59 @@ def score_run(
     compares like with like; the dropped segments are reported separately.
     """
     engines = sorted({key[0] for key in hypotheses})
-    common = [
-        segment_id
-        for segment_id in sorted(references)
-        if all((engine, segment_id) in hypotheses for engine in engines)
-    ]
     return {
         engine: [
             score_segment(
                 segment_id, engine, references[segment_id],
                 hypotheses[(engine, segment_id)], glossary,
             )
-            for segment_id in common
+            for segment_id in sorted(references)
+            if (engine, segment_id) in hypotheses
         ]
         for engine in engines
     }
+
+
+#: An engine that failed more than this share of the corpus is not ranked. Its
+#: numbers would describe only the segments it found easy.
+MAX_FAILURE_RATE = 0.10
+
+
+def pair_for_bootstrap(
+    scores_a: Sequence[SegmentScore], scores_b: Sequence[SegmentScore]
+) -> tuple[list[SegmentScore], list[SegmentScore]]:
+    """Intersect two engines' segments for a paired comparison.
+
+    Pairwise, deliberately. An earlier version intersected across *all* engines
+    at once, so one engine failing 25 hard segments deleted those segments from
+    everybody — quietly making the whole benchmark easier and flattering every
+    engine that had handled them. Reliability belongs in its own column, not
+    hidden inside the accuracy numbers.
+    """
+    common = sorted({s.segment_id for s in scores_a} & {s.segment_id for s in scores_b})
+    by_a = {s.segment_id: s for s in scores_a}
+    by_b = {s.segment_id: s for s in scores_b}
+    return [by_a[i] for i in common], [by_b[i] for i in common]
+
+
+def eligibility(
+    scores: dict[str, list[SegmentScore]],
+    corpus_size: int,
+    max_failure_rate: float = MAX_FAILURE_RATE,
+) -> dict[str, dict[str, object]]:
+    """Per-engine corpus coverage, and whether it may be ranked at all."""
+    report: dict[str, dict[str, object]] = {}
+    for engine, engine_scores in sorted(scores.items()):
+        covered = len(engine_scores)
+        missing = max(0, corpus_size - covered)
+        rate = missing / corpus_size if corpus_size else 0.0
+        report[engine] = {
+            "segments_scored": covered,
+            "segments_missing": missing,
+            "failure_rate": rate,
+            "rankable": rate <= max_failure_rate,
+        }
+    return report
 
 
 RESULT_COLUMNS = [
