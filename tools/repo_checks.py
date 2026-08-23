@@ -209,20 +209,46 @@ def check_alerts_schema(problems: list[str], strict: bool) -> None:
 
 
 def check_snapshot(problems: list[str], strict: bool) -> None:
-    """The six-hour window, proven by an immutable snapshot rather than asserted."""
-    rel = "docs/SNAPSHOT-22-14Z.md"
-    path = os.path.join(ROOT, rel)
-    if not os.path.exists(path):
+    """The six-hour window, proven by an immutable snapshot rather than asserted.
+
+    Looks for the numbered series `snapshots/NN-*.json`, not a fixed filename.
+    An earlier version hard-coded `docs/SNAPSHOT-22-14Z.md`, which the snapshot
+    tool never writes — so the check would have reported the artifact missing
+    forever while it sat on disk. That is the same defect as the engine count
+    pointing at the pre-amendment directory: a check aimed at a path someone
+    later renamed is worse than no check, because it is believed.
+    """
+    import glob
+    metas = sorted(glob.glob(os.path.join(ROOT, "snapshots", "*.json")))
+    if not metas:
         (problems.append if strict else NOTES.append)(
-            f"missing {rel} — the six-hour window is the one unrecoverable deliverable")
+            "no snapshot in snapshots/ — the six-hour window is the one "
+            "unrecoverable deliverable")
         return
-    text = open(path, encoding="utf-8").read()
-    for token in ("sha256", "span", "max"):
-        if token.lower() not in text.lower():
+    latest = metas[-1]
+    rel = os.path.relpath(latest, ROOT)
+    try:
+        meta = json.load(open(latest, encoding="utf-8"))
+    except Exception as exc:
+        _fail(problems, f"{rel}: not valid JSON ({exc})")
+        return
+    flat = json.dumps(meta).lower()
+    for token in ("sha256", "span", "gap"):
+        if token not in flat:
             _fail(problems, f"{rel}: no '{token}' recorded")
-    m = re.search(r"span[^0-9]{0,40}(\d{4,6})", text, re.I)
-    if m and int(m.group(1)) < 21600:
-        _fail(problems, f"{rel}: span {m.group(1)}s is under the required 21600s")
+    span = None
+    for key in ("span_s", "span_seconds", "window_span_s", "elapsed_s"):
+        if isinstance(meta.get(key), (int, float)):
+            span = meta[key]
+            break
+    if span is None:
+        (problems.append if strict else NOTES.append)(
+            f"{rel}: no numeric span field found; cannot assert >= 21600 s")
+    elif span < 21600:
+        (problems.append if strict else NOTES.append)(
+            f"{rel}: span {int(span)}s is under the required 21600s")
+    else:
+        print(f"snapshot {rel}: span {int(span)}s >= 21600s")
 
 
 def check_engines(problems: list[str], strict: bool) -> None:
