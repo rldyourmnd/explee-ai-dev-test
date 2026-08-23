@@ -496,3 +496,39 @@ certificate `CN=stt.nddev.it.com`, no auth headers, no cookies.
 A placeholder is deliberate: it makes the published link stable before the report
 exists, and it states that the design was frozen and the corpus hashed in
 advance, so nothing on that page was chosen after seeing results.
+
+### 19:58Z — trace export pre-flighted, so 22:14Z is mechanical
+
+The export is not run yet: the session is still going, so exporting now would
+produce a partial trace. What is checkable in advance has been checked.
+
+| check | result |
+|---|---|
+| exporter lossless by default | `--max-result` defaults to `None`; will not be passed |
+| foreign-project-slug guard | present (`1ee633e`) |
+| session located without `--list` | slug derived from cwd; 6.77 MB, 3,610 records |
+| secret scan | **0 findings** |
+| foreign project slugs | **0** |
+| anchored `HostName` lines | **0** — the gate `AGENTS.md` now specifies |
+| distinct IPv4 literals | 6, every one accounted for below |
+
+The IPv4 literals, since rule 3 asks for them to be reviewed rather than merely
+counted:
+
+| occurrences | what it is |
+|---:|---|
+| 134 | `0.0.0.0` and `127.0.0.1` — bind addresses and loopback in commands |
+| 19 | `8.8.8.8` and `1.1.1.1` — public resolvers, queried to prove DNS propagation |
+| 1 | `1.2.3.4` — synthetic, from testing my own redaction filter |
+| **7** | **the droplet that serves the public dashboard** |
+
+**One judgement call for the human.** The droplet's address entered the
+transcript in an instruction to me and again in `dig` output before I fixed a
+redaction filter that was silently failing — macOS `sed` does not support `\b`,
+so the pattern matched nothing and printed the address it was meant to hide. It
+is the host serving `spend.nddev.it.com`, which the README names, so anyone can
+resolve it in one query; it is not third-party infrastructure. That is a
+different case from the orchestration trace, which carried nine addresses of
+unrelated clients. Rule 3 asks for the list to be reviewed, and only the
+`HostName` count to be zero, so this is presented for a decision rather than
+treated as a blocker.
