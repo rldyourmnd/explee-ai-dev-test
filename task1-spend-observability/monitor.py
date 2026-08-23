@@ -2278,8 +2278,12 @@ background:var(--surface);border-radius:0 3px 3px 0}
 .alert.critical{border-left-color:var(--alarm)}
 .alert.warning{border-left-color:var(--warn)}
 .alert .t{font-size:12.5px}
-.alert .e{color:var(--muted);font-size:11px;margin-top:var(--s1);
-word-break:break-word;font-family:var(--mono)}
+/* Evidence tokens are long and unbreakable (first_observed=2026-...Z is 39
+   characters, wider than a 390px card). overflow-wrap:anywhere is the standard
+   property; word-break is kept for older engines. 12px is the smallest step on
+   the type scale, and 11px was below it. */
+.alert .e{color:var(--muted);font-size:12px;margin-top:var(--s1);
+word-break:break-word;overflow-wrap:anywhere;font-family:var(--mono)}
 /* Was 11px and unlabelled, which is text nobody reads occupying space.
    Larger, higher contrast, and every figure says what it is. */
 .rowsub{color:var(--muted);font-size:12px;font-family:var(--mono);margin-top:var(--s1)}
