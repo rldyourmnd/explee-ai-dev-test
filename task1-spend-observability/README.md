@@ -48,6 +48,30 @@ Six hours of observation is reached at **2026-08-23T22:14Z**. If the stricter
 reading is wanted — the deliverable process itself having run six hours — that
 is 23:11Z.
 
+## Deployment state, and two things that look like defects but are not
+
+Read this before concluding something is broken.
+
+**The deployed build is deliberately behind this repository.** Several
+improvements — the projection uncertainty guard, episode-scoped firing state,
+the corrected anomaly wording, `--since` — are committed and tested here but not
+running on the host. That is a standing rule, not drift: **nothing about the
+running system changes while the observation window is open**, because the
+window cannot be recreated and every restart is a risk taken against evidence
+that only exists once. They are deployed after the six-hour snapshot closes the
+stated minimum.
+
+**`ALERT-AUDIT.md` reports a failing audit, and that is the correct result.** Two
+of its lines do not reconcile because they were emitted by the *running* build
+and would not be emitted by the code here. A green audit produced by code that
+is not deployed would be the actual defect — it would describe a system nobody
+is running. The audit describes reality; the gap between reality and this
+repository is stated rather than closed by pretending.
+
+Both resolve at the same moment, and the resolution is verifiable rather than
+asserted: after deployment the audit is re-run and either reconciles every line
+or exits non-zero.
+
 ## Files
 
 | File | Role |

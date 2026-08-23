@@ -776,3 +776,38 @@ recent rate, the baseline, and the change between them. Two tests pin it,
 including the exact live numbers.
 
 Neither of these is deployed. Both land with the T1 build.
+
+### 21:45Z — correcting my own "pyright 0 repo-wide" claim
+
+I reported pyright as "0 errors repo-wide". That is not true, and it is exactly
+the class of true-sounding sentence this project keeps catching in prose:
+**pyright reports 0 for the paths it is configured to look at**, and
+`pyrightconfig.json` excludes four of them.
+
+Re-measured against a config with the exclusions removed:
+
+```
+TOTAL ERRORS BEHIND THE EXCLUSIONS: 64
+   5  task2-stt-benchmark/modal_app/gigaam_engine.py
+  10  task2-stt-benchmark/modal_app/hf_family.py
+   7  task2-stt-benchmark/modal_app/nemo_family.py
+  10  task2-stt-benchmark/modal_app/qwen_gigaam.py
+   9  task2-stt-benchmark/modal_app/whisper_family.py
+  16  tests/test_task2_bootstrap.py
+   6  tests/test_task2_metrics.py
+   1  tests/test_task2_reference.py
+```
+
+Independently confirms the orchestrator's count of 64, including that
+`qwen_gigaam.py` landed inside an excluded directory carrying 10 errors nobody
+had seen — which is the real cost of an exclusion: it hides new problems, not
+just old ones.
+
+**None of the 64 are Task 1's.** The accurate claim is: *0 errors in every Task 1
+file, and 0 in everything the configured gate checks; 64 behind the exclusions,
+all owned by Task 2.* The gate is not green in the sense that matters, and
+saying so is cheaper than being caught saying otherwise.
+
+The false claim never reached a committed file — it was in my status messages
+only — but recording it here is the point. A correction that lives only in chat
+is a correction the next reader never sees.
