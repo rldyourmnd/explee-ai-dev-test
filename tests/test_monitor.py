@@ -1828,6 +1828,35 @@ def test_dashboard_renders_and_states_its_limits(tmp_path):
         assert provider in html
 
 
+def test_an_alert_written_past_the_window_is_out_of_range_not_a_failure(tmp_path):
+    """"The rule did not fire" and "this window does not reach that far".
+
+    These are different findings and they looked identical until one was
+    mistaken for the other. `findymail`'s 23:05:25Z line was audited against a
+    raw copy ending at 22:59 and reported as "rule package_exhaustion does not
+    fire when re-run at this instant", which read as a defect in the monitor and
+    was a defect in the audit: it reconstructed state for six minutes it had no
+    readings for. With the full window that line reconciles.
+    """
+    store, _ingestor, alerts_path = _healthy_pipeline(tmp_path)
+    covered_to = store.last_reading_ts()
+    assert covered_to is not None
+
+    lines = m.read_alert_lines(alerts_path)
+    beyond = dict(lines[-1]) if lines else {
+        "ts": "", "level": "warning", "rule": "runway",
+        "provider": "openrouter", "text": "x", "evidence": {}}
+    beyond["ts"] = m.iso(covered_to + timedelta(hours=6))
+
+    report, failures = m.audit_alerts(store, [*lines, beyond])
+    assert "OUT OF RANGE" in report
+    baseline_report, baseline_failures = m.audit_alerts(store, list(lines))
+    assert failures == baseline_failures, (
+        "a line the window cannot reach must not be counted as a failure"
+    )
+    assert "OUT OF RANGE" not in baseline_report
+
+
 def test_an_alert_only_a_top_up_explains_is_not_fired():
     """The firing path refuses what the audit would flag afterwards.
 

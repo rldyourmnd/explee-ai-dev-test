@@ -18,16 +18,30 @@ come either from `--poll` or from an existing `raw_samples.jsonl`; the deployed
 instance uses the latter, because the API should see one client and the log
 should have one writer.
 
-Sharing the code is not the same as producing the same alerts, and an earlier
-version of this paragraph claimed it was. It said the two paths "cannot drift
-apart", as a design guarantee. They have: the live incremental path has emitted
-at least two lines the replay path does not reproduce, `bounceban` at
-2026-08-23T18:44:34Z and `findymail` at 2026-08-23T23:05:25Z, both of which the
-audit flags with "does not fire when re-run at this instant". The mechanism is
-not yet identified. What the shared parser actually guarantees is that neither
-path can *interpret a record* differently; it says nothing about state carried
-between evaluations, which a replay rebuilds and a long-running process does
-not.
+Sharing the code is not the same as producing the same alerts, and this
+paragraph has now been wrong in both directions, so it states what was measured
+rather than what follows from the design.
+
+It first claimed the two paths "cannot drift apart", as a guarantee. Two lines
+appeared to disprove it, `bounceban` at 2026-08-23T18:44:34Z and `findymail` at
+2026-08-23T23:05:25Z, both flagged by the audit with "does not fire when re-run
+at this instant". Neither turned out to be divergence:
+
+- `findymail` was audited against a raw copy that ended at 22:59, six minutes
+  before the line it was judging, so the audit was reconstructing state for a
+  period it had no readings for. Given the full window the line reconciles. The
+  defect was in `--audit`, which now reports such lines as out of range instead
+  of as rule failures.
+- `bounceban` was written by a build whose projection rule predates the
+  uncertainty guard. Re-running today's rule against that instant is a
+  comparison between two builds, not between two paths.
+
+So no case of live-versus-replay divergence has been demonstrated. That is not
+the same as a guarantee, and the guarantee is not reinstated here: what the
+shared parser actually establishes is that neither path can *interpret a record*
+differently. It says nothing about state carried between evaluations, which a
+replay rebuilds from zero and a long-running process does not, and that gap has
+not been tested.
 
 Deriving from an append-only log rather than from memory buys three things: the
 dashboard shows history from T0 rather than from process start, any threshold
@@ -561,6 +575,16 @@ class Store:
     def catalog(self) -> dict[str, dict[str, Any]]:
         rows = self.conn().execute("SELECT * FROM catalog ORDER BY provider").fetchall()
         return {r["provider"]: dict(r) for r in rows}
+
+    def last_reading_ts(self) -> datetime | None:
+        """The newest instant this store has evidence for.
+
+        The audit needs it to tell "the rule did not fire" apart from "this
+        window does not reach that far", which are different findings that
+        looked identical until one of them was mistaken for the other.
+        """
+        row = self.conn().execute("SELECT MAX(ts) AS ts FROM readings").fetchone()
+        return parse_ts(row["ts"]) if row and row["ts"] else None
 
     # -- readings --------------------------------------------------------
     def add_readings(self, readings: Sequence[Reading]) -> None:
@@ -1973,8 +1997,9 @@ class Collector:
     exactly the record shape the ingestor already reads, so the replay path and
     the live path share every line of parsing, estimation and alerting rather
     than having two implementations of it. That rules out the two disagreeing
-    about what a record *means*. It does not rule out them disagreeing about
-    what to *alert*, and they have; see the module docstring.
+    about what a record *means*. It does not by itself rule out them disagreeing
+    about what to *alert*; see the module docstring for two cases that looked
+    like exactly that and were not.
 
     It is off by default and must stay off wherever the standalone sampler is
     running. The API should see one client, not two, and a second poller would
@@ -3099,11 +3124,24 @@ def audit_alerts(store: Store, lines: Sequence[dict[str, Any]]) -> tuple[str, in
     removed was caused by normal operations and is reported as unreconciled; a
     note recording that an event happened nearby is not proof of anything.
 
+    An alert written after the last raw record cannot be re-derived, and saying
+    so is not the same as saying the rule failed. Auditing `findymail`'s
+    2026-08-23T23:05:25Z line against a raw copy that ended at 22:59 produced
+    "rule package_exhaustion does not fire when re-run at this instant", which
+    read as a defect in the monitor and was a defect in this function: it was
+    reconstructing state for six minutes it had no readings for. With the full
+    window the same line reconciles. Lines beyond coverage are now reported as
+    out of range and excluded from the failure count.
+
     Returns the report and the number of lines that failed to reconcile.
     """
     catalog = store.catalog()
     out = [f"Reconciling {len(lines)} alert lines against the raw window", ""]
     failures = 0
+
+    # The last instant this audit has evidence for. Re-deriving past it is
+    # asking what the data says about a time it does not cover.
+    covered_to = store.last_reading_ts()
 
     for index, alert in enumerate(lines, 1):
         provider = alert.get("provider")
@@ -3113,6 +3151,13 @@ def audit_alerts(store: Store, lines: Sequence[dict[str, Any]]) -> tuple[str, in
         out.append(f"[{index}] {alert['ts']}  {alert['level']}  {rule_name}  {provider}")
         out.append(f"     {alert['text'][:160]}")
         problems: list[str] = []
+
+        if covered_to is not None and when > covered_to:
+            out.append(f"     OUT OF RANGE: written {(when - covered_to).total_seconds():.0f}s "
+                       f"after the last raw record ({iso(covered_to)}), so this window "
+                       f"cannot re-derive it. Not counted as a failure.")
+            out.append("")
+            continue
 
         rule = PROVIDER_RULE_BY_NAME.get(rule_name)
         meta = catalog.get(provider) if provider else None

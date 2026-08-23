@@ -120,6 +120,20 @@ survive its own burn estimate recomputed one MAD slower. What found it was the
 audit, running against the build that was actually deployed and reporting a
 failure rather than a green tick.
 
+**Two lines that looked like live-versus-replay divergence, and were not.**
+The audit flagged `bounceban` and `findymail` with "does not fire when re-run at
+this instant", which reads as the live path and the replay path disagreeing, and
+this README briefly said exactly that. Both have since been explained and
+neither is divergence. `findymail` was audited against a raw copy that ended six
+minutes before the line it was judging, so the audit was reconstructing state
+for a period it had no readings for; `--audit` now reports such lines as out of
+range rather than as rule failures, and with the full window that line
+reconciles. `bounceban` was written by a build predating the uncertainty guard,
+so re-running today's rule against it compares two builds rather than two paths.
+No case of divergence has been demonstrated. That is not a guarantee either:
+state carried between evaluations, which a replay rebuilds from zero, has not
+been tested.
+
 **The current audit reports one unreconciled line, and it is not that class.**
 The monitor keeps running, so `alerts.jsonl` keeps growing; it is 13 lines at the
 last regeneration, and the thirteenth is a `critical` runway on `openrouter`. It
