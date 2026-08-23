@@ -15,3 +15,18 @@ task1-spend-observability/data/
 
 # macOS Finder metadata
 .DS_Store
+
+# Task 2 corpus and full transcripts — licence-constrained, never published.
+# The corpus is CC BY-NC-ND: publishing segment audio or a full transcript
+# reproduces the work. What ships is metrics, short quoted error spans and the
+# recipe (episode, URL, SHA-256, cut points), so the corpus is reproducible from
+# the publisher's original rather than from our copy. Hashes of these files are
+# published; the files are not.
+task2-stt-benchmark/data/raw/
+task2-stt-benchmark/data/audio/
+task2-stt-benchmark/data/segments/
+task2-stt-benchmark/data/reference/
+*.mp3
+*.wav
+*.m4a
+*.flac
