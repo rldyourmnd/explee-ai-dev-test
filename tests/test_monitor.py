@@ -1828,6 +1828,92 @@ def test_dashboard_renders_and_states_its_limits(tmp_path):
         assert provider in html
 
 
+def test_an_alert_only_a_top_up_explains_is_not_fired():
+    """The firing path refuses what the audit would flag afterwards.
+
+    `docs/TASK.md` says balances get topped up from time to time and that this
+    is normal operations, not an incident. An alert that exists only because a
+    top-up happened is the requirement being missed, not a weaker alert.
+
+    The audit computed this from the beginning, and that was the defect rather
+    than the safeguard: an auditor that knows a line was caused by a top-up,
+    while the alerter that wrote it does not, has the knowledge one component
+    too late.
+
+    The stub rule here fires on the topped-up series and not on the series with
+    the top-up undone, which is exactly the shape `findymail` had at 23:05Z.
+    """
+    values = [8342 - i for i in range(30)] + [10306 - i for i in range(30)]
+    readings = _series(values, {"package": 12000.0, "refresh": "2026-09-01"})
+    now = readings[-1].ts
+    meta = {"name": "Hunter", "pay_model": "credits_package",
+            "unit": "credits", "note": ""}
+    state = m.state_from_readings("findymail", meta, readings, now)
+    assert [kind for _t, kind, _d in state.cuts] == ["top_up"], "setup: need a top-up"
+
+    fires_above = 9000.0
+
+    def stub(candidate_state, _now):
+        if candidate_state.value is not None and candidate_state.value > fires_above:
+            return m.Candidate(key="findymail:stub", level="warning", rule="stub",
+                               rule_class="data_derived", provider="findymail",
+                               text="stub fired", evidence={}, sustain_s=0.0,
+                               signature="00|stub")
+        return None
+
+    assert stub(state, now) is not None, "setup: the rule must fire on the real series"
+    attributed = m.caused_by_normal_operations(state, stub, now)
+    assert attributed is not None, "an alert only the top-up explains must be attributed"
+    _cut_ts, kind = attributed
+    assert kind == "top_up"
+
+
+def test_an_alert_that_survives_the_top_up_still_fires():
+    """The guard must not swallow genuine alerts.
+
+    A rule that fires with the top-up removed is describing something the
+    top-up did not cause, so it has to pass through untouched. Without this
+    the previous test is satisfied by a guard that suppresses everything.
+    """
+    values = [8342 - i for i in range(30)] + [10306 - i for i in range(30)]
+    readings = _series(values, {"package": 12000.0, "refresh": "2026-09-01"})
+    now = readings[-1].ts
+    meta = {"name": "Hunter", "pay_model": "credits_package",
+            "unit": "credits", "note": ""}
+    state = m.state_from_readings("findymail", meta, readings, now)
+
+    def always(_candidate_state, _now):
+        return m.Candidate(key="findymail:always", level="warning", rule="always",
+                           rule_class="data_derived", provider="findymail",
+                           text="always fires", evidence={}, sustain_s=0.0,
+                           signature="00|always")
+
+    assert m.caused_by_normal_operations(state, always, now) is None
+
+
+def test_evaluate_emits_nothing_a_normal_operation_explains(tmp_path):
+    """The invariant, stated against the real pipeline.
+
+    Every candidate `evaluate` returns must survive the removal of every
+    discontinuity in its own estimation window. This is the property the audit
+    checks after the fact; asserting it here is what stops the two from ever
+    disagreeing again.
+    """
+    store, _ingestor, _alerts = _healthy_pipeline(tmp_path)
+    now = T0 + timedelta(seconds=80 * 30)
+    states = m.build_state(store, now, store.catalog())
+    by_provider = {s.provider: s for s in states}
+    for candidate in m.evaluate(states, now):
+        rule = m.PROVIDER_RULE_BY_NAME.get(candidate.rule)
+        state = by_provider.get(candidate.provider or "")
+        if rule is None or state is None:
+            continue
+        assert m.caused_by_normal_operations(state, rule, now) is None, (
+            f"{candidate.rule} on {candidate.provider} was emitted although a "
+            "normal operation in its estimation window explains it"
+        )
+
+
 def test_every_css_variable_used_is_defined(tmp_path):
     """A `var(--x)` with no `--x:` anywhere is invalid at computed-value time.
 
