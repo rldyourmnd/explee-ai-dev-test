@@ -219,6 +219,36 @@ A `--max-result` flag truncated tool output while the generated header claimed
 nothing had been dropped. In all three the tool reported success while doing the
 opposite of its purpose.
 
+## Check that the instrument honoured the conditions you asked for
+
+A measurement is only evidence if the setup you requested is the setup that ran.
+
+On 2026-08-23 a 390 px responsive check appeared to show real overflow: the
+subtitle and a metadata line running off the right edge, cards missing their
+right border. It was the instrument. Headless Chrome on macOS clamps the window
+to a 500 px minimum, so `--window-size=390` **laid the page out at 500 and then
+cropped the PNG to 390**. The screenshot was a crop, not an overflow, and nothing
+in the image said which. It only became obvious when the probe reported
+`vw=500` for a request of 390.
+
+The fix was to stop trusting the window size and give the page a container of the
+exact width — load it in a 390 px iframe and measure that frame's own
+`documentElement`. Measured properly: `scrollWidth == clientWidth == 390`,
+overflow 0.
+
+**So: report the conditions the instrument actually applied, next to the result.**
+A screenshot at a width the browser refused to honour looks exactly like a layout
+bug. Same for a viewport, a timeout, a sample rate, a model version, a container
+size — if you asked for X, print what you got before believing the output.
+
+This is the fifth member of one family in this run, and the family is the point:
+`--max-result` truncated while the header said nothing was dropped; a `\b`
+redaction filter on macOS `sed` matched nothing and printed what it was hiding;
+an em-dash sweep rewrote a tuple and clobbered a variable; an unpinned `ruff`
+checked a different ruleset than CI; and now a viewport that was never 390.
+**In each case the tool reported success while doing something other than what
+was asked.**
+
 ## Committing in a shared worktree
 
 **Use `git commit -- <paths>`. Never `git add` then `git commit`.**
