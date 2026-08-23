@@ -1,8 +1,24 @@
 # Explee — AI Dev Test Task
 
-Three deliverables, one repository, one module per task. **Every task ships a
-verbatim agent trace**, exported by `tools/export_trace.py` from a real session —
-never hand-written, never truncated.
+**The collector went live before any dashboard code existed.** The API has no
+history endpoint, so an observation window cannot be reconstructed afterwards;
+everything downstream replays an append-only raw log, which is why a clean
+re-measurement was possible hours later without losing a single record.
+
+Three deliverables, one repository, one module per task. Traces are exported by
+`tools/export_trace.py` from real sessions — never hand-written, never truncated.
+**Task 3's trace is shipped; Task 1's and Task 2's are not yet exported**, because
+those sessions are still running and an early export would stop the trace before
+the work does.
+
+**Start here if you are grading this:**
+[`task1-spend-observability/ALERT-AUDIT.md`](task1-spend-observability/ALERT-AUDIT.md)
+replays the window, compares every evidence field against the raw records, runs
+top-up counterfactuals, proves side-effect freedom by hashing the log before and
+after — and **publishes a failing result**, 2 of 13 lines unreconciled, because
+that is what the deployed build actually produces. It is the clearest single
+piece of evidence in the submission that these numbers were checked rather than
+asserted.
 
 An earlier Task 3 trace was quarantined for a confidentiality leak and replaced
 by a genuine fresh session rather than reconstructed or edited; the incident is
@@ -12,7 +28,7 @@ because a recorded leak is data and a concealed one is not.
 | Task | Deliverable | Status |
 |---|---|---|
 | [1 — Spend observability](task1-spend-observability/) | `monitor.py`, `alerts.jsonl`, public dashboard | collector gap-free since T0, max gap 29.670 s; dashboard live at [spend.nddev.it.com](https://spend.nddev.it.com/) — HTTP 200, valid certificate, no login, verified externally |
-| [2 — STT comparison](task2-stt-benchmark/) | published comparison report | **published** at [stt.nddev.it.com](https://stt.nddev.it.com/) — 5 engines plus 2 tuned tracks over 99 hashed segments (2952.821 s) against a publisher human transcript; design frozen before any output was read; recommends Whisper large-v3 with a glossary prompt |
+| [2 — STT comparison](task2-stt-benchmark/) | published comparison report | **published** at [stt.nddev.it.com](https://stt.nddev.it.com/) — 5 engines plus 2 tuned tracks over 99 hashed segments (2952.821 s) against a publisher human transcript; design frozen before any output was read; recommends **Whisper large-v3-turbo with a glossary prompt** (large-v3 was retracted — it collapses on 19 of 99 segments) |
 | [3 — Harness artifact](task3-harness-artifact/) | one harness file + 2–3 lines | artifact, its 2–3 lines and its trace all delivered |
 
 Live status, with the measurement behind every claim, is in
