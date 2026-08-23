@@ -1,13 +1,13 @@
-# Task 1 — Spend Observability
+# Task 1, Spend Observability
 
 **The deliverable is one file: `monitor.py`.** Download it, run
-`python3 monitor.py --poll`, and you have the whole system — it collects from
+`python3 monitor.py --poll`, and you have the whole system. It collects from
 the API, derives state, alerts, and serves the dashboard, with no second file,
 no server and no dependencies beyond a Python runtime.
 
 `raw_sampler.py` is not the other half of the deliverable. It is the twenty-line
 bootstrap that went live at T0, before any dashboard code existed, because the
-task needs six hours of observation and the API has no history endpoint — so the
+task needs six hours of observation and the API has no history endpoint, so the
 window had to start being captured before there was anything to capture it with.
 It is included as the record of what actually ran, not as something you need.
 
@@ -17,45 +17,45 @@ It is included as the record of what actually ran, not as something you need.
 > window, so it was not deployed.
 >
 > The difference is formatting only, checked rather than asserted: `diff` shows
-> exactly one hunk — `import asyncio, json, os, sys, time` split into five lines
-> — the two files import the same eight names, and the parse tree is identical
-> once the import block is excluded. The running copy is the one that produced
+> exactly one hunk, `import asyncio, json, os, sys, time` split into five lines
+> Both files import the same eight names, and the parse tree is identical once
+> the import block is excluded. The running copy is the one that produced
 > every number in this directory. This is noted because a reader comparing the
 > two would otherwise find an undocumented discrepancy, which is worse than a
 > documented one.
 
-Live at **https://spend.nddev.it.com/** — no login, HTTPS, `/healthz`,
+Live at **https://spend.nddev.it.com/**, no login, HTTPS, `/healthz`,
 `/api/state`, `/alerts.jsonl`.
 
-## "Run your monitor for at least 6 hours" — which six hours
+## "Run your monitor for at least 6 hours", which six hours
 
 Two clocks exist here and they start at different times, so both are stated
 rather than letting a reader pick the flattering one:
 
 | | |
 |---|---|
-| **Observation window** — what the monitor's picture covers | from **T0 = 2026-08-23T16:13:26.775Z** |
+| **Observation window**, what the monitor's picture covers | from **T0 = 2026-08-23T16:13:26.775Z** |
 | `monitor.py` process on the host | started 2026-08-23T17:10:59Z |
 
 The window is the one that matters, and it is the reason the replay design
 exists. `monitor.py` derives from an append-only log rather than from memory, so
-the dashboard, every metric and every alert cover the whole window from T0 —
+the dashboard, every metric and every alert cover the whole window from T0 ,
 not from whenever the process last started. `/healthz` and `/api/state` report
 `first_ts` as T0 for exactly that reason, and restarting the process does not
 shorten the picture.
 
-Six hours of observation is reached at **2026-08-23T22:14Z**. If the stricter
-reading is wanted — the deliverable process itself having run six hours — that
-is 23:11Z.
+Six hours of observation is reached at **2026-08-23T22:14Z**. Under the stricter
+reading, in which the deliverable process itself must have run six hours, it is
+23:11Z.
 
 ## Deployment state, and two things that look like defects but are not
 
 Read this before concluding something is broken.
 
 **The deployed build is deliberately behind this repository.** Several
-improvements — the projection uncertainty guard, episode-scoped firing state,
-the corrected anomaly wording, `--since` — are committed and tested here but not
-running on the host. That is a standing rule, not drift: **nothing about the
+improvements are committed and tested here but not running on the host: the
+projection uncertainty guard, episode-scoped firing state, the corrected anomaly
+wording, `--since`, and the shared warm-paper palette. That is a standing rule, not drift: **nothing about the
 running system changes while the observation window is open**, because the
 window cannot be recreated and every restart is a risk taken against evidence
 that only exists once. They are deployed after the six-hour snapshot closes the
@@ -64,7 +64,7 @@ stated minimum.
 **`ALERT-AUDIT.md` reports a failing audit, and that is the correct result.** Two
 of its lines do not reconcile because they were emitted by the *running* build
 and would not be emitted by the code here. A green audit produced by code that
-is not deployed would be the actual defect — it would describe a system nobody
+is not deployed would be the actual defect, it would describe a system nobody
 is running. The audit describes reality; the gap between reality and this
 repository is stated rather than closed by pretending.
 
@@ -85,7 +85,7 @@ or exits non-zero.
 ## Two ways in, one implementation
 
 `monitor.py` runs in either of two modes, and they share every line of parsing,
-estimation and alerting — the difference is only where the raw records come
+estimation and alerting, the difference is only where the raw records come
 from:
 
 | mode | records come from | used by |
@@ -94,7 +94,7 @@ from:
 | default | an existing `raw_samples.jsonl` | the deployed instance |
 
 Collection only ever *appends* raw records; everything downstream reads them
-back through the same path. That is deliberate — two parsers would drift, and
+back through the same path. That is deliberate, two parsers would drift, and
 the replay path is the one every test exercises.
 
 **The deployed instance does not use `--poll`.** It derives from the log the
@@ -125,11 +125,11 @@ Stated because an unqualified claim would be unprovable: `raw_sampler.py` stores
 `r.text[:8000]`, so a body longer than 8,000 characters would be silently
 clipped, and it records no original length or hash that would let you detect
 that after the fact. `monitor.py --poll` records `body_chars`, the
-pre-truncation length, so on that path a clip is detectable — new code can fix
+pre-truncation length, so on that path a clip is detectable, new code can fix
 the gap without restarting a capture that cannot be restarted.
 
 Measured over the captured window: **0 records at exactly 8,000 characters**,
-largest stored body **6,422** — the HTML gateway page a `504` returns — leaving
+largest stored body **6,422**, the HTML gateway page a `504` returns, leaving
 1,578 characters of headroom. Nothing in the window was clipped, so the log is
 verbatim in fact as well as in intent. Adding a length or hash field would mean
 restarting the sampler, which would end the observation window, so it is not
@@ -147,7 +147,7 @@ Four pay models, never aggregated together:
 | `postpaid` | vastai | credit that may legitimately go negative |
 
 Provider IDs are opaque keys: `brightdata` reports as "Oxylabs", `meta_ads` as
-"Google Ads", `openrouter` as "Groq". Nothing is inferred from an ID — including
+"Google Ads", `openrouter` as "Groq". Nothing is inferred from an ID, including
 which schema adapter to use, which is chosen by **the shape that came back**.
 
 A group is summed **only when its unit is fungible across vendors**, which for
@@ -159,8 +159,8 @@ credits are TTS characters, `resend` credits are emails, `scrapfly` credits are
 API calls. Adding 850,199 of one to 40,076 of another produced a headline
 number that was not a quantity of anything.
 
-Non-fungible groups therefore publish no total at all — `value` and `burn` are
-`None`, not `0`, so a later caller cannot quietly add them — and report instead
+Non-fungible groups therefore publish no total at all, `value` and `burn` are
+`None`, not `0`, so a later caller cannot quietly add them, and report instead
 what *is* comparable: how many packages exist and which one exhausts first.
 
 ## What the captured window actually shows
@@ -212,13 +212,13 @@ one self-healing. The 66-cycle figures above are left as first measured, since
 they are what the design was drawn from.
 
 So availability is evaluated **per provider**. What stops 504 singles from
-becoming spam is the length of the staleness window, not a pool-wide grouping —
+becoming spam is the length of the staleness window, not a pool-wide grouping ,
 and grouping pool-wide would have hidden every one of those 15 outages.
 
 ### Burn must be robust, and robust is not enough
 
 `findymail` took a +1994 credit top-up inside the window. A first/last
-difference reports it **burning −3623 credits/h** — that is, gaining credits.
+difference reports it **burning −3623 credits/h**, that is, gaining credits.
 Theil–Sen reports −55 credits/h, the rate it was actually consuming at.
 
 A median of *adjacent* differences is no better: `anthropic` is flat between
@@ -253,7 +253,7 @@ not money remaining. If `V(t)` is spend over `[t−24h, t]`, then
 dV/dt = r(t) − r(t−24h)
 ```
 
-— zero while spending steadily, and negative whenever the window rolls off
+, zero while spending steadily, and negative whenever the window rolls off
 faster than new cost lands. Fitting a slope to it and calling the result "burn"
 showed `anthropic` at **32.81 USD/h** against an actual 81.70 USD per 24 h, and
 `meta_ads` at **−11.39 USD/h**, which invites the conclusion that a paid-ads
@@ -261,7 +261,7 @@ account is earning money.
 
 The rate shown is `V / window`, with the window read from the payload rather
 than assumed: `anthropic` 3.40 USD/h, `meta_ads` 14.19 USD/h. The derivative is
-kept, but as what it actually is — an acceleration signal for the anomaly rule,
+kept, but as what it actually is, an acceleration signal for the anomaly rule,
 displayed as `trend`, never as spend. These two providers have no runway,
 because there is no balance to run out.
 
@@ -269,7 +269,7 @@ because there is no balance to run out.
 
 Two classes, labelled honestly on every line and on the dashboard.
 
-**`operational_policy`** — choices nobody specified. No SLA, no balance floor
+**`operational_policy`**, choices nobody specified. No SLA, no balance floor
 and no runway lead time were ever supplied. Where a measurement can *bound* a
 choice, the bound is quoted next to it in `monitor.py`.
 
@@ -286,30 +286,30 @@ choice, the bound is quoted next to it in `monitor.py`.
 
 A plain hourly cooldown was tried first and the live log showed why it fails.
 The second round of firing restated `elevenlabs` 44.0 → 42.7 h, `scrapfly`
-134.9 → 130.0 h and `openrouter` 55.6 → 52.1 h — drift nobody can act on — while
+134.9 → 130.0 h and `openrouter` 55.6 → 52.1 h, drift nobody can act on, while
 in the same round `resend` went **182.0 → 44.9 h**, a fourfold deterioration,
 sitting in a block of lines that looked identical. Burying the one line that
 mattered among three that did not is how an alert channel gets ignored.
 
 A condition now writes a line when it starts and again only when it crosses a
-**materiality band** — roughly doubling steps of time-to-impact
+**materiality band**, roughly doubling steps of time-to-impact
 (2/6/12/24/48/72/168 h), of outage duration, or of anomaly deviation. Bands
 carry a direction, so a condition that *eases* updates its band silently rather
 than announcing its own recovery; sliding back down speaks again.
 
 Over the same window this turns 10 lines into 9, but the content is what
 changed: every line after the first is now a genuine deterioration, and the
-`resend` story reads as one — 182 h → 157 h → 71.8 h → 47.8 h.
+`resend` story reads as one, 182 h → 157 h → 71.8 h → 47.8 h.
 
 `alerts.jsonl` is the log of changes. The dashboard table is the live state.
 
-**`data_derived`** — computed from the window. Burn anomaly fires at 6 MAD of
+**`data_derived`**, computed from the window. Burn anomaly fires at 6 MAD of
 that provider's own pairwise-slope distribution, floored at 10% of the baseline
 because MAD is exactly zero for the steadiest providers.
 
 This one caught a real event: `resend` accelerated from ~240 to ~700 credits/h
-at 16:52Z, a 19.1 MAD deviation. No fixed threshold would have caught it — its
-runway was still 170 h — and `elevenlabs`, burning 80× more in absolute terms,
+at 16:52Z, a 19.1 MAD deviation. No fixed threshold would have caught it, its
+runway was still 170 h, and `elevenlabs`, burning 80× more in absolute terms,
 correctly stayed silent because it was steady.
 
 ### Not alerts

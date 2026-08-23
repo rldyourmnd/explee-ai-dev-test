@@ -2,8 +2,8 @@
 
 Every line in `alerts.jsonl` re-derived from the raw window that produced it.
 The rule is re-run at the instant the line was written and **every evidence field
-it produced is compared**; fields the alerter contributes — sustain, materiality
-bands — are checked against the alerter's own invariants.
+it produced is compared**; fields the alerter contributes, sustain, materiality
+bands, are checked against the alerter's own invariants.
 
 Where a top-up, package reset or reverted blip sits anywhere in the estimation
 window, the incident is recomputed **with that event undone**. An alert that
@@ -49,7 +49,7 @@ It exits non-zero if any line fails to reconcile.
 of thirteen do not reconcile.** Both were emitted by the running build, and
 neither would be emitted by the code now in the repository.
 
-`findymail` at 17:00Z and `bounceban` at 18:44Z both fail the uncertainty guard —
+`findymail` at 17:00Z and `bounceban` at 18:44Z both fail the uncertainty guard ,
 a projection may only fire if it survives its own estimate's uncertainty, that
 is, still holds when the burn is recomputed one MAD slower. `bounceban` also
 fails the counterfactual independently: remove either the reverted blip at

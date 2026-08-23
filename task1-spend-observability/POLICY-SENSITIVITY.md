@@ -4,7 +4,7 @@ Every threshold in `POLICY` is a choice nobody specified. Left as bare
 constants they are magic numbers; measured against the window they become a
 defended choice with a stated cost.
 
-This is a snapshot of a window that is still growing — the provenance row below
+This is a snapshot of a window that is still growing. The provenance row below
 says exactly which data and which commit produced these numbers, and the table
 is regenerated against the full window once collection closes.
 
@@ -77,13 +77,13 @@ Ground truth, computed from the raw log without reference to any threshold: **16
 | 1800 s                           |    11 |         7 |
 | 3600 s                           |     8 |         5 |
 
-## Why 15 minutes — and the alert that has since vindicated it
+## Why 15 minutes, and the alert that has since vindicated it
 
 > **Update, 21:14Z.** The tables above were computed over a window in which no
 > outage exceeded 10.5 minutes, and the honest summary at the time was that the
 > shipped tolerance fired *nothing*. Collection continued past the six-hour
-> minimum, and at 21:14Z `zerobounce` went dark for **15.6 minutes — 31
-> consecutive failed polls, HTTP 500** — and produced the first `unavailable`
+> minimum, and at 21:14Z `zerobounce` went dark for **15.6 minutes, 31
+> consecutive failed polls, HTTP 500**, and produced the first `unavailable`
 > line of the run.
 >
 > That is the threshold behaving exactly as designed: silent through 16
@@ -91,7 +91,7 @@ Ground truth, computed from the raw log without reference to any threshold: **16
 > than anything previously measured. A threshold calibrated on one afternoon and
 > never tested by a real event would have been a guess; this one now has a
 > positive case as well as sixteen negative ones. It is also the clearest single
-> argument for the longer window — six hours would have shipped the guess.
+> argument for the longer window: six hours would have shipped the guess.
 >
 > These tables are regenerated against the full window before submission.
 
@@ -106,8 +106,8 @@ channel becomes noise, and noise is why the one line that matters gets missed.
 
 The shipped setting sits above the longest outage ever observed, so a line means
 "darker than anything we have measured". The cost is explicit: a ten-minute
-outage produces no line. It is not invisible — freshness turns amber at 300 s
-and red beyond, and `/healthz` reports the provider stale — but nobody is *told*.
+outage produces no line. It is not invisible. Freshness turns amber at 300 s and red beyond, and
+`/healthz` reports the provider stale. But nobody is *told*.
 
 If the employer's answer is "tell me about any five-minute gap", that is one
 line in `POLICY`, and the first table states what it will cost.
