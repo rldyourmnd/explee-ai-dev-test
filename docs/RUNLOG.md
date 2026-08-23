@@ -360,3 +360,18 @@ evaluation and shared — replay drops ~20% and the test suite with it.
 
 Confirmed a pure refactor by replaying the same window before and after and
 diffing: byte-identical `alerts.jsonl`.
+
+### 18:26Z — concurrency check against the live deployment
+
+The dashboard is served by a threaded HTTP server while the ingest thread
+writes to the same SQLite file, so the read/write overlap was exercised rather
+than assumed:
+
+```
+40 concurrent requests across / /healthz /api/state  -> 40x 200, no errors
+container: running, restarts=0
+collector: active
+```
+
+No non-startup lines in the container log. Per-thread connections plus WAL and a
+30 s busy timeout hold up; the writer never blocks a reader.
