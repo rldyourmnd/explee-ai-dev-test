@@ -142,6 +142,18 @@ class Policy:
     # bounds pathological oscillation across a bucket edge.
     refire_min_gap_s: float = 600.0
 
+    # How long a resolved condition is remembered. A condition that oscillates
+    # around its own threshold clears and returns repeatedly; forgetting the
+    # band it last announced would make every return look like a new incident.
+    # MEASURED: `bounceban` sits just barely inside package exhaustion -- 180 h
+    # of runway against 196 h to refresh -- so its projection flickers across
+    # the line, and it produced two lines an hour apart whose runway had
+    # *improved* from 180.4 h to 187.6 h. Nothing had happened worth a second
+    # line.
+    #
+    # After this long, a recurrence is a genuinely new incident and says so.
+    incident_forget_s: float = 6 * 3600.0
+
     # A credits package resets on its refresh date. Projecting a package to
     # exhaust before then is only worth saying if the shortfall is material.
     package_shortfall_fraction: float = 0.02
@@ -1559,23 +1571,35 @@ class Alerter:
             if last_fired is not None:
                 was = signature_severity(fired_signature)
                 now_severity = signature_severity(candidate.signature)
-                if now_severity < was:
-                    # Recovering. Not worth a line - nobody acts on an anomaly
-                    # easing from 20 to 14 MAD - but the stored band is lowered
-                    # so that sliding back down speaks again.
-                    self.store.set_alert_state(key, since, last_fired, candidate.signature)
-                    continue
-                if now_severity == was:
-                    # Same band as the line already written. Restating it would
-                    # tell a human nothing they could act on differently, and
-                    # the dashboard shows the condition as active regardless.
-                    self.store.set_alert_state(key, since, last_fired, fired_signature)
-                    continue
-                if (now - parse_ts(last_fired)).total_seconds() < POLICY.refire_min_gap_s:
-                    # Worse, but too soon: bounds a value oscillating across a
-                    # band edge.
-                    self.store.set_alert_state(key, since, last_fired, fired_signature)
-                    continue
+                # A condition that cleared and came back. If that happened long
+                # enough after the last line, it is a new incident; if it
+                # happened minutes later it is the same condition flickering
+                # across its own threshold, and the band comparison below
+                # decides on the merits rather than on the flicker.
+                recurred = since > parse_ts(last_fired)
+                aged_out = (now - parse_ts(last_fired)).total_seconds() >= \
+                    POLICY.incident_forget_s
+                if not (recurred and aged_out):
+                    if now_severity < was:
+                        # Recovering. Not worth a line - nobody acts on an
+                        # anomaly easing from 20 to 14 MAD - but the stored band
+                        # is lowered so that sliding back down speaks again.
+                        self.store.set_alert_state(key, since, last_fired,
+                                                   candidate.signature)
+                        continue
+                    if now_severity == was:
+                        # Same band as the line already written. Restating it
+                        # would tell a human nothing they could act on
+                        # differently, and the dashboard shows it as active.
+                        self.store.set_alert_state(key, since, last_fired,
+                                                   fired_signature)
+                        continue
+                    if (now - parse_ts(last_fired)).total_seconds() < POLICY.refire_min_gap_s:
+                        # Worse, but too soon: bounds a value oscillating across
+                        # a band edge.
+                        self.store.set_alert_state(key, since, last_fired,
+                                                   fired_signature)
+                        continue
 
             payload = {
                 "ts": iso(now),
@@ -1597,11 +1621,21 @@ class Alerter:
                 fired.append(payload)
             self.store.set_alert_state(key, since, iso(now), candidate.signature)
 
-        # Conditions that stopped holding: clear the sustain clock but keep
-        # last_fired so the cooldown still applies if it comes straight back.
-        for row in self.store.conn().execute("SELECT key, last_fired FROM alert_state").fetchall():
+        # Conditions that stopped holding: clear the sustain clock, but keep
+        # both last_fired and the band that was last announced.
+        #
+        # Wiping the band here was a spam vector. A condition sitting close to
+        # its own threshold clears and returns every few minutes, and with no
+        # memory of what had already been said, each return looked like a fresh
+        # incident -- `bounceban` produced two lines an hour apart whose runway
+        # had *improved*. Remembering the band means a return is judged on
+        # whether anything got worse. `incident_forget_s` is what eventually
+        # lets a genuine recurrence speak again.
+        for row in self.store.conn().execute(
+                "SELECT key, last_fired, signature FROM alert_state").fetchall():
             if row["key"] not in active:
-                self.store.set_alert_state(row["key"], None, row["last_fired"], None)
+                self.store.set_alert_state(row["key"], None, row["last_fired"],
+                                           row["signature"])
 
         return fired
 

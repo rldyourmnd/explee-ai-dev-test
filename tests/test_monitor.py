@@ -819,6 +819,52 @@ def _runway_candidate(runway_h, key="runway:openrouter"):
     )
 
 
+def test_a_condition_flickering_across_its_threshold_speaks_once(tmp_path):
+    """The `bounceban` case: two lines an hour apart, runway *improved* between.
+
+    A projection sitting close to its own threshold clears and returns every few
+    minutes. Wiping the announced band on clear made every return look like a
+    fresh incident, so the log carried a second line whose runway had gone from
+    180.4 h to 187.6 h — nothing a human would act on.
+    """
+    store = m.Store(str(tmp_path / "monitor.sqlite"))
+    alerts = tmp_path / "alerts.jsonl"
+    alerter = m.Alerter(store, str(alerts))
+
+    for minute in range(0, 90, 5):
+        when = T0 + timedelta(minutes=minute)
+        # Present for two ticks, absent for one, over and over.
+        if (minute // 5) % 3 == 2:
+            alerter.process([], when)
+        else:
+            runway = 180.4 if minute < 45 else 187.6      # it gets *better*
+            alerter.process([_runway_candidate(runway)], when)
+
+    lines = _alert_lines(alerts)
+    assert len(lines) == 1, \
+        f"flicker across a threshold produced {len(lines)} lines: " \
+        f"{[x['evidence']['runway_h'] for x in lines]}"
+
+
+def test_a_recurrence_long_after_the_last_line_is_a_new_incident(tmp_path):
+    """Remembering the band must not silence a genuine recurrence forever."""
+    store = m.Store(str(tmp_path / "monitor.sqlite"))
+    alerts = tmp_path / "alerts.jsonl"
+    alerter = m.Alerter(store, str(alerts))
+
+    alerter.process([_runway_candidate(50.0)], T0)
+    alerter.process([_runway_candidate(50.0)], T0 + timedelta(minutes=1))
+    assert len(_alert_lines(alerts)) == 1
+
+    alerter.process([], T0 + timedelta(minutes=5))                       # resolved
+    later = T0 + timedelta(seconds=m.POLICY.incident_forget_s + 600)
+    alerter.process([_runway_candidate(50.0)], later)                    # returns
+    alerter.process([_runway_candidate(50.0)], later + timedelta(minutes=1))
+
+    lines = _alert_lines(alerts)
+    assert len(lines) == 2, "a recurrence past the forget window is a new incident"
+
+
 def test_a_recovering_condition_is_not_announced(tmp_path):
     """An anomaly easing from 20 MAD to 14 is not something anyone acts on."""
     store = m.Store(str(tmp_path / "monitor.sqlite"))
