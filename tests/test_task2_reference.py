@@ -32,6 +32,17 @@ from harness.reference import (  # noqa: E402
 )
 
 
+def measured(value: object) -> float:
+    """Assert a metric was measured, and narrow it for the type checker.
+
+    `aggregate()` returns `float | None` because an unmeasured metric must never
+    be reported as 0.0. A test comparing one has to say it expects a
+    measurement, which is what this does.
+    """
+    assert value is not None, "expected a measured value, got None"
+    return float(value)  # type: ignore[arg-type]
+
+
 @pytest.fixture(scope="module")
 def glossary():
     return glossary_module.load()
@@ -124,7 +135,7 @@ def test_agreement_is_pooled_over_counts_not_averaged():
     short_pair = (ann("s1", "a", "раз два"), ann("s1", "b", "три четыре"))
     pooled = corpus_agreement([long_pair, short_pair])
     assert pooled == pytest.approx(2 / 92)
-    assert pooled < 0.5  # the naive mean of 0.0 and 1.0
+    assert measured(pooled) < 0.5  # the naive mean of 0.0 and 1.0
 
 
 def test_agreement_across_different_segments_is_refused():

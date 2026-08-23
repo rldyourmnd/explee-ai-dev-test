@@ -21,11 +21,44 @@ from harness.bootstrap import (  # noqa: E402
     rank,
 )
 from harness.metrics import SegmentScore  # noqa: E402
+from typing import Sequence  # noqa: E402
 
 RESAMPLES = 400  # enough to exercise the code path; the run uses 10 000
 
+def measured(value: object) -> float:
+    """Assert a metric was measured, and narrow it for the type checker.
 
-def segments(engine, error_counts, ref_words=20):
+    `aggregate()` and `Interval` return `float | None` because an unmeasured
+    metric must never be reported as 0.0. Tests that compare those values have
+    to say out loud that they expect a measurement, which is what this does.
+    """
+    assert value is not None, "expected a measured value, got None"
+    return float(value)  # type: ignore[arg-type]
+
+
+def text(outcome: dict, key: str) -> str:
+    """Read a string field out of decide()'s dict[str, object] result."""
+    value = outcome[key]
+    assert isinstance(value, str), f"{key} should be a string, got {type(value)}"
+    return value
+
+
+def names(outcome: dict, key: str) -> list[str]:
+    """Read a list-of-names field out of decide()'s result."""
+    value = outcome[key]
+    assert isinstance(value, (list, tuple)), f"{key} should be a sequence"
+    return [str(v) for v in value]
+
+
+def rejected_names(outcome: dict) -> list[str]:
+    """Names of rejected engines. `rejected` maps name to reason, not a list."""
+    value = outcome["rejected"]
+    assert isinstance(value, dict), f"rejected should be a mapping, got {type(value)}"
+    return [str(k) for k in value]
+
+
+
+def segments(engine, error_counts, ref_words=20) -> list[SegmentScore]:
     return [
         SegmentScore(
             segment_id=f"s{i}",
@@ -44,7 +77,7 @@ def test_a_large_consistent_difference_is_detected():
     comparison = paired_bootstrap("wer", good, bad, resamples=RESAMPLES)
     assert comparison.better == "good"
     assert not comparison.indistinguishable
-    assert comparison.difference.low > 0  # bad has the higher WER
+    assert measured(comparison.difference.low) > 0  # bad has the higher WER
 
 
 def test_a_tiny_difference_is_reported_as_no_winner():
@@ -68,7 +101,7 @@ def test_interval_is_seeded_and_reproducible():
     first = bootstrap_interval("wer", scores, resamples=RESAMPLES, seed=7)
     second = bootstrap_interval("wer", scores, resamples=RESAMPLES, seed=7)
     assert (first.low, first.point, first.high) == (second.low, second.point, second.high)
-    assert first.low <= first.point <= first.high
+    assert measured(first.low) <= measured(first.point) <= measured(first.high)
 
 
 def test_unmeasurable_metric_yields_no_interval_and_no_winner():
@@ -81,7 +114,7 @@ def test_unmeasurable_metric_yields_no_interval_and_no_winner():
 
 
 def test_rank_orders_lower_wer_first():
-    engines = {
+    engines: dict[str, Sequence[SegmentScore]] = {
         "a": segments("a", [5, 5, 5, 5]),
         "b": segments("b", [1, 1, 1, 1]),
         "c": segments("c", [9, 9, 9, 9]),
@@ -91,7 +124,7 @@ def test_rank_orders_lower_wer_first():
 
 
 def test_decision_rule_rejects_an_engine_that_fails_the_guardrail():
-    engines = {
+    engines: dict[str, Sequence[SegmentScore]] = {
         "clean": segments("clean", [1] * 8),
         "unusable": segments("unusable", [14] * 8),
     }
@@ -100,11 +133,11 @@ def test_decision_rule_rejects_an_engine_that_fails_the_guardrail():
         resamples=RESAMPLES,
     )
     assert outcome["winner"] == "clean"
-    assert "unusable" in outcome["rejected"]
+    assert "unusable" in rejected_names(outcome)
 
 
 def test_decision_rule_breaks_a_statistical_tie_on_cost():
-    engines = {
+    engines: dict[str, Sequence[SegmentScore]] = {
         "pricey": segments("pricey", [2, 3, 2, 3, 2, 3, 2, 3]),
         "cheap": segments("cheap", [3, 2, 3, 2, 3, 2, 3, 2]),
     }
@@ -112,24 +145,25 @@ def test_decision_rule_breaks_a_statistical_tie_on_cost():
         engines, primary="wer", guardrail_metric="wer", guardrail_max=0.5,
         cost_usd={"pricey": 4.10, "cheap": 0.90}, resamples=RESAMPLES,
     )
-    assert set(outcome["indistinguishable_from_leader"]) == {"pricey", "cheap"}
+    assert set(names(outcome, "indistinguishable_from_leader")) == {"pricey", "cheap"}
     assert outcome["winner"] == "cheap"
-    assert "cheapest" in outcome["basis"]
+    assert "cheapest" in text(outcome, "basis")
 
 
 def test_no_engine_meeting_the_guardrail_is_reported_not_papered_over():
-    engines = {"a": segments("a", [15] * 5), "b": segments("b", [16] * 5)}
+    engines: dict[str, Sequence[SegmentScore]] = {
+        "a": segments("a", [15] * 5), "b": segments("b", [16] * 5)}
     outcome = decide(
         engines, primary="wer", guardrail_metric="wer", guardrail_max=0.30,
         resamples=RESAMPLES,
     )
     assert outcome["winner"] is None
-    assert outcome["reason"] == "no engine met the guardrail"
+    assert text(outcome, "reason") == "no engine met the guardrail"
 
 
 # --- the declared tie-break order ---------------------------------------------
 
-def rich(engine, wer_errors, cs_errors, ref_words=20, cs_words=5):
+def rich(engine, wer_errors, cs_errors, ref_words=20, cs_words=5) -> list[SegmentScore]:
     """Segments with independently controllable overall and code-switch error."""
     return [
         SegmentScore(
@@ -150,11 +184,11 @@ def test_a_tie_on_the_primary_metric_goes_to_code_switch_wer_not_cost():
         {"a": a, "b": b}, primary="wer", guardrail_metric="wer",
         guardrail_max=0.5, cost_usd={"a": 9.99, "b": 0.01}, resamples=RESAMPLES,
     )
-    assert set(outcome["indistinguishable_from_leader"]) == {"a", "b"}
+    assert set(names(outcome, "indistinguishable_from_leader")) == {"a", "b"}
     # b is far cheaper; the declared order must still pick a on code-switch WER.
     assert outcome["winner"] == "a"
-    assert any("cs_wer" in step for step in outcome["tie_break_steps"])
-    assert "cost" not in outcome["basis"]
+    assert any("cs_wer" in step for step in names(outcome, "tie_break_steps"))
+    assert "cost" not in text(outcome, "basis")
 
 
 def test_cost_is_reached_only_after_every_quality_metric_ties():
@@ -167,8 +201,8 @@ def test_cost_is_reached_only_after_every_quality_metric_ties():
         resamples=RESAMPLES,
     )
     assert outcome["winner"] == "cheap"
-    assert "not a quality judgement" in outcome["basis"]
-    assert any("cs_wer" in step for step in outcome["tie_break_steps"])
+    assert "not a quality judgement" in text(outcome, "basis")
+    assert any("cs_wer" in step for step in names(outcome, "tie_break_steps"))
 
 
 def test_no_winner_when_everything_ties_and_no_cost_is_supplied():
@@ -180,4 +214,4 @@ def test_no_winner_when_everything_ties_and_no_cost_is_supplied():
         guardrail_max=0.5, resamples=RESAMPLES,
     )
     assert outcome["winner"] is None
-    assert "indistinguishable on every declared metric" in outcome["basis"]
+    assert "indistinguishable on every declared metric" in text(outcome, "basis")

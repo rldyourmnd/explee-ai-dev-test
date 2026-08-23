@@ -2,6 +2,17 @@
 # requires-python = ">=3.11"
 # dependencies = ["modal"]
 # ///
+# pyright: reportMissingImports=false, reportAttributeAccessIssue=false
+# pyright: reportCallIssue=false, reportArgumentType=false
+#
+# These four rules only. torch, librosa, transformers, soundfile, nemo and
+# gigaam exist inside the Modal container image and are deliberately not
+# installed locally, so pyright cannot resolve them or the types that flow
+# from them. Modal's decorators are also beyond it: `.remote` and `.starmap`
+# are attached at runtime, and `modal.parameter` class fields are not visible
+# as constructor arguments. Every OTHER rule stays active on this file, which
+# is the point: the directory used to be excluded wholesale, so a new defect
+# of any kind landed here unseen.
 """Whisper-family engines on Modal GPU, full precision.
 
 App name `explee-stt-benchmark`, scoped to itself. The workspace is never

@@ -32,6 +32,17 @@ from harness.metrics import (  # noqa: E402
 from harness.normalize import normalize_for_wer, normalize_term, script_of, tokens  # noqa: E402
 
 
+def measured(value: object) -> float:
+    """Assert a metric was measured, and narrow it for the type checker.
+
+    `aggregate()` returns `float | None` because an unmeasured metric must never
+    be reported as 0.0. A test comparing one has to say it expects a
+    measurement, which is what this does.
+    """
+    assert value is not None, "expected a measured value, got None"
+    return float(value)  # type: ignore[arg-type]
+
+
 @pytest.fixture(scope="module")
 def glossary():
     return glossary_module.load()
@@ -56,9 +67,9 @@ def test_raka_for_rag_scores_as_a_failure(glossary):
     assert s.latin_to_cyrillic == 1
     assert s.latin_term_occurrences >= 1
     rates = aggregate([s])
-    assert rates["term_recall"] < 1.0
-    assert rates["latin_to_cyrillic_rate"] > 0
-    assert rates["cs_wer"] > 0
+    assert measured(rates["term_recall"]) < 1.0
+    assert measured(rates["latin_to_cyrillic_rate"]) > 0
+    assert measured(rates["cs_wer"]) > 0
 
 
 def test_lead_house_for_clickhouse_scores_as_a_failure(glossary):
@@ -153,7 +164,7 @@ def test_omission_and_hallucination_are_counted_separately(glossary):
     assert invented.insertions == 4 and invented.deletions == 0
 
     rates = aggregate([dropped])
-    assert rates["omission_rate"] > 0
+    assert measured(rates["omission_rate"]) > 0
     assert rates["hallucination_rate"] == 0.0
 
 
@@ -195,7 +206,7 @@ def test_code_switch_wer_is_restricted_to_the_english_spans(glossary):
     assert s.cs_ref_words == 1          # `kubernetes`
     assert s.cs_errors == 0             # heard correctly
     assert aggregate([s])["cs_wer"] == 0.0
-    assert aggregate([s])["wer"] > 0.0  # the dropped fillers still cost WER
+    assert measured(aggregate([s])["wer"]) > 0.0  # dropped fillers still cost WER
 
 
 def test_boundary_errors_are_counted_at_script_junctions(glossary):
@@ -226,7 +237,7 @@ def test_aggregate_pools_counts_rather_than_averaging_rates(glossary):
     pooled = aggregate([long_clean, short_bad])
     naive_mean = (0.0 + 1.0) / 2
     assert pooled["wer"] == pytest.approx(2 / 92)
-    assert pooled["wer"] < naive_mean
+    assert measured(pooled["wer"]) < naive_mean
 
 
 # --- diarisation and timings --------------------------------------------------

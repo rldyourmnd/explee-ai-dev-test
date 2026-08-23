@@ -15,10 +15,6 @@
     "**/__pycache__",
     "**/node_modules",
     "browser",
-    "docs",
-    "task2-stt-benchmark/modal_app",
-    "tests/test_task2_bootstrap.py",
-    "tests/test_task2_metrics.py",
-    "tests/test_task2_reference.py"
+    "docs"
   ]
 }
