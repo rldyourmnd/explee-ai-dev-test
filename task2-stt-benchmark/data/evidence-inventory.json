@@ -1,0 +1,84 @@
+{
+  "purpose": "Hashes of every input and output behind the published numbers. The audio and the full engine transcripts are not redistributed (the talk and its transcript belong to their authors), so this inventory plus the recipe is what makes the result checkable: re-derive the files and the hashes must match.",
+  "corpus": {
+    "source_url": "https://www.youtube.com/watch?v=z2aARjKDg4w",
+    "audio_sha256": "4b88b8d5b9d04f17f81c4dc406b8651e1ca4167d48832b7508dd676ef0f39fd9",
+    "manifest_sha256": "57a4c6239047ae017615e4dc234312a90ef1226afc970f2617dec5ee3fbc5077",
+    "segments": 99
+  },
+  "reference_extraction": {
+    "source_url": "https://habr.com/ru/articles/523378/",
+    "page_sha256": "dad52981f930ea9c3c9c1c7ed976037c0c6b97be6bb2ce1e24f79728aff0e606",
+    "extracted_sha256": "b77ca98b5ae1bb942491b570e6479b5f2b42e44f2222c3d60f43796d19fe1557",
+    "selector_rule": "slice from the article-formatted-body marker to end of document, take every <p>",
+    "removed": [
+      "<figure> blocks (slide captions, never spoken)",
+      "<pre>/<code> blocks",
+      "paragraphs under 3 characters",
+      "the article's own abstract, 6 paragraphs before the speaker's first line"
+    ],
+    "words": 4854
+  },
+  "glossary_sha256": "214a316a5a679f13fc0694765b5a990ff5cabc5f4c6931f70ecfe13a287f7593",
+  "distractors_sha256": "d2d6386564b8448be9f191081f376d592b4356d5f92180faa3140231f20b3409",
+  "distractor_absence_scan": "verified absent from the reference and from all five stock engine outputs before the prompted run",
+  "results_sha256": "e5b8f1a1f33fbd57ef80d93bed6c23f00d823446602680aef2f3b57441e33c50",
+  "raw_outputs": {
+    "parakeet-tdt-0.6b-v3-default": {
+      "segments": 99,
+      "model_id": "nvidia/parakeet-tdt-0.6b-v3",
+      "track": "default",
+      "gpu": "L4",
+      "torch_dtype": "float32",
+      "combined_sha256": "32531b0f45910b46643d2a7af98124f14bb84e5a673b5bc105b9205b0bb650c4"
+    },
+    "seamless-m4t-v2-default": {
+      "segments": 99,
+      "model_id": "facebook/seamless-m4t-v2-large",
+      "track": "default",
+      "gpu": "L4",
+      "torch_dtype": "float16",
+      "combined_sha256": "b23d6a8fbb45d3ed41958728a5010fd6ef1350998293eec020ab3c6a658b88d0"
+    },
+    "wav2vec2-xlsr-ru-default": {
+      "segments": 99,
+      "model_id": "jonatasgrosman/wav2vec2-large-xlsr-53-russian",
+      "track": "default",
+      "gpu": "L4",
+      "torch_dtype": "float32",
+      "combined_sha256": "a6224fdb13a3f1a379c86fc3360fc374f64c92581057f5a2684642067943c143"
+    },
+    "whisper-large-v3-default": {
+      "segments": 99,
+      "model_id": "openai/whisper-large-v3",
+      "track": "default",
+      "gpu": "L4",
+      "torch_dtype": "float16",
+      "combined_sha256": "ec6eb816a169e19fe0c5d6733c0c235684d63886d71f47c60c640e8da53fb73e"
+    },
+    "whisper-large-v3-tuned": {
+      "segments": 99,
+      "model_id": "openai/whisper-large-v3",
+      "track": "tuned",
+      "gpu": "L4",
+      "torch_dtype": "float16",
+      "combined_sha256": "4547686a007bac9be309efc9e1266e84f10b5e00efeebafede9209c8658a3161"
+    },
+    "whisper-large-v3-turbo-default": {
+      "segments": 99,
+      "model_id": "openai/whisper-large-v3-turbo",
+      "track": "default",
+      "gpu": "L4",
+      "torch_dtype": "float16",
+      "combined_sha256": "ee028f1959cc5b73805a0c9c0d932903443392cf21e4909a571bcaeca340a2a4"
+    },
+    "whisper-large-v3-turbo-tuned": {
+      "segments": 99,
+      "model_id": "openai/whisper-large-v3-turbo",
+      "track": "tuned",
+      "gpu": "L4",
+      "torch_dtype": "float16",
+      "combined_sha256": "1ca3cecfef7022e3474e9252182f7c37b125e229a9285393b5166de2323d3cd7"
+    }
+  }
+}
