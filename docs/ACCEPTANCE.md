@@ -28,6 +28,46 @@ which `main` had long passed — a matrix that lags the tree is the same defect 
 a stale board, and this is the artifact a grader is handed as proof.
 
 
+
+## Snapshot series — every six hours while collection continues
+
+The submission ships **the last** snapshot; `01` stays as the documented moment
+the stated six-hour minimum was met. Numbered rather than time-named so the
+sequence, and any gap in it, is obvious.
+
+| # | Due | Status | Artifact |
+|---|---|---|---|
+| 01 | 2026-08-23T22:14Z | pending — closes the six-hour minimum | `snapshots/01-*.md` + `.json` |
+| 02 | 2026-08-24T04:14Z | scheduled | `snapshots/02-*` |
+| 03 | 2026-08-24T10:14Z | scheduled | `snapshots/03-*` |
+| 04 | 2026-08-24T16:14Z | scheduled | `snapshots/04-*` |
+
+Each is standalone: `sha256`, bytes, lines, first and last timestamp, exact span,
+largest consecutive gap, malformed count, provider count, response-class
+breakdown, and collector state **before and after**. Verification is by *prefix*
+digest, not whole-file — the log is append-only and still growing, so whole-file
+digests describe different lengths and can never agree. That defect was caught in
+rehearsal rather than at 22:14Z.
+
+| # | Deliverable | Owner | Status | Verification |
+|---|---|---|---|---|
+| 1.8 | **T1 marker** — the exact commit SHA that then runs untouched for 24 h | `surface:2` | **not declared.** Four preconditions, none met: single-file `--poll` deployed, recurrence semantics deployed, audit clean (currently 2 of 11 unreconciled against the running build), sensitivity regenerated | the SHA recorded here, with `monitor.py --since T1` |
+| 1.9 | **Clean-window regeneration** — `alerts.jsonl` and the sensitivity table replayed from T1 under one frozen configuration | `surface:2` | pending T1. Today's `alerts.jsonl` is an accumulation across code versions, so it is the output of no single configuration | replay from T1; assert the raw log's `sha256` is unchanged by the operation |
+| 2.11 | **Cost discipline on the GPU benchmark** | `surface:5` | required — smallest GPU that fits, cold start recorded separately from inference, image and library versions pinned, app stopped when the run completes | an unpinned environment makes the comparison an anecdote; a held GPU costs money for nothing |
+
+**The T1 mechanism is the payoff of the T0 decision.** The raw sampler is not
+touched and cannot be: raw capture is independent of alert logic, so only derived
+state is recomputed while the sampler keeps appending. Had the monitor held
+history in memory, a clean window would have required restarting collection and
+losing everything before it.
+
+**Scope discipline, applied to this file.** The machine-readable status source
+that would generate the README and this matrix is **dropped**. It would make the
+repository more complete without changing anything we deliver or recommend, which
+is the test. The consistency and acceptance checks stay because they catch real
+drift — they have already caught a stale baseline, future timestamps, dead links
+and an engine count pointed at the wrong directory.
+
 ## Cross-cutting
 
 These rows were lost when this matrix was re-derived from `docs/TASK.md` and are

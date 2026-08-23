@@ -103,6 +103,13 @@ printing names, so this document and the trace that produced it stay clean:
 | `modal app list` | the whole workspace |
 | `gddy domain list` | the whole registrar account |
 
+**Standing check, not a reminder.** This class has now bitten four times:
+`export_trace.py --list`, the session-directory listing that contaminated the
+first Task 3 trace, `modal app list`, and the `gh`/`doctl`/`gddy` listings
+measured above. **Before a worker uses a tool that is new to this repository,
+check its listing commands against this section.** A tool that can reach past
+this project is a loaded gun pointed at a published trace.
+
 **The rule.** In any session that will be exported, do not run a bare listing
 command. Scope it to the object you already know you need
 (`gh repo view <this-repo>`, `systemctl is-active explee-raw-sampler`,
