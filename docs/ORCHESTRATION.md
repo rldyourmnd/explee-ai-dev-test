@@ -5,7 +5,7 @@ single place that says what is true right now, with the measurement behind each
 claim. Maintained by the orchestrator (`surface:3`); workers report, they do not
 edit this file.
 
-**Last heartbeat: 2026-08-23T18:04Z.**
+**Last heartbeat: 2026-08-23T18:16Z.**
 
 ## ESCALATIONS — open, for the human
 
@@ -20,6 +20,7 @@ the owner reserves it, which supersedes the escalation instruction in
 | 2 | **Task 3 ships with no trace?** Its trace is quarantined; the submission requires one per task. | Submission scope |
 | 3 | **Task 2 has no brief.** `surface:5` idle since 16:48Z; STT scope undecided. | Business scope |
 | 4 | **Task 1 DNS.** `spend.nddev.it.com` needs an A record; GoDaddy zone, no token, rule 2 forbids pasting one. | Access the agents do not have |
+| 4b | **NEW 18:16Z — tunnel as an alternative to DNS.** Task 1 identified a third-party tunnel that would give the dashboard a public HTTPS hostname without a DNS record, and **refused to act on it**: it would publish company spend data through a third party and install software on the host. Unlike `nip.io` it would not leak an IP into the URL, so it is a real option, not a rejected one. | Publishing company data through a third party |
 | 5 | **`docs/briefs/review-agent-prompt.md` is untracked.** Owner-authored draft; not committed or pushed by this session. Say the word and it goes up. | It is the owner's draft |
 | 6 | **Pre-existing pyright error**, `tools/export_trace.py:205` from `e7af3a4` — `ROLE_LABEL.get` returns `str \| None`, then `+=`. Outside every current diff; does not affect `pytest` or `ruff`. Flagged by Task 3, not fixed. | Whether a green-gates repo should also be pyright-clean |
 
@@ -48,13 +49,20 @@ endpoint, so an interruption is unrecoverable and cannot be faked.
 |---|---|
 | State | `active` |
 | T0 | `2026-08-23T16:13:26.775Z` (first record, matches the logged T0) |
-| Last record | `2026-08-23T18:03:32.807Z`, 28 s before the check |
-| Lines | 3536 (+384 since 17:51Z) |
-| Growth | 31.9 lines/min over 12.1 min — matches the expected ~32 |
+| Last record | `2026-08-23T18:15:33.333Z`, 24 s before the check |
+| Lines | 3920 (+384 since 18:03Z) |
+| Growth | 32.2 lines/min over 11.9 min — matches the expected ~32 |
 | Gaps > 45 s | **0**, verified across every consecutive record pair |
 | Malformed lines | 0 |
-| Elapsed | 1 h 50 m of the 6 h minimum |
-| 6 h mark | `2026-08-23T22:14Z` — **4 h 10 m remaining** |
+| Elapsed | 2 h 02 m of the 6 h minimum |
+| 6 h mark | `2026-08-23T22:14Z` — **3 h 58 m remaining** |
+
+**Second, independent watch now running.** Task 1 armed a 5-minute monitor
+covering collector state, container health, SSH reachability, a stalled log, and
+the 22:14Z mark. It reports the collector `active` and **never restarted**,
+verified 8× across every host action it took. Two independent observers on
+rule 1 at different intervals is strictly better than one; this session's
+12-minute check continues unchanged rather than deferring to it.
 
 Task 1 restarted its **monitor** container this cycle and verified the collector
 was `active` before and after; the sampler itself was never touched.
@@ -288,6 +296,7 @@ before each push, never after:
 | 17:41Z | **93 passed**, ruff clean, both exit 0 | `ae2c7cb..79be7bd`, 2 commits |
 | 17:53Z | **101 passed**, ruff clean, both exit 0 | `dc0125d..6c365f1`, 4 commits |
 | 18:04Z | **114 passed**, ruff clean, both exit 0 | `6c365f1..6ce1e80`, 1 commit |
+| 18:16Z | **117 passed**, ruff clean, both exit 0 | `6efe631..14489e2`, 4 commits |
 
 Test count 84 → 93 → 101 → 114 across the session; each rise came with the change
 it covers rather than after it.
@@ -340,3 +349,4 @@ entries promptly, at the same time as the `--list` warning.
 | 17:40Z | `active`, 2768 lines, +31.8/min, 0 gaps | T1 unblocked, deploying dashboard, committed `79be7bd`; T3 fixed both exporter defects in `d7c2b24`, verified by running `--list` (0 foreign slugs) — cross-cutting risk **closed**; gates green at 93 passed, pushed to `origin/main`; T2 unchanged |
 | 17:52Z | `active`, 3152 lines, +32.0/min, 0 gaps | T1 withdrew the pool-wide 429 claim against 66 cycles of captured data (`fdd04b8`) and proved restart durability by `sha256`; README status table corrected by this session — it still said Task 3 "not started" and promised a trace for every task; T3 idle, artifact done, parked on the owner's trace decision; T2 unchanged |
 | 18:04Z | `active`, 3536 lines, +31.9/min, 0 gaps | T1 committed `6ce1e80` (alert lines on material change, not cooldown expiry) and is mid-edit on top-up segment cuts; gates 114 passed, pushed; T3 idle 25 min, correctly parked; T2 unchanged. No new blockers |
+| 18:16Z | `active`, 3920 lines, +32.2/min, 0 gaps | T1 shipped 4 commits (concurrency check, replay determinism, testable `/healthz`, per-provider discontinuities computed once) and armed a second 5-min watch on rule 1; **new decision surfaced — third-party tunnel as a DNS alternative, flagged not taken**; gates 117 passed, pushed; T3 and T2 unchanged |
