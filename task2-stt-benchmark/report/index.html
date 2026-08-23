@@ -204,6 +204,40 @@ counts as beneficial only if recall rises <em>and</em> precision does not materi
 <em>and</em> WER does not worsen <em>and</em> distractors stay absent. Large-v3 passes all
 four. Turbo fails the fourth.</p>
 
+
+<h2>Where each engine breaks: results by slice</h2>
+
+<p>An overall score can hide the failure that matters. We split the reference into blocks
+containing English technical terms and blocks that are pure Russian, and scored each engine on
+both.</p>
+
+<div class="scroll">
+<table>
+<tr><th>Engine</th><th>WER, Russian-only<br>(7 blocks)</th><th>WER, code-switched<br>(92 blocks)</th><th>Code-switch penalty</th></tr>
+<tr><td><strong>Parakeet-TDT v3</strong></td><td class="num ok">0.269</td><td class="num">0.627</td><td class="num warn">+0.358</td></tr>
+<tr><td>Whisper large-v3-turbo</td><td class="num">0.326</td><td class="num ok">0.597</td><td class="num">+0.272</td></tr>
+<tr><td>Whisper large-v3</td><td class="num">0.334</td><td class="num">0.608</td><td class="num">+0.274</td></tr>
+<tr><td>Whisper large-v3 + glossary</td><td class="num">0.483</td><td class="num">0.610</td><td class="num ok">+0.127</td></tr>
+<tr><td>wav2vec2-XLSR Russian</td><td class="num">0.483</td><td class="num warn">0.808</td><td class="num">+0.325</td></tr>
+<tr><td>Seamless-M4T-v2</td><td class="num">0.514</td><td class="num">0.665</td><td class="num">+0.151</td></tr>
+</table>
+</div>
+
+<div class="callout">
+<strong>Parakeet is the trap this benchmark was built to catch.</strong> It has the best
+Russian-only error rate in the entire field — better than either Whisper — and the largest
+penalty when English terms appear. Judged on Russian fluency it looks like the strongest
+engine here; judged on the speech this employer actually has, it is third. An evaluation that
+reported one overall number would have made that mistake.
+</div>
+
+<p>Two honest limits on this table. The Russian-only slice is <strong>7 blocks</strong>, so
+treat its ordering as indicative, not settled. And the mixed-morphology slice
+(<code>ClickHouse-е</code>, <code>RAG-пайплайн</code>) could not be measured at all: our
+normalisation splits hyphens, so those become two tokens and no single token carries both
+scripts. That is a consequence of a deliberate scoring choice, and we report it as
+unmeasured rather than approximating it.</p>
+
 <h2>How much can one hour actually prove?</h2>
 
 <p>"Statistically indistinguishable" is only informative if the test could have found a

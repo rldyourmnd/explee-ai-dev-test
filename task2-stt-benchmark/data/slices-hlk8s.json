@@ -1,0 +1,121 @@
+{
+  "slice_sizes": {
+    "russian_only": 7,
+    "code_switched": 92,
+    "numbers": 18
+  },
+  "mixed_morphology": "not measurable: normalisation splits hyphens, so ClickHouse-e becomes two tokens and no single token carries both scripts",
+  "slices": {
+    "russian_only": {
+      "whisper-large-v3-default": {
+        "wer": 0.3342857142857143,
+        "term_recall": null,
+        "term_f1": null
+      },
+      "whisper-large-v3-tuned": {
+        "wer": 0.4828571428571429,
+        "term_recall": null,
+        "term_f1": null
+      },
+      "whisper-large-v3-turbo-default": {
+        "wer": 0.32571428571428573,
+        "term_recall": null,
+        "term_f1": null
+      },
+      "whisper-large-v3-turbo-tuned": {
+        "wer": 0.3457142857142857,
+        "term_recall": null,
+        "term_f1": null
+      },
+      "parakeet-tdt-0.6b-v3-default": {
+        "wer": 0.26857142857142857,
+        "term_recall": null,
+        "term_f1": null
+      },
+      "seamless-m4t-v2-default": {
+        "wer": 0.5142857142857142,
+        "term_recall": null,
+        "term_f1": null
+      },
+      "wav2vec2-xlsr-ru-default": {
+        "wer": 0.4828571428571429,
+        "term_recall": null,
+        "term_f1": null
+      }
+    },
+    "code_switched": {
+      "whisper-large-v3-default": {
+        "wer": 0.6084205933682374,
+        "term_recall": 0.39855072463768115,
+        "term_f1": 0.5188679245283019
+      },
+      "whisper-large-v3-tuned": {
+        "wer": 0.6097294938917975,
+        "term_recall": 0.6304347826086957,
+        "term_f1": 0.6932270916334662
+      },
+      "whisper-large-v3-turbo-default": {
+        "wer": 0.5972949389179756,
+        "term_recall": 0.35507246376811596,
+        "term_f1": 0.4827586206896552
+      },
+      "whisper-large-v3-turbo-tuned": {
+        "wer": 0.6206369982547993,
+        "term_recall": 0.6086956521739131,
+        "term_f1": 0.6801619433198381
+      },
+      "parakeet-tdt-0.6b-v3-default": {
+        "wer": 0.6265270506108203,
+        "term_recall": 0.36231884057971014,
+        "term_f1": 0.4807692307692308
+      },
+      "seamless-m4t-v2-default": {
+        "wer": 0.6653577661431065,
+        "term_recall": 0.17391304347826086,
+        "term_f1": 0.27906976744186046
+      },
+      "wav2vec2-xlsr-ru-default": {
+        "wer": 0.8082460732984293,
+        "term_recall": 0.0,
+        "term_f1": null
+      }
+    },
+    "numbers": {
+      "whisper-large-v3-default": {
+        "wer": 0.5192307692307693,
+        "term_recall": 0.36585365853658536,
+        "term_f1": 0.4918032786885247
+      },
+      "whisper-large-v3-tuned": {
+        "wer": 0.5656108597285068,
+        "term_recall": 0.4878048780487805,
+        "term_f1": 0.5970149253731344
+      },
+      "whisper-large-v3-turbo-default": {
+        "wer": 0.5124434389140271,
+        "term_recall": 0.21951219512195122,
+        "term_f1": 0.34615384615384615
+      },
+      "whisper-large-v3-turbo-tuned": {
+        "wer": 0.5192307692307693,
+        "term_recall": 0.4878048780487805,
+        "term_f1": 0.625
+      },
+      "parakeet-tdt-0.6b-v3-default": {
+        "wer": 0.5282805429864253,
+        "term_recall": 0.43902439024390244,
+        "term_f1": 0.5625
+      },
+      "seamless-m4t-v2-default": {
+        "wer": 0.6391402714932126,
+        "term_recall": 0.07317073170731707,
+        "term_f1": 0.12244897959183672
+      },
+      "wav2vec2-xlsr-ru-default": {
+        "wer": 0.6617647058823529,
+        "term_recall": 0.0,
+        "term_f1": null
+      }
+    }
+  }
+}
