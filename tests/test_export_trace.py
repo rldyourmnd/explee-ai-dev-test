@@ -213,3 +213,61 @@ def test_list_sessions_unknown_project_does_not_enumerate_the_others(tmp_path, c
 
 def test_project_slug_matches_claude_code_layout():
     assert et.project_slug(Path("/Users/dev/work/proj")) == "-Users-dev-work-proj"
+
+
+# A trace that drops content while its header claims nothing was dropped is not
+# verbatim, whether or not the loss is disclosed inline. Every path that can
+# lose content must be recorded so main() can refuse to write the file.
+def test_malformed_jsonl_line_is_recorded_not_skipped(tmp_path):
+    log = tmp_path / "s.jsonl"
+    log.write_text('{"type":"user","message":{}}\n{"type":"assis\n', encoding="utf-8")
+    losses = []
+    records = et.load(log, losses)
+    assert len(records) == 1
+    assert any("malformed JSON on line 2" in loss for loss in losses)
+
+
+def test_invalid_utf8_is_recorded_not_silently_replaced(tmp_path):
+    log = tmp_path / "s.jsonl"
+    log.write_bytes(b'{"type":"user","message":{"content":"caf\xff"}}\n')
+    losses = []
+    et.load(log, losses)
+    assert any("invalid UTF-8" in loss for loss in losses)
+
+
+def test_load_without_a_losses_sink_still_raises_on_bad_bytes(tmp_path):
+    log = tmp_path / "s.jsonl"
+    log.write_bytes(b'\xff\xfe\n')
+    with pytest.raises(UnicodeDecodeError):
+        et.load(log)
+
+
+def test_image_block_omission_is_recorded():
+    losses = []
+    et.render_tool_result([{"type": "image", "source": {}}], losses)
+    assert any("image block omitted" in loss for loss in losses)
+
+
+def test_truncation_is_recorded_as_a_loss():
+    records = [_turn("assistant", [{"type": "tool_result", "content": "x" * 5000}])]
+    losses = []
+    et.build(records, "T", "s", Path("x.jsonl"), 100, losses)
+    assert any("4900 characters of tool result truncated" in loss for loss in losses)
+
+
+def test_lossless_session_records_no_losses():
+    records = [_turn("user", [{"type": "text", "text": "hello"}]),
+               _turn("assistant", [{"type": "tool_result", "content": "short"}])]
+    losses = []
+    md, _ = et.build(records, "T", "s", Path("x.jsonl"), None, losses)
+    assert losses == []
+    assert "not verbatim" not in md
+
+
+def test_header_retracts_the_verbatim_claim_when_content_was_lost():
+    records = [_turn("assistant", [{"type": "tool_result", "content": "x" * 5000}])]
+    losses = []
+    md, _ = et.build(records, "T", "s", Path("x.jsonl"), 100, losses)
+    assert "**This export is not verbatim.**" in md
+    # the retraction belongs above the transcript, not buried at the loss site
+    assert md.index("not verbatim") < md.index("Tool result")

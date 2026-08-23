@@ -65,15 +65,35 @@ SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 ROLE_LABEL = {"user": "User", "assistant": "Assistant"}
 
 
-def load(path: Path) -> list[dict]:
+def load(path: Path, losses: list[str] | None = None) -> list[dict]:
+    """Parse a session log, recording anything that could not be rendered.
+
+    Both failure modes here used to be silent: undecodable bytes became U+FFFD
+    via errors="replace", and a malformed line was skipped by the bare continue.
+    Either one produces a trace that is missing content while the header still
+    claims nothing was dropped. They are recorded now, and `main` refuses to
+    write a trace when the list is non-empty.
+    """
+    raw = path.read_bytes()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        if losses is None:
+            raise
+        losses.append(f"invalid UTF-8 in {path.name} at byte {exc.start}; "
+                      f"decoded with replacement characters")
+        text = raw.decode("utf-8", errors="replace")
+
     records = []
-    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+    for lineno, line in enumerate(text.splitlines(), start=1):
         line = line.strip()
         if not line:
             continue
         try:
             records.append(json.loads(line))
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as exc:
+            if losses is not None:
+                losses.append(f"malformed JSON on line {lineno} of {path.name}: {exc.msg}")
             continue
     return records
 
@@ -85,7 +105,7 @@ def fence(text: str, lang: str = "") -> str:
     return f"{bar}{lang}\n{text}\n{bar}"
 
 
-def render_tool_result(content) -> str:
+def render_tool_result(content, losses: list[str] | None = None) -> str:
     if isinstance(content, str):
         return content
     if isinstance(content, list):
@@ -95,6 +115,9 @@ def render_tool_result(content) -> str:
                 if block.get("type") == "text":
                     parts.append(block.get("text", ""))
                 elif block.get("type") == "image":
+                    if losses is not None:
+                        losses.append("image block omitted from markdown "
+                                      "(present in raw JSONL; export with --copy-raw)")
                     parts.append("[image omitted from markdown; present in raw JSONL]")
                 else:
                     parts.append(json.dumps(block, ensure_ascii=False, indent=2))
@@ -154,7 +177,7 @@ def human_ts(raw: str | None) -> str:
 
 
 def build(records: list[dict], title: str, session_id: str, source: Path,
-          max_result: int | None) -> tuple[str, list[str]]:
+          max_result: int | None, losses: list[str] | None = None) -> tuple[str, list[str]]:
     turns = [r for r in records if r.get("type") in ("user", "assistant")
              and isinstance(r.get("message"), dict)]
     if not turns:
@@ -200,7 +223,7 @@ def build(records: list[dict], title: str, session_id: str, source: Path,
     for index, record in enumerate(turns, start=1):
         message = record["message"]
         role = record["type"]
-        label = ROLE_LABEL.get(role, role)
+        label = ROLE_LABEL.get(role) or str(role)
         if record.get("isSidechain"):
             label += " (subagent)"
         out.append(f"## [{index}] {label} · {human_ts(ts_of(record))}")
@@ -235,10 +258,13 @@ def build(records: list[dict], title: str, session_id: str, source: Path,
                         fence(payload, "json"), ""]
 
             elif kind == "tool_result":
-                body = render_tool_result(block.get("content"))
+                body = render_tool_result(block.get("content"), losses)
                 findings += [f"{n}  (first seen: turn {index}, tool result)" for n in scan_secrets(body)]
                 if max_result is not None and len(body) > max_result:
                     dropped = len(body) - max_result
+                    if losses is not None:
+                        losses.append(f"turn {index}: {dropped} characters of tool "
+                                      f"result truncated by --max-result")
                     body = (body[:max_result]
                             + f"\n\n[... {dropped} characters truncated by "
                               f"--max-result; full output is in the raw session JSONL ...]")
@@ -247,6 +273,16 @@ def build(records: list[dict], title: str, session_id: str, source: Path,
 
         out.append("---")
         out.append("")
+
+    # The header promises a verbatim render. If anything was lost, that promise
+    # is retracted at the top of the file, not footnoted where the loss happened
+    # - a reader decides whether to trust the document before reading it.
+    if losses:
+        notice = ["> **This export is not verbatim.** The following content "
+                  "could not be rendered losslessly:", ""]
+        notice += [f"> - {loss}" for loss in dict.fromkeys(losses)]
+        notice += ["", "> The raw session JSONL is the authoritative record.", ""]
+        out[out.index("---"):out.index("---")] = notice
 
     return "\n".join(out), findings
 
@@ -296,6 +332,9 @@ def main() -> int:
     parser.add_argument("--allow-secrets", action="store_true",
                         help="blanket override; prefer --allow-finding, which cannot mask a "
                              "credential that appears somewhere you did not review")
+    parser.add_argument("--allow-lossy", action="store_true",
+                        help="write the trace even though content was truncated, skipped "
+                             "or replaced; the header declares the export non-verbatim")
     parser.add_argument("--list", action="store_true",
                         help="list sessions for this project only (see --project)")
     args = parser.parse_args()
@@ -315,8 +354,24 @@ def main() -> int:
         return 2
     source = candidates[0]
 
-    markdown, findings = build(load(source), args.title, args.session, source,
-                               args.max_result)
+    losses: list[str] = []
+    markdown, findings = build(load(source, losses), args.title, args.session, source,
+                               args.max_result, losses)
+
+    # Fail closed on any lossy path. A trace whose header says "nothing was
+    # dropped" while a tool result was truncated, a malformed line was skipped,
+    # or bytes were replaced is not verbatim, and disclosing the truncation in
+    # the body does not make it verbatim either. --allow-lossy exists so the
+    # operator can still get a readable rendering of a damaged log, and it
+    # stamps the header so the resulting file never claims more than it is.
+    if losses and not args.allow_lossy:
+        print(f"refusing to write {args.out}: export would not be verbatim",
+              file=sys.stderr)
+        for loss in dict.fromkeys(losses):
+            print(f"  - {loss}", file=sys.stderr)
+        print("\nfix the source of the loss, or pass --allow-lossy to write a "
+              "rendering that declares itself incomplete.", file=sys.stderr)
+        return 3
 
     # One fingerprint may surface in several turns; collapse to first sighting.
     unique: dict[str, str] = {}

@@ -69,7 +69,11 @@ is the honest state, not a formatting placeholder.
 | X.1 | Gates green on a **clean tree at the final SHA** | — | `surface:3` | pending final | see "Final gate procedure" below | — |
 | X.2 | Lossless export (no truncation, fail-closed) | `tools/export_trace.py` | `surface:8` | open — `--list` fixed in `d7c2b24`; truncation/image/UTF-8/malformed paths still open | regression tests + `--max-result` rejected in submission mode | — |
 | X.3 | `--max-result` removed from handoff instructions | `docs/HANDOFF.md` | `surface:3` | **DONE** — command run 18:46Z, output `0` | `awk '/^\`\`\`bash/{f=1;next} /^\`\`\`/{f=0} f' docs/HANDOFF.md \| grep -c -- '--max-result'` → **`0`** | at `479187b`+this pass |
-| X.4 | Delivery package, allowlisted | TBD | `surface:3` | **BLOCKED** — decision 3 | package inventory + SHA-256 manifest + independent contamination scan | — |
+| X.4 | Delivery route: history rewrite + publish | this repo | `surface:3` | **procedure written, NOT RUN** — runs once, after 22:14Z and after workers finish | see "Publication procedure" below | — |
+| X.5 | Type check clean | `pyright` | `surface:8` | **18 errors at `8111af1`** — reported by CI, non-blocking until 0 | `uv run --with pyright --with pytest pyright` → `0 errors` | — |
+| X.6 | CI attached to the final commit | `.github/workflows/ci.yml` | `surface:3` | added this pass; first run pending | GitHub Actions run, green pytest + ruff, on the final SHA | — |
+| X.7 | Working tree free of third-party identifiers | whole repo | `surface:3` | **DONE** — command run 18:58Z, empty output | `git ls-files -z \| xargs -0 grep -lEi '<client-a>\|<client-b>'` → empty; `grep -lE '^[[:space:]]*HostName[[:space:]]+'` → empty; no public IPs | at this pass |
+| X.8 | **History** free of third-party identifiers | all refs | `surface:3` | **OPEN** — working tree is clean, history is not | `git log -p --all \| grep -ci '<identifier>'` → `0`, after the rewrite | — |
 
 ## Six-hour snapshot procedure — runs at 22:14Z, collection must not stop
 
@@ -110,6 +114,100 @@ EOF
 Every number that comes back is recorded in `docs/SNAPSHOT-22-14Z.md` and its
 SHA-256 becomes the hash in row 1.4. Collection continues past the mark; longer
 is better, and the snapshot is a copy, not a stopping point.
+
+## Publication procedure — written now, **run exactly once, at the end**
+
+Sequencing is the whole point. Three sessions are live in this working tree, and
+`git filter-repo` plus a force-push under them destroys uncommitted work.
+History also keeps growing, so rewriting now means rewriting twice. **Do not run
+any of this until the 22:14Z snapshot is taken and every worker has finished and
+committed.**
+
+**Preconditions, all of them, checked in this order:**
+
+1. 22:14Z snapshot complete, row 1.4 filled.
+2. `surface:2`, `surface:5`, `surface:8` finished, committed, and confirmed idle.
+3. `git status --porcelain` empty.
+4. Every worker told that history is about to be rewritten and that they must not
+   commit again — after the force-push, their local `main` is a different history
+   and any commit made on the old one is stranded.
+5. `gddy` authenticated by the human (OAuth is a browser flow; agents cannot do
+   it) if the dashboard hostname route is chosen.
+
+**Step 0 — rollback insurance, before touching anything.** `filter-repo` is not
+undoable in place.
+
+```bash
+git bundle create ../explee-backup-$(date -u +%Y%m%dT%H%M%SZ).bundle --all
+git rev-parse HEAD > ../explee-backup-head.txt
+git for-each-ref > ../explee-backup-refs.txt
+```
+
+Rollback is then `git fetch ../explee-backup-*.bundle 'refs/*:refs/*'` into a
+fresh clone, and a force-push of the recovered `main`. The bundle lives outside
+the repository so the rewrite cannot eat it.
+
+**Step 1 — remove the quarantined traces from all history.** Only 3 commits touch
+them; every later commit still gets a new SHA.
+
+```bash
+git filter-repo --force \
+  --invert-paths \
+  --path TRACE-orchestration.md \
+  --path task3-harness-artifact/TRACE-task3-quarantined.md
+```
+
+**Step 2 — scrub identifiers that live in *other* files' history.** The working
+tree was sanitized in a normal commit, but the pre-sanitization blobs of
+`docs/RUNLOG.md` and `docs/ORCHESTRATION.md` still contain them. Write
+`../replacements.txt` outside the repo:
+
+```
+<client-a>==>REDACTED-CLIENT
+<client-b>==>REDACTED-CLIENT
+```
+
+```bash
+git filter-repo --force --replace-text ../replacements.txt
+```
+
+**Step 3 — verify across every ref, not just the tip.** This is the step that
+decides whether publication is safe:
+
+```bash
+git log -p --all | grep -ci '<client-a>\|<client-b>'          # expect 0
+git log -p --all | grep -cE '^\+[[:space:]]*HostName[[:space:]]+'  # expect 0
+git log --all --diff-filter=A --name-only --format= | sort -u | grep -i trace
+git rev-list --count HEAD
+```
+
+Publication proceeds **only** if the first two return `0`. If either is
+non-zero, stop and re-scope the replacements — do not publish and clean later,
+because a push cannot be recalled.
+
+**Step 4 — re-point and force-push.** `filter-repo` deletes the `origin` remote
+deliberately, so this is an explicit act rather than an accident:
+
+```bash
+git remote add origin git@github.com:rldyourmnd/explee-ai-dev-test.git
+git push --force origin main
+```
+
+**Step 5 — make public, then re-verify from outside.** Flip visibility, then
+confirm from a clean unauthenticated context that what is public is what was
+intended — the scan above proves the local history, not what GitHub serves.
+
+**Known consequences, stated rather than discovered later:**
+
+- **Every SHA changes.** Any SHA recorded in this matrix before the rewrite is
+  void afterwards. Final SHAs must be captured *after* Step 4, and CI (X.6) must
+  be green on the rewritten commit, not the pre-rewrite one.
+- A rewrite cannot retract what was already fetched. This repository has 0 forks
+  and 0 stars, and has only ever been pushed to by this session, so the exposure
+  window is the GitHub-side cache alone — which is why rewriting is viable here
+  and would not be on a repository with real clones.
+- Publication is decision 3 and remains the human's. This procedure is the
+  *mechanism*; it does not make the choice.
 
 ## Final gate procedure — clean tree only
 

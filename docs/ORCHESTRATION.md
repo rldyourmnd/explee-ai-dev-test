@@ -119,7 +119,7 @@ ways, so this cannot be resolved by default:
 - **Made public:** it publishes `TRACE-orchestration.md` and
   `task3-harness-artifact/TRACE-task3-quarantined.md` **including their leaks** —
   9 third-party IPs, 16 SSH `HostName` lines, unrelated client names (RUNLOG
-  16:27Z), and `unrelated-client-a` ×20. It also publishes **all git history**, where
+  16:27Z), and an unrelated client project's name ×20. It also publishes **all git history**, where
   commit `f9ef23b` still carries the Task 3 trace under its original name.
   Quarantining changed the file's disposition; it did not remove it from history.
 
@@ -271,7 +271,7 @@ directory listing into the trace. Every row names an **unrelated client
 project**:
 
 ```
-2026-08-02 22:12   1410K   2f6b3453-…   unrelated-client-a
+2026-08-02 22:12   1410K   2f6b3453-…   -Users-<user>-Developer-servers-server-<unrelated-client>-ai
 ```
 
 Full scan I ran over the file, so the numbers are checkable:
@@ -281,7 +281,7 @@ Full scan I ran over the file, so the numbers are checkable:
 | IP addresses | 0 | clean |
 | `HostName` | 8 | benign — all its own scan commands quoted back, not config |
 | `nddev` | 11 | in scope — this submission's own infrastructure, already public in `README.md` and `RUNLOG.md` |
-| `unrelated-client-a` | **20** | **leak** |
+| unrelated client project name | **20** | **leak** |
 | `/Users/rldyourmnd/…` | 25 | lower severity — local username and plugin-cache paths |
 
 This is the RUNLOG 16:27Z pattern reproduced inside a trace that is meant to

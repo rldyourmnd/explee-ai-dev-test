@@ -30,7 +30,7 @@ so no resize downtime would land inside the observation window.
 Pre-flight check: all seven containers carry `restart: unless-stopped` and
 `docker` is `enabled`, so recovery needed no manual step. Verified after:
 `captcha.nddev.it.com` 200 in 0.377 s (was 0.538 s),
-`unrelated-client-b` 200 in 0.494 s (was 0.593 s).
+a second unrelated host on the same proxy 200 in 0.494 s (was 0.593 s).
 
 ### 16:14Z — T0, raw capture live
 `explee-raw-sampler.service` enabled and started on `server-nddev-amsterdam`.
@@ -83,7 +83,7 @@ nothing to do with this submission:
 |---|---|
 | Distinct third-party server IPs | 9 |
 | `HostName` lines from `~/.ssh/config` | 16 |
-| Unrelated client/project names | unrelated-client-b ×45, unrelated-client-a ×10, and 9 others |
+| Unrelated client/project names | 11 distinct, 55 mentions (names withheld) |
 
 Cause: early reconnaissance listed SSH hosts and `Developer/` to pick a deploy
 target, which was reasonable locally and unacceptable in a published artifact.
