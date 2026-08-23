@@ -125,6 +125,27 @@ Reverted blips are detected by pairing a rise with a matching fall inside a
 An **unmatched** fall stays in the burn rate: a large one-off charge is spend,
 and excluding it would under-report risk.
 
+### A trailing-window total is not a balance, and its derivative is not a rate
+
+`anthropic` returns spend over a stated window (`"window": "trailing_24h"`),
+not money remaining. If `V(t)` is spend over `[t−24h, t]`, then
+
+```
+dV/dt = r(t) − r(t−24h)
+```
+
+— zero while spending steadily, and negative whenever the window rolls off
+faster than new cost lands. Fitting a slope to it and calling the result "burn"
+showed `anthropic` at **32.81 USD/h** against an actual 81.70 USD per 24 h, and
+`meta_ads` at **−11.39 USD/h**, which invites the conclusion that a paid-ads
+account is earning money.
+
+The rate shown is `V / window`, with the window read from the payload rather
+than assumed: `anthropic` 3.40 USD/h, `meta_ads` 14.19 USD/h. The derivative is
+kept, but as what it actually is — an acceleration signal for the anomaly rule,
+displayed as `trend`, never as spend. These two providers have no runway,
+because there is no balance to run out.
+
 ## Alerting
 
 Two classes, labelled honestly on every line and on the dashboard.

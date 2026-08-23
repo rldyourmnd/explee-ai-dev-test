@@ -167,6 +167,23 @@ BASELINE = Baseline()
 DEPLETING = {"prepaid_balance", "credits_package", "postpaid"}
 ACCUMULATING = {"spend_report"}
 
+TRAILING_WINDOW = re.compile(r"trailing_(\d+)h")
+DEFAULT_TRAILING_H = 24.0
+
+
+def trailing_window_h(extra: dict[str, Any]) -> float:
+    """Length of the window a spend report covers, from the payload itself.
+
+    `anthropic` states it (`"window": "trailing_24h"`), so it is read rather
+    than assumed; 24 h is the fallback for a report that omits it.
+    """
+    match = TRAILING_WINDOW.search(str(extra.get("window") or ""))
+    if match:
+        hours = float(match.group(1))
+        if hours > 0:
+            return hours
+    return DEFAULT_TRAILING_H
+
 
 # --------------------------------------------------------------------------
 # Time
@@ -863,6 +880,14 @@ class ProviderState:
     burn: Estimate | None = None
     recent_burn: Estimate | None = None
 
+    # Spend reports only. A trailing-window total is not a balance and its
+    # derivative is not a spend rate: if V(t) is spend over [t-24h, t] then
+    # dV/dt = r(t) - r(t-24h), which is zero while spending steadily. The
+    # defensible rate is V / window, and the derivative is kept separately as
+    # an acceleration signal.
+    trailing_rate_per_h: float | None = None
+    trailing_window_h: float | None = None
+
     stale_s: float | None = None
     available: bool = True
     unavailable_since: datetime | None = None
@@ -885,6 +910,20 @@ class ProviderState:
     @property
     def depleting(self) -> bool:
         return self.pay_model in DEPLETING
+
+    @property
+    def spend_rate_per_h(self) -> float | None:
+        """The number to put in front of a human as "burn", per pay model.
+
+        For a balance this is the fitted rate of decline. For a trailing spend
+        report it is the window average, never the derivative - showing dV/dt
+        for `anthropic` read 32.81 USD/h against an actual 81.70 USD per 24 h,
+        an order of magnitude out and in the wrong direction whenever the
+        window happened to be rolling off.
+        """
+        if self.pay_model in ACCUMULATING:
+            return self.trailing_rate_per_h
+        return self.burn.rate_per_h if self.burn and self.burn.ok else None
 
     @property
     def health_pct(self) -> float | None:
@@ -954,6 +993,14 @@ def build_state(store: Store, now: datetime, catalog: dict[str, dict[str, Any]],
 
 def _project(state: ProviderState, now: datetime) -> None:
     """Fill in runway / projected-at-refresh, or leave them None and say why."""
+    if state.pay_model in ACCUMULATING and state.value is not None and state.last_ok:
+        hours = trailing_window_h(state.last_ok.extra)
+        state.trailing_window_h = hours
+        state.trailing_rate_per_h = state.value / hours
+        # No balance exists, so there is no runway to compute. Deliberately
+        # left None rather than filled with something plausible.
+        return
+
     burn = state.burn
     if state.value is None or burn is None or not burn.ok or burn.rate_per_h is None:
         return
@@ -1208,19 +1255,34 @@ def rule_burn_anomaly(state: ProviderState, now: datetime) -> Candidate | None:
     if delta <= 0:
         return None
     factor = recent.rate_per_h / base.rate_per_h if base.rate_per_h else None
-    return Candidate(
-        key=f"burn_anomaly:{state.provider}",
-        rule="burn_anomaly",
-        level="warning",
-        provider=state.provider,
-        text=(
+    # For a trailing spend report the compared quantity is the rate of change
+    # of the reported total, which is an acceleration, not a spend rate. Saying
+    # "burn accelerated to X/h" there would put a number in front of a human
+    # that means something else entirely.
+    if state.pay_model in ACCUMULATING:
+        window = state.trailing_window_h or DEFAULT_TRAILING_H
+        headline = (
+            f"{state.provider} ({state.name}) trailing-{window:.0f}h cost is climbing "
+            f"{_fmt(recent.rate_per_h, state.unit)}/h faster than usual over the last "
+            f"{recent.span_s / 60:.0f} min, against a window baseline of "
+            f"{_fmt(base.rate_per_h, state.unit)}/h; reported cost now "
+            f"{_fmt(state.value, state.unit)} per {window:.0f} h "
+            f"({_fmt(state.trailing_rate_per_h, state.unit)}/h average)"
+        )
+    else:
+        headline = (
             f"{state.provider} ({state.name}) burn accelerated to "
             f"{_fmt(recent.rate_per_h, state.unit)}/h over the last "
             f"{recent.span_s / 60:.0f} min against a window baseline of "
             f"{_fmt(base.rate_per_h, state.unit)}/h"
             + (f" ({factor:.1f}x)" if factor else "")
-            + f"; deviation {abs(delta) / scale:.1f} MAD-equivalents"
-        ),
+        )
+    return Candidate(
+        key=f"burn_anomaly:{state.provider}",
+        rule="burn_anomaly",
+        level="warning",
+        provider=state.provider,
+        text=headline + f"; deviation {abs(delta) / scale:.1f} MAD-equivalents",
         evidence={
             "recent_burn_per_h": round(recent.rate_per_h, 6),
             "baseline_burn_per_h": round(base.rate_per_h, 6),
@@ -1631,9 +1693,10 @@ def snapshot(store: Store, now: datetime | None = None) -> dict[str, Any]:
             "unmeasurable": [],
         })
         bucket["providers"] += 1
-        if state.value is not None and state.burn and state.burn.ok:
+        rate = state.spend_rate_per_h
+        if state.value is not None and rate is not None:
             bucket["value"] += state.value
-            bucket["burn_per_h"] += state.burn.rate_per_h or 0.0
+            bucket["burn_per_h"] += rate
             bucket["measurable"] += 1
         else:
             bucket["unmeasurable"].append(state.provider)
@@ -1760,6 +1823,19 @@ def _impact_cell(state: ProviderState) -> str:
 
 def _burn_cell(state: ProviderState) -> str:
     burn = state.burn
+    if state.pay_model in ACCUMULATING:
+        rate = state.trailing_rate_per_h
+        if rate is None:
+            return '<span class="dim">no report yet</span>'
+        window = state.trailing_window_h or DEFAULT_TRAILING_H
+        trend = ""
+        if burn and burn.ok and burn.slope_per_h is not None:
+            sign = "+" if burn.slope_per_h >= 0 else ""
+            trend = (f", trend {sign}{burn.slope_per_h:,.1f}/h"
+                     if abs(burn.slope_per_h) >= 0.05 else ", steady")
+        sub = f"{_fmt(state.value, state.unit)} per {window:.0f} h{trend}"
+        return f'{escape(_fmt(rate, state.unit))}/h<div class="rowsub">{escape(sub)}</div>'
+
     if burn is None or not burn.ok or burn.rate_per_h is None:
         reason = burn.reason if burn and burn.reason else "no estimate"
         return f'<span class="dim">{escape(str(reason))}</span>'
@@ -1814,15 +1890,17 @@ def render_dashboard(snap: dict[str, Any]) -> str:
         note = (f'<div class="rowsub">{len(missing)} not measurable: '
                 f'{escape(", ".join(missing))}</div>') if missing else ""
         if group["pay_model"] == "spend_report":
-            head = "trailing spend"
+            head = "trailing reported cost"
+            rate_note = "window average, not a balance"
         else:
             head = "value on hand"
+            rate_note = "summed burn, this unit only"
         group_cards.append(f"""<div class="card">
 <h2>{escape(group["pay_model"])} &middot; {escape(unit)}</h2>
 <div class="big">{escape(_fmt(group["value"], unit))}</div>
 <div class="meta">{escape(head)} across {group["measurable"]}/{group["providers"]} providers</div>
 <div class="big" style="font-size:15px">{escape(_fmt(group["burn_per_h"], unit))}/h</div>
-<div class="meta">summed burn, this unit only</div>{note}
+<div class="meta">{escape(rate_note)}</div>{note}
 </div>""")
 
     alert_blocks = []
@@ -2062,7 +2140,8 @@ def text_report(snap: dict[str, Any]) -> str:
               f"{'burn/h':>14s} {'impact_h':>10s} {'fresh_s':>8s} {'ok%':>6s}  alerts")
     lines.append(header)
     for state in snap["providers"]:
-        burn = f"{state.burn.rate_per_h:,.3f}" if state.burn and state.burn.ok else "n/a"
+        rate = state.spend_rate_per_h
+        burn = f"{rate:,.3f}" if rate is not None else "n/a"
         impact = f"{state.runway_h:,.1f}" if state.runway_h is not None else "-"
         value = f"{state.value:,.2f}" if state.value is not None else "-"
         fresh = f"{state.stale_s:.0f}" if state.stale_s is not None else "-"

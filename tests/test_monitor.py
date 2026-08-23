@@ -281,6 +281,60 @@ def test_theil_sen_survives_a_step_shaped_series():
     assert m.theil_sen(points) > 0, "Theil-Sen still sees the rise"
 
 
+@pytest.mark.parametrize("window,hours", [
+    ({"window": "trailing_24h"}, 24.0),
+    ({"window": "trailing_720h"}, 720.0),
+    ({"window": None}, 24.0),
+    ({}, 24.0),
+    ({"window": "rolling"}, 24.0),
+])
+def test_trailing_window_is_read_from_the_payload_not_assumed(window, hours):
+    assert m.trailing_window_h(window) == hours
+
+
+def test_a_trailing_cost_report_reports_the_window_average_not_its_derivative():
+    """dV/dt of a trailing-window total is not a spend rate.
+
+    If V(t) is spend over [t-24h, t] then dV/dt = r(t) - r(t-24h), which is
+    zero while spending steadily and negative whenever the window rolls off
+    faster than new cost lands. Displaying it read `anthropic` at 32.81 USD/h
+    against an actual 81.70 USD per 24 h, and `meta_ads` at -11.39 USD/h, which
+    invites the conclusion that a paid-ads account is earning money.
+    """
+    state = _state(provider="anthropic", pay_model="spend_report", unit="usd",
+                   value=81.70)
+    state.last_ok = m.Reading("anthropic", T0, m.STATE_OK, 81.70, 200, 110.0,
+                              "cost_report", {"window": "trailing_24h"})
+    m._project(state, T0)
+    assert state.trailing_window_h == 24.0
+    assert state.trailing_rate_per_h == pytest.approx(81.70 / 24)
+    assert state.spend_rate_per_h == pytest.approx(3.404, abs=0.01)
+    assert state.runway_h is None, "a cost report has no balance to run out"
+
+
+def test_a_falling_trailing_report_never_shows_a_negative_spend_rate():
+    """The window rolling off is not income."""
+    state = _state(provider="meta_ads", pay_model="spend_report", unit="usd",
+                   value=337.00)
+    state.last_ok = m.Reading("meta_ads", T0, m.STATE_OK, 337.00, 200, 110.0,
+                              "spend_report_24h", {"window": "trailing_24h"})
+    # A steeply falling report: the derivative is negative...
+    falling = [m.Reading("meta_ads", T0 + timedelta(seconds=30 * i), m.STATE_OK,
+                         360.0 - i * 0.5, 200, 110.0, "spend_report_24h",
+                         {"window": "trailing_24h"}) for i in range(40)]
+    state.burn = m.estimate_burn(falling, "spend_report")
+    m._project(state, T0)
+    assert state.burn.rate_per_h < 0, "the derivative really is negative here"
+    assert state.spend_rate_per_h > 0, "but the spend rate never is"
+    assert state.spend_rate_per_h == pytest.approx(337.00 / 24, abs=0.01)
+
+
+def test_a_balance_provider_still_reports_its_fitted_decline():
+    state = _state(provider="brightdata", value=900.0)
+    state.burn = m.Estimate(8.87, -8.87, 200, 7200.0, 0.01)
+    assert state.spend_rate_per_h == pytest.approx(8.87)
+
+
 def test_estimate_refuses_rather_than_guessing_from_too_few_samples():
     readings = [
         m.Reading("brightdata", T0 + timedelta(seconds=30 * i), m.STATE_OK,

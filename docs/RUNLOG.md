@@ -239,3 +239,34 @@ on top, not the thing keeping the file clean.
 The "429 is injected pool-wide" row was withdrawn and replaced with the measured
 result, with the superseded claim struck through rather than deleted. A wrong
 measurement that reached a design decision is worth leaving visible.
+
+### 18:05Z — spend-report burn was an order of magnitude wrong; corrected
+
+A second read of the rendered dashboard caught a semantics error in the two
+`spend_report` providers. Burn was being computed as the fitted slope of the
+reported value — but that value is a trailing-window total, not a balance.
+
+With `V(t)` the spend over `[t−24h, t]`:
+
+```
+dV/dt = r(t) − r(t−24h)
+```
+
+which is zero while spending steadily and negative whenever the window rolls
+off faster than new cost lands. The dashboard was therefore showing:
+
+| Provider | shown as burn | actually |
+|---|---|---|
+| `anthropic` | 32.81 USD/h | 81.70 USD per 24 h = **3.40 USD/h** |
+| `meta_ads` | **−11.39 USD/h** | 340.47 USD per 24 h = **14.19 USD/h** |
+
+A negative burn on a paid-ads account reads as income. Both numbers are now
+`V / window`, with the window parsed from the payload (`"window":
+"trailing_24h"`) rather than assumed. The derivative is kept but labelled as
+what it is — a `trend`, feeding the anomaly rule — and the burn-anomaly text for
+these two providers no longer describes an acceleration as a spend rate.
+
+This is the same class of error as reading `{}` as zero: a plausible number in
+the right units that means something else. It survived the unit tests because
+every test asserted the estimator was internally consistent, and none asserted
+the estimate meant what the column header claimed.
