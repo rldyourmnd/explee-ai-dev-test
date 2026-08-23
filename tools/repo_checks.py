@@ -37,6 +37,14 @@ CLAIM_DOCS = ["README.md", "AGENTS.md", "docs/ACCEPTANCE.md", "docs/ORCHESTRATIO
               "docs/RUNLOG.md", "docs/HANDOFF.md"]
 
 TS_RE = re.compile(r"\b(20\d\d-\d\d-\d\d)T(\d\d:\d\d(?::\d\d(?:\.\d+)?)?)Z")
+# Bare time-of-day stamps like "21:46Z" are the dominant format in these
+# documents and were completely unchecked by the dated pattern above, which
+# requires a full ISO date. A 21:46Z stamp written at 21:42Z sailed through
+# the gate that exists to catch exactly that. Matched separately and dated to
+# today, since that is what a bare stamp means in a same-day log.
+BARE_TS_RE = re.compile(r"(?<![\d:-])([0-2]\d):([0-5]\d)Z\b")
+# The snapshot series runs every six hours from the six-hour mark.
+SCHEDULED_INSTANTS = {"22:14", "04:14", "10:14", "16:14"}
 # Markdown links to repository-relative paths: not URLs, not anchors.
 LINK_RE = re.compile(r"\[[^\]]*\]\((?!https?://|#|mailto:)([^)#\s]+)")
 
@@ -132,6 +140,21 @@ def check_no_future_timestamps(problems: list[str]) -> None:
                 if stamp > horizon and not forward.search(line):
                     _fail(problems, f"{rel}:{lineno}: timestamp {date}T{clock}Z is in the "
                                     f"future (now {now:%Y-%m-%dT%H:%M:%SZ})")
+            if forward.search(line):
+                continue
+            for hh, mm in BARE_TS_RE.findall(line):
+                # The declared six-hourly snapshot cadence is future BY DESIGN.
+                # Widening the forward-looking vocabulary until these stopped
+                # matching would have blunted the check into uselessness; naming
+                # the four scheduled instants keeps it sharp.
+                if f"{hh}:{mm}" in SCHEDULED_INSTANTS:
+                    continue
+                stamp = now.replace(hour=int(hh), minute=int(mm), second=0, microsecond=0)
+                # Only same-day stamps are meaningful; a bare time far in the past
+                # is yesterday's log, not a claim about the future.
+                if stamp > horizon:
+                    _fail(problems, f"{rel}:{lineno}: bare timestamp {hh}:{mm}Z is in the "
+                                    f"future (now {now:%H:%M}Z)")
 
 
 def check_referenced_paths_exist(problems: list[str]) -> None:

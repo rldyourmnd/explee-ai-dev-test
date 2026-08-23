@@ -106,7 +106,7 @@ drift — they have already caught a stale baseline, future timestamps, dead lin
 and an engine count pointed at the wrong directory.
 
 
-## UI convergence — measured on both live pages 21:46Z
+## UI convergence — measured on both live pages 21:41Z
 
 `docs/ui-spec.md` asks both pages to declare the **same token names**, so a
 reader meets one system rather than two that happen to resemble each other.
