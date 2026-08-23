@@ -1719,10 +1719,18 @@ class Ingestor:
     OFFSET_KEY = "raw_offset"
     EVAL_KEY = "last_eval_ts"
 
-    def __init__(self, store: Store, alerter: Alerter, raw_path: str) -> None:
+    def __init__(self, store: Store, alerter: Alerter, raw_path: str,
+                 since: datetime | None = None) -> None:
         self.store = store
         self.alerter = alerter
         self.raw_path = raw_path
+        # Records before this instant are skipped entirely, so derived state
+        # describes only the window from here on. This is what makes a "clean
+        # window" possible without touching the capture: the raw log stays one
+        # continuous file written by a collector that never restarted, and only
+        # what we derive from it is scoped. It is the whole point of deriving
+        # from an append-only log rather than holding state in memory.
+        self.since = since
         self.stop = threading.Event()
         self.last_eval: datetime | None = None
         self.last_ingest_wall: datetime | None = None
@@ -1828,6 +1836,15 @@ class Ingestor:
                 record = _decode(line)
                 if record is None:
                     continue
+                if self.since is not None:
+                    raw_ts = record.get("ts")
+                    if not isinstance(raw_ts, str):
+                        continue
+                    try:
+                        if parse_ts(raw_ts) < self.since:
+                            continue
+                    except ValueError:
+                        continue
                 total += 1
                 batch.append(record)
                 try:
@@ -2968,6 +2985,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="replay, then reconcile every alerts.jsonl line against the raw "
                              "window that produced it; exits non-zero if any line does not "
                              "reconcile")
+    parser.add_argument("--since", default=None,
+                        help="ignore raw records before this ISO-8601 instant, so derived "
+                             "state describes only the window from there on (the T1 clean "
+                             "window). The raw log is not modified.")
     parser.add_argument("--as-of", default=None,
                         help="evaluate the report at this ISO-8601 instant instead of the "
                              "end of the log; only meaningful with --once")
@@ -3002,7 +3023,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     store = Store(db_path)
     alerter = Alerter(store, alerts_path)
-    ingestor = Ingestor(store, alerter, args.raw)
+    ingestor = Ingestor(store, alerter, args.raw,
+                        since=parse_ts(args.since) if args.since else None)
 
     started = time.monotonic()
     count = ingestor.replay()

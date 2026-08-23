@@ -85,8 +85,13 @@ def local_digest(path: Path) -> tuple[str, int, int]:
     return digest.hexdigest(), size, lines
 
 
-def measure(path: Path) -> dict[str, Any]:
-    """Everything the snapshot asserts, computed from the bytes on disk."""
+def measure(path: Path, since: datetime | None = None) -> dict[str, Any]:
+    """Everything the snapshot asserts, computed from the bytes on disk.
+
+    `since` narrows the measurement to a sub-window without touching the file.
+    That is how the clean post-T1 window is described: the raw log stays one
+    continuous capture, and only what we derive from it is scoped.
+    """
     per_provider: dict[str, list[datetime]] = {}
     all_ts: list[datetime] = []
     malformed = 0
@@ -110,6 +115,8 @@ def measure(path: Path) -> dict[str, Any]:
                 when = parse_ts(record["ts"])
             except ValueError:
                 malformed += 1
+                continue
+            if since is not None and when < since:
                 continue
             all_ts.append(when)
             if record.get("kind") == "balance" and record.get("provider"):
@@ -159,10 +166,27 @@ def measure(path: Path) -> dict[str, Any]:
     }
 
 
+def next_sequence() -> int:
+    """The next number in the snapshot sequence.
+
+    Snapshots are taken every six hours and each is a standalone artifact, so
+    they are numbered rather than named by time: a reader can see the sequence
+    and its gaps at a glance, and the last one is unambiguous.
+    """
+    if not SNAPSHOT_DIR.exists():
+        return 1
+    used = [int(m.group(1)) for path in SNAPSHOT_DIR.glob("*.md")
+            if (m := re.match(r"^(\d+)-", path.name))]
+    return max(used, default=0) + 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--label", required=True,
-                        help="snapshot name, e.g. six-hour or twenty-four-hour")
+                        help="what this snapshot is, e.g. six-hour-minimum or clean-window")
+    parser.add_argument("--since", default=None,
+                        help="only measure records at or after this ISO-8601 instant, "
+                             "for describing a sub-window such as the one after T1")
     parser.add_argument("--dry-run", action="store_true",
                         help="measure and print, write nothing")
     args = parser.parse_args()
@@ -190,14 +214,16 @@ def main() -> int:
     remote_bytes_now = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else 0
     faithful = bool(remote_sha) and sha == remote_sha
     grew_by = max(0, remote_bytes_now - size)
-    stats = measure(LOCAL_RAW)
+    since = parse_ts(args.since) if args.since else None
+    stats = measure(LOCAL_RAW, since)
     after = collector_state()
     taken_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     commit = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short", "HEAD"],
                             capture_output=True, text=True).stdout.strip()
 
+    seq = next_sequence()
     body = [
-        f"# Window snapshot — {args.label}",
+        f"# Window snapshot {seq:02d} — {args.label}",
         "",
         "Immutable record of the observation window.",
         "",
@@ -212,6 +238,7 @@ def main() -> int:
         "",
         "| | |",
         "|---|---|",
+        f"| snapshot | **{seq:02d}** in the six-hourly sequence |",
         f"| taken at | `{taken_at}` |",
         f"| label | `{args.label}` |",
         f"| repository | `{commit}` |",
@@ -231,6 +258,9 @@ def main() -> int:
         "",
         "## The window",
         "",
+        ("" if not args.since else
+         f"Scoped to records at or after `{args.since}`. The raw log itself is one "
+         "continuous capture; only the measurement is narrowed.\n"),
         "| | |",
         "|---|---|",
         f"| first record | `{stats['first_ts']}` |",
@@ -281,10 +311,12 @@ def main() -> int:
         return 0 if faithful else 1
 
     SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
-    out = SNAPSHOT_DIR / f"{args.label}.md"
+    stem = f"{seq:02d}-{args.label}"
+    out = SNAPSHOT_DIR / f"{stem}.md"
     out.write_text(report, encoding="utf-8")
-    (SNAPSHOT_DIR / f"{args.label}.json").write_text(
-        json.dumps({"taken_at": taken_at, "label": args.label, "commit": commit,
+    (SNAPSHOT_DIR / f"{stem}.json").write_text(
+        json.dumps({"sequence": seq, "taken_at": taken_at, "label": args.label,
+                    "since": args.since, "commit": commit,
                     "collector_before": before, "collector_after": after,
                     "sha256_snapshot": sha, "sha256_host_prefix": remote_sha,
                     "faithful_prefix": faithful, "bytes": size, "lines": lines,

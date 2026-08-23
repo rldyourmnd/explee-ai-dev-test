@@ -7,6 +7,7 @@ read as two hundred incidents. Each of those has a test that asserts the
 fabricated answer is *not* produced, using payloads and numbers taken from the
 captured window rather than invented ones.
 """
+import hashlib
 import importlib.util
 import json
 import statistics
@@ -1318,6 +1319,41 @@ def test_a_partial_trailing_line_is_left_for_the_next_pass(tmp_path):
                      '"latency_ms":110,"body":"{\\"balance\\":1.0,\\"currency\\":\\"usd\\"}"}\n')
     ingestor.replay()
     assert store.coverage()["samples"] == before + 1
+
+
+def test_since_scopes_derived_state_without_touching_the_raw_log(tmp_path):
+    """How a clean window is produced without disturbing the capture.
+
+    The submitted artifacts must be the product of one stable configuration
+    rather than an accumulation across code versions. That is achieved by
+    replaying the raw log from a marker instant with frozen code — the collector
+    keeps running untouched throughout, because raw capture is independent of
+    alert logic. Deriving from an append-only log rather than from memory is
+    what buys this.
+    """
+    records = _cycles(
+        lambda _p, i: ('{"balance":%.2f,"currency":"usd"}' % (900 - i), 200), 60)
+    raw = _write(tmp_path / "raw.jsonl", records)
+    digest_before = hashlib.sha256(raw.read_bytes()).hexdigest()
+
+    marker = T0 + timedelta(seconds=30 * 30)
+    store = m.Store(str(tmp_path / "clean.sqlite"))
+    ingestor = m.Ingestor(store, m.Alerter(store, str(tmp_path / "clean-alerts.jsonl")),
+                          str(raw), since=marker)
+    ingestor.replay()
+
+    coverage = store.coverage()
+    assert coverage["samples"] > 0, "the scoped window must still contain data"
+    assert m.parse_ts(coverage["first_ts"]) >= marker, \
+        "no record before the marker may reach derived state"
+
+    # Roughly half the cycles are after the marker.
+    full = m.Store(str(tmp_path / "full.sqlite"))
+    m.Ingestor(full, m.Alerter(full, str(tmp_path / "full-alerts.jsonl")), str(raw)).replay()
+    assert coverage["samples"] < full.coverage()["samples"]
+
+    assert hashlib.sha256(raw.read_bytes()).hexdigest() == digest_before, \
+        "the raw log must not be modified"
 
 
 def test_ingestion_is_idempotent_under_repeated_replay(tmp_path):
