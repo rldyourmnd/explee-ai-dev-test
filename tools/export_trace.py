@@ -8,10 +8,14 @@ The employer asked for the REAL conversation, so this renders every user and
 assistant turn in order, including reasoning blocks, tool calls with their full
 inputs, and tool results. Nothing is paraphrased and nothing is dropped.
 
-Secrets are handled by refusing, not by redacting: silently rewriting the
-transcript would break the verbatim guarantee that makes the trace worth
-reading. If a credential pattern is found the export aborts and names the turn,
-so the leak gets fixed at the source instead of being papered over.
+That claim is enforced, not asserted. Credentials, truncated tool results,
+malformed JSONL lines, undecodable bytes and omitted image blocks all abort the
+export and name what would have been lost, because a trace whose header claims
+nothing was dropped while content is missing is worse than no trace: silently
+rewriting the transcript would break the verbatim guarantee that makes it worth
+reading, and disclosing a loss in a footnote does not make the document
+verbatim either. --allow-lossy renders a damaged log anyway and stamps the
+header so the file never claims to be something it is not.
 
 Usage:
     uv run tools/export_trace.py --session <uuid> --out task1/TRACE.md --title "Task 1"

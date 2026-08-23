@@ -1,7 +1,11 @@
 # TRACE-task3-quarantined.md is not part of the submission
 
-Same disposition as `TRACE-orchestration.md` (rule 5): it stays in this private
-repository as working history and is excluded from what ships to the employer.
+Same disposition as `TRACE-orchestration.md`. Both were first quarantined in
+place, then removed from the working tree at 18:52Z on the way to publication.
+The file this record describes therefore no longer exists beside it — **but it
+still exists in git history**, so publication requires the history rewrite in
+`docs/ACCEPTANCE.md`, not merely the deletion. A deleted file and a purged file
+are different things (`AGENTS.md` rule 5).
 
 ## What happened
 
@@ -28,16 +32,24 @@ Neither tested for project or client names, so they were never evidence that
 the trace was clean of them. A passing scan licenses a conclusion only about
 the patterns it actually matches.
 
-## Fixes worth making at the source
+## Fixes made at the source
 
-1. `--list` should require or infer `--project` and glob that slug only, instead
-   of every project on the machine.
-2. The exporter's refusal patterns cover credentials only. A trace that
+1. **Done** (`d7c2b24`). `--list` lists one project, defaulting to the slug for
+   the current directory, and its error path does not name the projects it found
+   instead. Four regression tests, verified to fail against the old code.
+2. **Open.** The exporter's refusal patterns cover credentials only. A trace that
    publishes verbatim also needs a foreign-identifier check - at minimum, project
-   slugs under `~/.claude/projects/` other than the one being exported.
-3. The `grep -c HostName` gate in `AGENTS.md` matches the bare word, so it can
-   never reach 0 in a trace that quotes the rule. Matching `HostName\s+\S+`
-   would test SSH config content rather than the word.
+   slugs under `~/.claude/projects/` other than the one being exported. `AGENTS.md`
+   now carries a manual slug scan, but manual is not the same as enforced, and the
+   scan that caught this leak should live in the tool.
+3. **Done** (`d7c2b24`). The `grep -c HostName` gate matched the bare word, so it
+   flagged its own instructions and could never reach 0 in a trace quoting the
+   rule. `HostName\s+\S+` was tried first and rejected: in
+   `grep -c HostName TRACE.md` the filename is the non-space token, so prose
+   still matched. The gate is anchored to `^\s*HostName\s+`, which is what SSH
+   config looks like. Measured on this trace: 6 false alarms before, 0 after.
 
-Not applied here: `tests/test_export_trace.py` is checked out modified by
-another live session and these changes belong with it.
+Separately, the lossy-export defect the external review found in the same tool
+is closed (`ca27622`): truncation, malformed JSONL, undecodable bytes and
+omitted image blocks now abort the export instead of producing a trace whose
+header claims nothing was dropped.
