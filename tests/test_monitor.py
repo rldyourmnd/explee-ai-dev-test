@@ -1069,6 +1069,111 @@ def test_aggregation_never_crosses_a_pay_model_or_a_currency(tmp_path):
         snap["groups"]["spend_report/usd"]["value"]
 
 
+def _condition_pipeline(tmp_path, cycles, name="raw.jsonl"):
+    """A provider that goes dark, so a condition moves through its lifecycle."""
+    def builder(_provider, i):
+        return (('{"balance":900.00,"currency":"usd"}', 200) if i < 5
+                else ('{"error":"upstream 500"}', 500))
+    return _pipeline(tmp_path, _cycles(builder, cycles), name=name)
+
+
+def test_a_condition_inside_its_sustain_window_reads_as_pending(tmp_path):
+    """Nothing has been written, so nothing may claim an incident was raised."""
+    store = m.Store(str(tmp_path / "monitor.sqlite"))
+    alerts = tmp_path / "alerts.jsonl"
+    alerter = m.Alerter(store, str(alerts))
+    candidate = m.Candidate(
+        key="runway:openrouter", rule="runway", level="warning", provider="openrouter",
+        text="openrouter reaches zero in 50 h", evidence={"runway_h": 50.0},
+        rule_class=m.CLASS_POLICY, sustain_s=300.0, signature="02|runway:warning:lt72")
+
+    # First tick starts the sustain clock; 60 s in, it is still holding.
+    alerter.process([candidate], T0)
+    alerter.process([candidate], T0 + timedelta(seconds=60))
+    status = m.condition_status(store, candidate, T0 + timedelta(seconds=60))
+    assert status["status"] == "pending"
+    assert status["sustain_remaining_s"] == pytest.approx(240.0, abs=1)
+    assert status["last_fired"] is None
+    assert _alert_lines(alerts) == [], "pending must mean nothing was written"
+
+    # Past the sustain period, a line is written and it reads as firing.
+    alerter.process([candidate], T0 + timedelta(seconds=400))
+    status = m.condition_status(store, candidate, T0 + timedelta(seconds=400))
+    assert status["status"] == "firing"
+    assert status["sustain_remaining_s"] == 0.0
+    assert len(_alert_lines(alerts)) == 1
+
+
+def test_a_deteriorating_condition_is_flagged_before_the_line_is_written(tmp_path):
+    store = m.Store(str(tmp_path / "monitor.sqlite"))
+    alerter = m.Alerter(store, str(tmp_path / "alerts.jsonl"))
+    calm = _runway_candidate(100.0)
+    alerter.process([calm], T0)
+    alerter.process([calm], T0 + timedelta(seconds=60))
+    assert m.condition_status(store, calm, T0 + timedelta(seconds=60))["deteriorated"] is False
+
+    worse = _runway_candidate(20.0)
+    status = m.condition_status(store, worse, T0 + timedelta(seconds=90))
+    assert status["status"] == "firing", "a line already exists for this key"
+    assert status["deteriorated"] is True, "the band worsened since that line"
+
+
+def test_the_dashboard_separates_pending_from_written(tmp_path):
+    store, _ingestor, _alerts = _condition_pipeline(tmp_path, 40)
+    html = m.render_dashboard(m.snapshot(store, T0 + timedelta(seconds=40 * 30)))
+    assert "Conditions holding now" in html
+    assert "Lines written to alerts.jsonl" in html
+    assert "nobody has been told" in html
+
+
+def test_a_condition_reads_as_firing_once_a_line_exists(tmp_path):
+    store, _ingestor, alerts = _condition_pipeline(tmp_path, 140)
+    snap = m.snapshot(store, T0 + timedelta(seconds=140 * 30))
+    fired = [c for c in snap["conditions"] if c["status"] == "firing"]
+    assert fired, "a written line must show as firing"
+    assert _alert_lines(alerts), "and the file must actually contain it"
+    assert fired[0]["last_fired"] is not None
+    html = m.render_dashboard(snap)
+    assert "Conditions holding now" in html
+    assert "Lines written to alerts.jsonl" in html
+
+
+def test_a_same_band_active_condition_is_not_marked_deteriorated(tmp_path):
+    store, _ingestor, _alerts = _condition_pipeline(tmp_path, 140)
+    snap = m.snapshot(store, T0 + timedelta(seconds=140 * 30))
+    firing = [c for c in snap["conditions"] if c["status"] == "firing"]
+    assert firing and not any(c["deteriorated"] for c in firing)
+
+
+def test_a_recovered_condition_leaves_the_live_list_but_not_the_record(tmp_path):
+    """The file is a record; it must not rewrite itself when things improve."""
+    def builder(_provider, i):
+        if i < 5 or i >= 130:
+            return ('{"balance":900.00,"currency":"usd"}', 200)
+        return ('{"error":"upstream 500"}', 500)
+
+    store, _ingestor, alerts = _pipeline(tmp_path, _cycles(builder, 160))
+    written = _alert_lines(alerts)
+    assert written, "the outage should have produced a line while it lasted"
+    snap = m.snapshot(store, T0 + timedelta(seconds=160 * 30))
+    assert not [c for c in snap["conditions"] if c["rule"] == "unavailable"], \
+        "a recovered condition must drop out of the live list"
+    assert len(_alert_lines(alerts)) == len(written), "the record must not shrink"
+
+
+def test_pending_conditions_rank_below_firing_ones(tmp_path):
+    pending = _state(provider="p_pending", value=1.0)
+    pending.runway_h = 2.0
+    pending.alerts = [{"level": "critical", "rule": "runway", "status": "pending"}]
+    firing = _state(provider="a_firing", value=1.0)
+    firing.runway_h = 50.0
+    firing.alerts = [{"level": "warning", "rule": "runway", "status": "firing"}]
+    calm = _state(provider="b_calm", value=100.0)
+    calm.runway_h = 900.0
+    ordered = sorted([pending, firing, calm], key=m.risk_key)
+    assert [s.provider for s in ordered] == ["a_firing", "p_pending", "b_calm"]
+
+
 def test_risk_sort_puts_alerting_providers_first_not_alphabetical(tmp_path):
     calm = _state(provider="zzz_calm", value=100.0)
     calm.runway_h = 900.0

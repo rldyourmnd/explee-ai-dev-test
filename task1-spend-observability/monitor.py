@@ -1762,14 +1762,50 @@ def risk_key(state: ProviderState) -> tuple[Any, ...]:
     first. Time-to-impact is hours, which is comparable across providers
     without ever putting USD, GBP and credits into the same arithmetic.
     """
-    worst = min((SEVERITY.get(a["level"], 9) for a in state.alerts), default=9)
+    # A firing condition outranks a merely pending one: something has actually
+    # been raised. Pending still outranks calm, because it is about to be.
+    firing = [a for a in state.alerts if a.get("status") == "firing"]
+    ranked = firing or state.alerts
+    worst = min((SEVERITY.get(a["level"], 9) for a in ranked), default=9)
     if state.alerts:
-        return (0, worst, state.runway_h if state.runway_h is not None else 1e9, state.provider)
+        tier = 0 if firing else 1
+        return (tier, worst, state.runway_h if state.runway_h is not None else 1e9,
+                state.provider)
     if not state.available:
-        return (1, 0, -(state.stale_s or 0), state.provider)
+        return (2, 0, -(state.stale_s or 0), state.provider)
     if state.runway_h is not None:
-        return (2, 0, state.runway_h, state.provider)
-    return (3, 0, 0.0, state.provider)
+        return (3, 0, state.runway_h, state.provider)
+    return (4, 0, 0.0, state.provider)
+
+
+def condition_status(store: Store, candidate: Candidate, now: datetime) -> dict[str, Any]:
+    """Where a holding condition sits in its lifecycle.
+
+    `pending`  the condition holds but no line has been written for it. Either
+               the sustain period has not elapsed, or it has and the next
+               evaluation will write one.
+    `firing`   a line has been written and the condition still holds.
+
+    The distinction matters because `alerts.jsonl` is the record of what a human
+    was actually told. A dashboard that renders both states the same way claims
+    an incident was raised when it may not have been.
+    """
+    prior = store.alert_state(candidate.key)
+    since = parse_ts(prior["active_since"]) if prior and prior["active_since"] else None
+    last_fired = prior["last_fired"] if prior else None
+    held = (now - since).total_seconds() if since else 0.0
+    return {
+        "status": "firing" if last_fired else "pending",
+        "held_s": round(held, 1),
+        "sustain_s": candidate.sustain_s,
+        "sustain_remaining_s": round(max(0.0, candidate.sustain_s - held), 1),
+        "last_fired": last_fired,
+        "band": candidate.signature,
+        "fired_band": prior["signature"] if prior else None,
+        "deteriorated": bool(
+            last_fired and prior
+            and signature_severity(candidate.signature) > signature_severity(prior["signature"])),
+    }
 
 
 def snapshot(store: Store, now: datetime | None = None) -> dict[str, Any]:
@@ -1777,15 +1813,24 @@ def snapshot(store: Store, now: datetime | None = None) -> dict[str, Any]:
     catalog = store.catalog()
     states = build_state(store, now, catalog)
 
+    # A condition that is holding but has not yet written a line is *pending*,
+    # not firing. Showing the two identically overstated the situation: the
+    # table implied an incident had been raised when nothing had reached
+    # alerts.jsonl and nobody had been told.
     active = {}
+    conditions: list[dict[str, Any]] = []
     for candidate in evaluate(states, now):
-        active.setdefault(candidate.provider, []).append({
-            "rule": candidate.rule,
-            "level": candidate.level,
-            "rule_class": candidate.rule_class,
-            "text": candidate.text,
-            "evidence": candidate.evidence,
-        })
+        entry = dict(condition_status(store, candidate, now),
+                     rule=candidate.rule,
+                     level=candidate.level,
+                     rule_class=candidate.rule_class,
+                     provider=candidate.provider,
+                     text=candidate.text,
+                     evidence=candidate.evidence)
+        active.setdefault(candidate.provider, []).append(entry)
+        conditions.append(entry)
+    conditions.sort(key=lambda c: (c["status"] != "firing", SEVERITY.get(c["level"], 9),
+                                   c.get("provider") or ""))
     for state in states:
         state.alerts = active.get(state.provider, [])
         state.events = store.events(limit=6, provider=state.provider)
@@ -1856,6 +1901,9 @@ def snapshot(store: Store, now: datetime | None = None) -> dict[str, Any]:
         "generated_at": iso(now),
         "providers": states,
         "groups": groups,
+        # Two different questions, deliberately not merged: `conditions` is what
+        # is true now, `alerts` is what was written to the file a human reads.
+        "conditions": conditions,
         "alerts": store.fired_alerts(limit=25),
         "events": store.events(limit=25),
         "coverage": dict(coverage, window_span_s=round(window_span, 1),
@@ -2010,10 +2058,21 @@ def render_dashboard(snap: dict[str, Any]) -> str:
 
     rows = []
     for state in states:
-        alert_pills = "".join(
-            f'<span class="pill p-{"crit" if a["level"] == "critical" else "warn"}">{escape(a["rule"])}</span> '
-            for a in state.alerts
-        ) or '<span class="dim">-</span>'
+        pills = []
+        for a in state.alerts:
+            if a["status"] == "firing":
+                cls = "crit" if a["level"] == "critical" else "warn"
+                title = f'firing since {a["last_fired"]}'
+                mark = ""
+            else:
+                cls = "dim"
+                left = a["sustain_remaining_s"]
+                title = (f'pending — {left:.0f}s of sustain left'
+                         if left > 0 else 'pending — writes on the next evaluation')
+                mark = "&hellip;"
+            pills.append(f'<span class="pill p-{cls}" title="{escape(title)}">'
+                         f'{escape(a["rule"])}{mark}</span> ')
+        alert_pills = "".join(pills) or '<span class="dim">-</span>'
         events = "".join(
             f'<div class="rowsub">{escape(e["kind"])} {escape(e["ts"][11:19])}Z '
             f'{"+" if e["detail"].get("delta", 0) > 0 else ""}{e["detail"].get("delta", "")}</div>'
@@ -2104,6 +2163,34 @@ def render_dashboard(snap: dict[str, Any]) -> str:
         alert_blocks.append('<div class="alert"><div class="t dim">'
                             'No alert has fired since the window opened.</div></div>')
 
+    # Conditions holding right now, which is a different question from what has
+    # been written to alerts.jsonl. One is the present, the other is the record.
+    condition_blocks = []
+    for cond in snap["conditions"][:12]:
+        if cond["status"] == "firing":
+            badge = ('<span class="pill p-crit">firing</span>'
+                     if cond["level"] == "critical"
+                     else '<span class="pill p-warn">firing</span>')
+            when = f'line written {escape(str(cond["last_fired"]))}'
+            if cond["deteriorated"]:
+                when += " &middot; <strong>worsened since</strong>, next evaluation writes again"
+        else:
+            badge = '<span class="pill p-dim">pending</span>'
+            left = cond["sustain_remaining_s"]
+            when = (f'held {cond["held_s"]:.0f}s of {cond["sustain_s"]:.0f}s required '
+                    f'&mdash; {left:.0f}s before a line is written'
+                    if left > 0 else
+                    'sustain met &mdash; a line is written on the next evaluation')
+        condition_blocks.append(f"""<div class="alert {escape(cond["level"])}">
+<div class="t">{badge}
+<span class="pill p-dim">{escape(cond["rule"])}</span>
+<strong>{escape(str(cond.get("provider") or "pool"))}</strong></div>
+<div class="t" style="margin-top:4px">{escape(cond["text"])}</div>
+<div class="e">{when}</div></div>""")
+    if not condition_blocks:
+        condition_blocks.append('<div class="alert"><div class="t ok">'
+                                'Nothing is currently in an alerting state.</div></div>')
+
     event_blocks = []
     for event in snap["events"][:12]:
         detail = event["detail"]
@@ -2157,9 +2244,18 @@ T0 {escape(coverage["first_ts"] or "-")} &middot; last {escape(coverage["last_ts
 </tr></thead><tbody>{"".join(rows)}</tbody></table>
 
 <div class="two" style="margin-top:24px">
-<div><h2>Alerts fired ({len(snap["alerts"])} in store)</h2>{"".join(alert_blocks)}</div>
-<div><h2>Events &mdash; top-ups and resets</h2>{"".join(event_blocks)}</div>
+<div><h2>Conditions holding now ({len(snap["conditions"])})</h2>
+<div class="meta" style="margin:-4px 0 10px">Live state. <em>pending</em> means the condition is
+holding but nothing has been written yet &mdash; nobody has been told.</div>
+{"".join(condition_blocks)}</div>
+<div><h2>Lines written to alerts.jsonl ({len(snap["alerts"])})</h2>
+<div class="meta" style="margin:-4px 0 10px">The record of what a human was actually told, newest
+first. A line appears when a condition starts and when it crosses a materiality band.</div>
+{"".join(alert_blocks)}</div>
 </div>
+
+<h2 style="margin-top:24px">Events &mdash; top-ups, resets and reverted blips</h2>
+<div class="two">{"".join(event_blocks)}</div>
 
 <h2 style="margin-top:24px">Collection health</h2>
 <div class="grid cols">
