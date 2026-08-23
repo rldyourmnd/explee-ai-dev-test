@@ -148,7 +148,11 @@ def main() -> int:
     print(f"| raw records | {records:,} |")
     print(f"| window | `{first}` -> `{last}` |")
     print(f"| repository | `{commit}` |")
-    print("| regenerate | `uv run tools/policy_sensitivity.py` |")
+    # The tool writes the document to stdout. Saying so matters: the previous
+    # wording omitted the redirect, and a run that looked successful left the
+    # document untouched for 45 minutes while the tables went to a log file.
+    print("| regenerate | `uv run tools/policy_sensitivity.py > "
+          "task1-spend-observability/POLICY-SENSITIVITY.md` |")
     print()
     print(f"Ground truth, computed from the raw log without reference to any threshold: "
           f"**{len(truth)} outages** of {GROUND_TRUTH_MIN_POLLS}+ consecutive failed polls, "
