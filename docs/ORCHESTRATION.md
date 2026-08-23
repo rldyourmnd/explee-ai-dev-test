@@ -273,6 +273,40 @@ externally-fetched public artifact in the submission, and it closes the
 deliverable this session could not verify locally because of a stale negative
 DNS cache.
 
+## Human decisions — all four settled, 20:20Z
+
+The four open decisions are closed. Recorded here because a decision that lives
+only in a chat message is a decision nobody can audit.
+
+**1. "Strictly per the task" on code-as-one-file.** `monitor.py` becomes
+self-sufficient with its own polling mode, but **only after the 22:14Z
+snapshot**. The second reviewer argued the one-file requirement was invented;
+the human overruled that and the reviewer was right only about timing. Nothing
+about the running system changes while the observation window is open — the
+window is the one thing that cannot be recreated.
+
+**2. Diarization is dropped.** Speaker and timestamp metrics leave Task 2
+entirely. The task asks which transcriber *hears our speech*, not who spoke.
+Declaring it out of scope closes two review findings in a line instead of hours
+of forced-alignment work, and a benchmark that measures fewer things honestly
+beats one that measures more things badly.
+
+**3. Nothing paid, at all** — no cloud STT, not even free tiers. Everything runs
+on the human's Modal GPUs with open models. **The consequence worth recording is
+not the money: the audio never leaves our perimeter**, which dissolves the corpus
+licence exposure entirely. We redistribute neither the audio nor a derivative, so
+the `NC` leg I flagged as contestable stops being load-bearing.
+
+**4. The reference-annotation blocker is dissolved, not budgeted.** Instead of
+paying for or hand-producing annotation, Task 2 uses a Russian IT recording that
+ships with a **human-made publisher transcript** — conference расшифровки,
+author-uploaded subtitles, published podcast transcripts. That reference is
+independent of every ranked engine, so **circularity disappears at the root**
+rather than being bounded by a six-segment slice, and it costs zero human hours.
+It requires a dated `PREREGISTRATION` amendment before any output, as does the
+earlier protocol change the reviewer correctly caught being slipped in
+unamended — amending in the open is what keeps a pre-registration worth having.
+
 ## Contradiction sweep, 18:59Z — standing order 1
 
 The three known contradictions are **closed**, each re-checked by running the
