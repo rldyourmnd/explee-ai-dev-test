@@ -145,6 +145,26 @@ Press Enter on what is there instead.
 The framing this repository uses everywhere else applies to messaging too:
 **an unverified send is an assumption, and an assumption is not evidence.**
 
+## Committing in a shared worktree
+
+**Use `git commit -- <paths>`. Never `git add` then `git commit`.**
+
+`git add` writes to an index every session in this worktree shares, so *any*
+window between staging and committing lets another session's commit sweep your
+staged files into its own. Narrowing what you stage shrinks the blast radius; it
+does not close the window, because the window is the mechanism.
+
+`git commit -- <paths>` commits working-tree content for those paths in one
+operation with no staging step. No window, no shared state.
+
+This bit three times on 2026-08-23: `7a90b2f` carried Task 1's monitor fixes
+under *"Record Task 2 publication"*, `1282ad1` carried Task 1's polling-loop
+tests under *"Task 2: power simulation"*, and one orchestrator change landed
+under an unrelated exporter subject. Nothing was ever lost — what was lost is
+**discoverability**, a rationale filed under a subject line nobody searching for
+it will read. A correct commit with the wrong message is a defect in the history,
+which is one of the artifacts being graded here.
+
 ## Evidence
 
 Every claim in a deliverable is a hypothesis plus the data behind it. "The API
