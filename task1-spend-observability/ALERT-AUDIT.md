@@ -21,64 +21,59 @@ It exits non-zero if any line fails to reconcile.
 
 | provenance | |
 |---|---|
-| alert lines audited | 11 |
-| raw records | 6,960 |
-| repository | `7a990f4` |
+| alert lines audited | 13 |
+| raw records | 9,744 |
+| repository | `bf7baac` |
+
+## Every line
+
+| # | when | rule | provider | headline | reconciled |
+|---:|---|---|---|---:|---|
+| 1 | 2026-08-23T16:48:58.531Z | `package_exhaustion` | `elevenlabs` | 44.0 h | yes |
+| 2 | 2026-08-23T16:48:58.531Z | `package_exhaustion` | `resend` | 182.0 h | yes |
+| 3 | 2026-08-23T16:48:58.531Z | `package_exhaustion` | `scrapfly` | 134.9 h | yes |
+| 4 | 2026-08-23T16:48:58.531Z | `runway` | `openrouter` | 55.6 h | yes |
+| 5 | 2026-08-23T17:00:29.033Z | `package_exhaustion` | `findymail` | 186.0 h | **no** |
+| 6 | 2026-08-23T17:07:59.407Z | `burn_anomaly` | `resend` | 20.4 MAD | yes |
+| 7 | 2026-08-23T17:08:59.455Z | `package_exhaustion` | `resend` | 157.1 h | yes |
+| 8 | 2026-08-23T17:22:30.111Z | `package_exhaustion` | `resend` | 71.8 h | yes |
+| 9 | 2026-08-23T17:44:01.213Z | `package_exhaustion` | `resend` | 47.8 h | yes |
+| 10 | 2026-08-23T18:03:32.259Z | `runway` | `openrouter` | 47.9 h | yes |
+| 11 | 2026-08-23T18:44:34.368Z | `package_exhaustion` | `bounceban` | 180.4 h | **no** |
+| 12 | 2026-08-23T21:05:45.480Z | `unavailable` | `zerobounce` | 934.9 s | yes |
+| 13 | 2026-08-23T21:08:16.622Z | `burn_anomaly` | `meta_ads` | 7.1 MAD | yes |
 
 ## State of this audit
 
 **This audit runs against the build currently deployed, and it fails: two lines
-of eleven do not reconcile.** Both were emitted by the running build, and
+of thirteen do not reconcile.** Both were emitted by the running build, and
 neither would be emitted by the code now in the repository.
 
-```
-[5]  2026-08-23T17:00:29Z  package_exhaustion  findymail
-     UNRECONCILED: rule package_exhaustion does not fire when re-run at this instant
+`findymail` at 17:00Z and `bounceban` at 18:44Z both fail the uncertainty guard —
+a projection may only fire if it survives its own estimate's uncertainty, that
+is, still holds when the burn is recomputed one MAD slower. `bounceban` also
+fails the counterfactual independently: remove either the reverted blip at
+17:00Z or the top-up at 18:00Z from its estimation window and the alert ceases
+to exist. Two different checks reaching the same line is the reason to believe
+both.
 
-[11] 2026-08-23T18:44:34Z  package_exhaustion  bounceban
-     without the reverted_blip at 2026-08-23T17:00:29Z (+3): the alert DISAPPEARS
-     without the top_up      at 2026-08-23T18:00:02Z (+3): the alert DISAPPEARS
-     UNRECONCILED: rule package_exhaustion does not fire when re-run at this instant
-     UNRECONCILED: caused solely by a reverted_blip at 2026-08-23T17:00:29Z
-     UNRECONCILED: caused solely by a top_up at 2026-08-23T18:00:02Z
-```
+**Why the deployed build does not have the fix yet.** Nothing about the running
+system changes while the observation window is open. The guard is committed and
+tested; it reaches the deployment after the six-hour snapshot. Until then this
+file honestly shows a failing audit rather than a passing one produced by code
+that is not running.
 
-`findymail` fails on the uncertainty guard alone. `bounceban` fails on it *and*
-is independently shown by the counterfactual to depend on two separate
-normal-operations events — remove either the reverted blip or the top-up from
-its estimation window and the alert ceases to exist. Two different checks
-reaching the same line is the reason to believe both.
-
-`bounceban` projects to exhaust with a ~17 h margin against a burn of 37.6
-credits/h whose MAD is 4.7. Remove a +3 credit event from its window and the
-projection no longer crosses the line. The alert exists because of a top-up,
-which is precisely the thing that must never produce one.
-
-The fix is a rule change, not a threshold tweak — a flat "2% of package" cannot
-tell this line apart from `findymail`'s at 5.98% or `resend`'s at 7.78%, both of
-which are legitimate. **A projection may now only fire if it survives its own
-estimate's uncertainty**: recomputed with the burn one dispersion (MAD) slower,
-the claim must still hold. That is not a tuned constant — the bound is the
-provider's own slope dispersion, so a steady provider is held tightly and a
-noisy one loosely.
-
-Measured effect, replayed over the same window: **11 lines become 9.** Both
-`findymail` at 17:00Z and `bounceban` at 18:44Z drop out; every `elevenlabs`,
-`resend`, `scrapfly` and `openrouter` line survives comfortably. With the guard
-in place the audit reconciles 9 of 9 and exits zero.
-
-**Why the deployed build does not have it yet.** The human's ruling is that
-nothing about the running system changes while the observation window is open.
-The guard is committed and tested; it reaches the deployment at the 22:14Z
-snapshot, at which point `alerts.jsonl` and this document are regenerated
-together against the full window. Until then this file honestly shows a failing
-audit rather than a passing one produced by code that is not running.
+**This file is a snapshot of a moving artifact.** `alerts.jsonl` accumulates
+while collection continues, and today's lines were produced by several
+successive versions of the alert rules. The submitted version is regenerated by
+replaying the clean post-T1 window with frozen code, so that it is the product
+of one configuration rather than an accumulation across versions.
 
 ## Full reconciliation output
 
 ```
-[replay] 6960 records in 21.0s from task1-spend-observability/data/raw_samples.jsonl
-Reconciling 11 alert lines against the raw window
+[replay] 9744 records in 34.2s from task1-spend-observability/data/raw_samples.jsonl
+Reconciling 13 alert lines against the raw window
 
 [1] 2026-08-23T16:48:58.531Z  warning  package_exhaustion  elevenlabs
      elevenlabs (Deepgram) is projected to exhaust its credits package 44.0 h from now, 199.2 h before the 2026-09-01 refresh; 867,131 of 1,000,000 credits left, bur
@@ -162,6 +157,20 @@ Reconciling 11 alert lines against the raw window
      UNRECONCILED: caused solely by a reverted_blip at 2026-08-23T17:00:29.313Z: removing it removes the alert
      UNRECONCILED: caused solely by a top_up at 2026-08-23T18:00:02.391Z: removing it removes the alert
 
+[12] 2026-08-23T21:05:45.480Z  warning  unavailable  zerobounce
+     zerobounce (NeverBounce) has returned no usable value for 15.6 min (last value 15.6 min ago); 31 consecutive failed polls, last state http_error HTTP 500
+     re-ran unavailable: 7 evidence fields compared
+     sustained 30s of 0s required
+     no top-up, reset or blip in the estimation window, so nothing to attribute the alert to
+     reconciled
+
+[13] 2026-08-23T21:08:16.622Z  warning  burn_anomaly  meta_ads
+     meta_ads (Google Ads) trailing-24h cost is climbing 12.50 USD/h faster than usual over the last 30 min, against a window baseline of -15.33 USD/h; reported cost
+     re-ran burn_anomaly: 10 evidence fields compared
+     sustained 302s of 300s required
+     no top-up, reset or blip in the estimation window, so nothing to attribute the alert to
+     reconciled
+
 Repeat lines, and what each one added
 
   resend / package_exhaustion: 4 lines
@@ -171,7 +180,7 @@ Repeat lines, and what each one added
   openrouter / runway: 2 lines
     + 74.6 min  runway:warning:lt72 -> runway:warning:lt48  runway 55.6 h -> 47.9 h
 
-unreconciled lines: 2 of 11
+unreconciled lines: 2 of 13
 
-auditee sha256[:16]: 9c5672bdcc2947bb -> 9c5672bdcc2947bb  unchanged
+auditee sha256[:16]: 7d5a3d057cd78c22 -> 7d5a3d057cd78c22  unchanged
 ```
