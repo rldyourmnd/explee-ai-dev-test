@@ -348,6 +348,37 @@ the trailing total turned upward; it may not say anyone spent faster.
 Same family as the viewport that was never 390, except the instrument was the
 reasoning rather than the tool.
 
+## A gate that writes is not safe to run as a check
+
+`tools/alert_audit_doc.py` verifies the alert log **and rewrites
+`ALERT-AUDIT.md`** as it goes. Running it to "check the gate" therefore mutates a
+tracked file — and in a worktree four sessions share, running it while another
+session is mid-edit puts a foreign write into their working copy.
+
+Separate the two jobs: a **verifier** exits non-zero and touches nothing; a
+**generator** writes. If one command must do both, it needs a `--check` mode that
+suppresses the write, and a third party checking someone else's gate should use
+only that mode.
+
+## `cmd | tail` reports tail's exit code, not the command's
+
+```bash
+uv run tools/alert_audit_doc.py 2>&1 | tail -1; echo "exit=$?"   # prints 0. Always.
+```
+
+`$?` after a pipeline is the **last** command's status. The audit was failing with
+exit 1 and this reported success, twice, on a gate whose entire purpose is its
+exit code.
+
+Capture the status of the command itself:
+
+```bash
+uv run tools/alert_audit_doc.py > /tmp/out 2>&1; rc=$?; tail -1 /tmp/out; echo "exit=$rc"
+```
+
+Same family as everything else here: the pipeline succeeded, and the thing it
+reported was not the thing under test.
+
 ## Check that the instrument honoured the conditions you asked for
 
 A measurement is only evidence if the setup you requested is the setup that ran.
