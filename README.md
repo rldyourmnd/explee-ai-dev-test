@@ -5,7 +5,7 @@ verbatim agent trace alongside its artifact.
 
 | Task | Deliverable | Status |
 |---|---|---|
-| [1 — Spend observability](task1-spend-observability/) | `monitor.py`, `alerts.jsonl`, public dashboard | collector running, monitor in progress |
+| [1 — Spend observability](task1-spend-observability/) | `monitor.py`, `alerts.jsonl`, public dashboard | collector running, monitor deployed; dashboard awaiting a DNS record |
 | [2 — STT comparison](task2-stt-benchmark/) | published comparison report | not started |
 | [3 — Harness artifact](task3-harness-artifact/) | one harness file + 2–3 lines | not started |
 
@@ -27,21 +27,37 @@ Measured, not assumed — from the first minutes of capture:
 | Behaviour | Evidence |
 |---|---|
 | Spend is continuous and observable | `brightdata` 951.99 → 949.05 → 948.83 over ~2 min (≈ −6.6 USD/h) |
-| HTTP 429 is injected across providers, not per-provider | `tremendous` and `findymail` both returned 429 in the same poll cycle |
-| Gateway timeouts happen | `tremendous` → `504` after 3.4 s |
+| ~~HTTP 429 is injected across providers, not per-provider~~ **withdrawn, see below** | ~~`tremendous` and `findymail` both returned 429 in the same poll cycle~~ |
+| HTTP 429 is per-provider | over 66 captured cycles, 429 hit **exactly one** provider each time, never two |
+| Gateway timeouts happen | `tremendous` → `504` after 3.4 s, ~3.1 s latency against 110 ms normal |
 | A provider can return valid JSON with no fields | `anthropic` returned `{}` once, then `cost_report` on the next 8 calls |
+
+**Correction.** The pool-wide reading of 429 was drawn from reconnaissance at
+16:01Z — twelve minutes *before* T0 — so it is not in the captured window at
+all, and it does not survive it. Task 1 re-tested it against 66 exact poll
+cycles and found 429 confined to `tremendous` (16×) and `findymail` (12×), one
+provider at a time, in runs of 1–2 cycles. The sustained per-provider signal is
+5xx: `meta_ads` 16 consecutive cycles, `bounceban` 13, `findymail` 11,
+`zerobounce` 11. This entry is left visible rather than quietly rewritten,
+because a wrong measurement that got shipped into a design is itself worth
+recording.
 
 Three design consequences:
 
-1. **429 must not be attributed to a provider.** Because it is injected across
-   the pool, an availability rule that fires per provider produces alert spam.
-   The rule has to look at the error rate across all providers at once.
+1. **Availability is per provider, with a sustain period.** 429 is not pool-wide,
+   so grouping availability across the pool would have hidden four genuine
+   multi-minute outages. What prevents spam from 504 singles is the length of
+   the staleness window (900 s, above the longest outage measured), not a
+   pool-wide grouping. A separate pool-wide rule still exists for the case where
+   most of the estate goes dark at once, thresholded above the worst cycle
+   observed (4 of 15).
 2. **`{}` is a third state.** Parsing it into `value = 0` would fabricate a
    balance collapse and a critical alert. It is recorded as `schema_miss`,
    distinct from both a value and an HTTP error.
-3. **Burn rate must be gap-aware.** Rates are differences between polls, and
-   429/504 tear holes in the series. A naive `Δbalance / Δt` across a five-minute
-   hole mixes spend with any top-up that happened inside it.
+3. **Burn rate must be gap-aware and jump-aware.** Rates are differences between
+   polls, and 429/504 tear holes in the series. A naive `Δbalance / Δt` across a
+   five-minute hole mixes spend with any top-up that happened inside it — for
+   `findymail` it reports the balance *rising* by 3623 credits/h.
 
 ## Known measurement limit
 

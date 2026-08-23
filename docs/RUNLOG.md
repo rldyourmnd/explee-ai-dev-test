@@ -210,3 +210,32 @@ alerts.jsonl             : 6 lines, regenerated against the whole window
 ```
 
 Still pending, unchanged: the public DNS record. Nothing else waits on it.
+
+### 17:50Z — restart-preserves-state verified on the deployment, not just in tests
+
+"Restart preserves history and alert state" is a definition-of-done item, so it
+was checked against the running deployment rather than only against fixtures.
+
+```
+BEFORE  alerts=6 samples=2730 fired=6 sha=35d3f1c927986b2e
+AFTER   alerts=6 samples=2745 fired=6 sha=35d3f1c927986b2e
+collector active before and after; never restarted
+```
+
+`alerts.jsonl` is byte-identical across the restart — same digest, not merely
+the same line count — so no live alert re-fired and no line was duplicated. All
+six `last_fired` timestamps survived in `alert_state`, which is what holds the
+cooldown across a process boundary. Readings grew 2730 → 2745 because the tail
+picked up new samples, not because anything was re-ingested: the restart logged
+`[replay] 0 records`, resuming from the stored byte offset.
+
+The two properties are deliberately independent. Ingestion is idempotent under a
+full re-read (readings key on `(provider, ts)`, alerts on a content hash), so a
+lost offset would cost time and not correctness; the offset is an optimisation
+on top, not the thing keeping the file clean.
+
+### 17:52Z — 429 correction landed in the repository README
+
+The "429 is injected pool-wide" row was withdrawn and replaced with the measured
+result, with the superseded claim struck through rather than deleted. A wrong
+measurement that reached a design decision is worth leaving visible.
