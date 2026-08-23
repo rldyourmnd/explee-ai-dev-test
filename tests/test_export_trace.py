@@ -522,3 +522,89 @@ def test_ordinary_in_project_commands_are_not_flagged():
     for cmd in ["ls -la task3-harness-artifact/", "grep -rn foo tools/",
                 "git status --short", "ls ~/.claude/skills"]:
         assert et.enumerating_reason("Bash", cmd) is None, cmd
+
+
+def test_excision_never_touches_reasoning_messages_or_other_blocks():
+    """Excising by turn takes the tool results in it and nothing else.
+
+    docs/TASK.md wants every message and every correction. An excision removes
+    output from a command that should not have been run - never a turn's
+    thinking, text, or the tool call itself.
+    """
+    use, res = _call_and_result("tu_1", "listing\nlines")
+    records = [
+        _turn("assistant", [{"type": "thinking", "thinking": "why I did it"},
+                            {"type": "text", "text": "a correction I made"}, use]),
+        _turn("user", [res]),
+    ]
+    md, _ = et.build(records, "T", "s", Path("x.jsonl"), None, None, None, {"1", "2"})
+    assert "why I did it" in md, "reasoning must survive"
+    assert "a correction I made" in md, "messages and corrections must survive"
+    assert "Tool call — `ListAgents`" in md, "the call itself stays; only its result goes"
+    assert "listing" not in md
+
+
+def test_excision_removes_the_whole_result_not_the_matching_lines():
+    # 4 bad names inside 52 lines: leaving 48 would invite the question of what
+    # the rest contained, so the unit of removal is the whole result
+    body = "\n".join(["clean"] * 48 + ["-Users-dev-work-unrelated-client"] * 4)
+    use, res = _call_and_result("tu_1", body)
+    records = [_turn("assistant", [use]), _turn("user", [res])]
+    md, _ = et.build(records, "T", "s", Path("x.jsonl"), None, None, None, {"tu_1"})
+    assert "clean" not in md, "the whole result goes, not just the matching lines"
+    assert "52 lines removed" in md
+
+
+# Four false positives reported from task 2's real session. A guard that cries
+# wolf gets routed around, so each is pinned here with the command that produced
+# it, alongside the true positive it must not stop catching.
+import json as _json
+
+
+def _bash(cmd, description="check modal container listing settings"):
+    return _json.dumps({"command": cmd, "description": description})
+
+
+def test_grep_of_own_source_is_not_a_container_listing():
+    # matched the word max_containerS; nothing was listed
+    cmd = 'grep -n "max_containers|scaledown_window|gpu=" task2-stt-benchmark/modal_app/*.py'
+    assert et.enumerating_reason("Bash", _bash(cmd)) is None
+
+
+def test_help_output_is_not_an_enumeration():
+    # the exporter's own help text describes --list; describing is not listing
+    assert et.enumerating_reason("Bash", _bash("uv run tools/export_trace.py --help")) is None
+
+
+def test_project_scoped_list_is_native():
+    # this is the fix for the original unscoped listing, not a new instance of it
+    assert et.enumerating_reason("Bash", _bash("uv run tools/export_trace.py --list")) is None
+
+
+def test_list_pointed_at_another_project_still_flags():
+    cmd = "uv run tools/export_trace.py --list --project -Users-someone-else-thing"
+    assert et.enumerating_reason("Bash", _bash(cmd)) == "project listing"
+
+
+def test_the_projects_own_slug_with_trailing_punctuation_is_native():
+    own = "-Users-dev-work-this-project"
+    assert et.scan_foreign_slugs(f"exported from {own}.", own) == []
+    assert et.scan_foreign_slugs(f"({own})", own) == []
+
+
+def test_agent_prose_does_not_trigger_enumeration_flags():
+    # the description is what the agent wrote about the call, not the call
+    payload = _json.dumps({"command": "git status --short",
+                           "description": "list every docker container and session"})
+    assert et.enumerating_reason("Bash", payload) is None
+
+
+def test_real_enumerators_are_still_caught_after_narrowing():
+    for cmd, expected in [("docker ps -a", "container listing"),
+                          ("modal app list", "container listing"),
+                          ("gh repo list someorg", "repository listing"),
+                          ("cat ~/.ssh/config", "host configuration"),
+                          ("ls ~/Developer", "home directory listing"),
+                          ("cd /tmp && docker ps", "container listing")]:
+        assert et.enumerating_reason("Bash", _bash(cmd, "")) == expected, cmd
+    assert et.enumerating_reason("ListAgents", "{}") == "session listing"

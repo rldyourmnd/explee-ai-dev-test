@@ -17,6 +17,20 @@ reading, and disclosing a loss in a footnote does not make the document
 verbatim either. --allow-lossy renders a damaged log anyway and stamps the
 header so the file never claims to be something it is not.
 
+Excision is the one permitted modification, and it is deliberately not
+redaction. Redaction matches content and deletes whatever the pattern hit: the
+operation is unreproducible, its extent is unknowable to a reader, and a
+confidentiality removal is indistinguishable from deleting something
+inconvenient. --excise instead addresses a named unit - one tool result, by turn
+number or tool-call id - removes it whole, and has the tool state in place what
+was removed, what produced it, why, and how many lines went. A reader sees a
+complete transcript with a stated, countable, addressable hole rather than a
+document that has been quietly rewritten. The whole result goes, never the
+matching lines inside it: removing 4 names from a 52-line listing would leave 48
+lines of an enumeration that should not have been run, and invite the question
+of what the other 48 held. Messages, reasoning, corrections and failed attempts
+are never touched.
+
 Usage:
     uv run tools/export_trace.py --session <uuid> --out task1/TRACE.md --title "Task 1"
     uv run tools/export_trace.py --list            # this project only
@@ -83,29 +97,59 @@ SUPPORTED_BLOCKS = frozenset({"text", "thinking", "tool_use", "tool_result"})
 # one will be a command nobody here has run yet. Deliberately narrow: it targets
 # calls that cross a project boundary, not ordinary listing inside this project,
 # because a guard that fires on every `ls` gets switched off.
+# Anchored to a command position - start of line, or after a shell separator -
+# so the verb has to be the thing being RUN. Matching these words anywhere in
+# the payload flagged `grep "max_containers" modal_app/*.py`, which lists
+# nothing, and a guard that fires on a grep of your own source is a guard people
+# route around.
+_CMD = r"(?:^|[;&|]\s*|\$\(\s*)"
 ENUMERATING_CALLS: list[tuple[str, re.Pattern[str]]] = [
-    ("session listing", re.compile(r"\b(cmux\s+(list|ls)\b|list-sessions|ListAgents)")),
-    ("project listing", re.compile(r"export_trace\.py\s+--list|\.claude/projects/?\s*$|"
-                                   r"ls\s+[^|;]*\.claude/projects")),
-    ("container listing", re.compile(r"\bdocker\s+(ps|container\s+ls)\b|\bmodal\s+app\s+list\b")),
-    ("repository listing", re.compile(r"\bgh\s+repo\s+list\b|\bgh\s+search\s+repos\b")),
-    ("host configuration", re.compile(r"(cat|less|head|tail|grep)[^|;]*\.ssh/config|"
-                                      r"\bknown_hosts\b")),
+    ("session listing", re.compile(_CMD + r"(?:cmux\s+(?:list|ls)\b|\S*list-sessions\b)")),
+    # export_trace --list is NOT here: it is project-scoped by construction, and
+    # it is the fix for the original unscoped listing. Only pointing it at
+    # another project enumerates anything.
+    ("project listing", re.compile(r"--project(?:=|\s+)\S+|" + _CMD + r"ls\s+[^|;]*\.claude/projects")),
+    ("container listing", re.compile(_CMD + r"(?:docker\s+(?:ps|container\s+ls)\b|"
+                                            r"modal\s+app\s+list\b)")),
+    ("repository listing", re.compile(_CMD + r"gh\s+(?:repo\s+list|search\s+repos)\b")),
+    ("host configuration", re.compile(r"[^|;]*\.ssh/config|\bknown_hosts\b")),
     # Only when the listing targets the parent itself. `ls ~/Developer` shows
     # every project on the machine; `ls -d ~/Developer/org/one-project` checks
     # that one path exists and enumerates nothing, and flagging it would train
     # the operator to wave the guard through.
     ("home directory listing",
-     re.compile(r"\bls\b(?![^|;]*\s-\w*d\b)[^|;]*~/(?:Developer|Projects|src|work)/?(?=[\s;|\"']|\\n|$)")),
+     re.compile(_CMD + r"ls\b(?![^|;]*\s-\w*d\b)[^|;]*~/(?:Developer|Projects|src|work)/?(?=[\s;|\"']|\\n|$)")),
 ]
+
+# Fields carrying what was actually executed. A Bash `description` is prose the
+# agent wrote about the call; scanning it flagged calls whose description merely
+# mentioned containers or listing. Provenance is the command, not the caption.
+COMMAND_FIELDS = ("command", "query", "cmd", "script")
+
+
+def command_text(payload: str) -> str:
+    """The executed part of a tool input, without the agent's own prose."""
+    try:
+        parsed = json.loads(payload)
+    except (json.JSONDecodeError, TypeError):
+        return payload
+    if not isinstance(parsed, dict):
+        return payload
+    parts = [str(parsed[f]) for f in COMMAND_FIELDS if isinstance(parsed.get(f), str)]
+    return "\n".join(parts) if parts else ""
 
 
 def enumerating_reason(tool_name: str, payload: str) -> str | None:
     """Name the enumeration class of a call, or None if it does not enumerate."""
     if tool_name == "ListAgents":
         return "session listing"
+    command = command_text(payload)
+    # `--help` prints a tool's documentation. The exporter's own help text
+    # describes --list, which is not the same as having listed anything.
+    if re.search(r"(?:^|\s)--help\b", command):
+        return None
     for reason, pattern in ENUMERATING_CALLS:
-        if pattern.search(payload):
+        if pattern.search(command):
             return reason
     return None
 
@@ -241,7 +285,12 @@ def scan_foreign_slugs(text: str, permitted: str | None) -> list[str]:
     home = "-".join(permitted.split("-")[:3])
     found: list[str] = []
     for match in FOREIGN_SLUG.finditer(text):
-        slug = match.group(0)
+        # A slug written in prose collects the sentence's punctuation. Without
+        # this the project's OWN slug followed by a full stop compares unequal
+        # to `permitted` and reports as foreign - which would block every trace
+        # this repository ever exports, since its own slug appears in paths,
+        # in --list output and in the AGENTS.md rule-3 scan itself.
+        slug = match.group(0).rstrip("._-")
         # A prefix of the permitted slug is the same project named shorter, not
         # a different one.
         if slug == permitted or permitted.startswith(slug):
