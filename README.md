@@ -1,13 +1,19 @@
 # Explee — AI Dev Test Task
 
-Three deliverables, one repository, one module per task. Every task ships a
-verbatim agent trace alongside its artifact.
+Three deliverables, one repository, one module per task. Each task ships a
+verbatim agent trace alongside its artifact — with one exception, recorded rather
+than papered over: Task 3's trace was quarantined for a confidentiality leak and
+is not part of the submission. See
+[`task3-harness-artifact/QUARANTINE.md`](task3-harness-artifact/QUARANTINE.md).
 
 | Task | Deliverable | Status |
 |---|---|---|
-| [1 — Spend observability](task1-spend-observability/) | `monitor.py`, `alerts.jsonl`, public dashboard | collector running, monitor deployed; dashboard awaiting a DNS record |
-| [2 — STT comparison](task2-stt-benchmark/) | published comparison report | not started |
-| [3 — Harness artifact](task3-harness-artifact/) | one harness file + 2–3 lines | not started |
+| [1 — Spend observability](task1-spend-observability/) | `monitor.py`, `alerts.jsonl`, public dashboard | collector running gap-free since T0; monitor deployed and verified; dashboard awaiting a DNS record |
+| [2 — STT comparison](task2-stt-benchmark/) | published comparison report | not started — awaiting scope |
+| [3 — Harness artifact](task3-harness-artifact/) | one harness file + 2–3 lines | artifact delivered; trace quarantined, see above |
+
+Live status, with the measurement behind every claim, is in
+[docs/ORCHESTRATION.md](docs/ORCHESTRATION.md).
 
 ## Why the collector started before anything else
 

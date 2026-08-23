@@ -5,7 +5,7 @@ single place that says what is true right now, with the measurement behind each
 claim. Maintained by the orchestrator (`surface:3`); workers report, they do not
 edit this file.
 
-**Last heartbeat: 2026-08-23T17:40Z.**
+**Last heartbeat: 2026-08-23T17:52Z.**
 
 ## ESCALATIONS — open, for the human
 
@@ -48,13 +48,16 @@ endpoint, so an interruption is unrecoverable and cannot be faked.
 |---|---|
 | State | `active` |
 | T0 | `2026-08-23T16:13:26.775Z` (first record, matches the logged T0) |
-| Last record | `2026-08-23T17:39:31.410Z`, 27 s before the check |
-| Lines | 2768 (+480 since 17:24Z) |
-| Growth | 31.8 lines/min over 15.1 min — matches the expected ~32 |
+| Last record | `2026-08-23T17:51:32.040Z`, 26 s before the check |
+| Lines | 3152 (+384 since 17:39Z) |
+| Growth | 32.0 lines/min over 12.0 min — matches the expected ~32 |
 | Gaps > 45 s | **0**, verified across every consecutive record pair |
 | Malformed lines | 0 |
-| Elapsed | 1 h 26 m of the 6 h minimum |
-| 6 h mark | `2026-08-23T22:14Z` — **4 h 34 m remaining** |
+| Elapsed | 1 h 38 m of the 6 h minimum |
+| 6 h mark | `2026-08-23T22:14Z` — **4 h 22 m remaining** |
+
+Task 1 restarted its **monitor** container this cycle and verified the collector
+was `active` before and after; the sampler itself was never touched.
 
 Task 1 deployed its monitor against this log at 17:10Z with the data directory
 mounted **read-only**, which makes rule 1 structural rather than a promise, and
@@ -76,10 +79,33 @@ one invalidates the submission.
 **Unblocked and working.** The owner closed the DNS menu at ~17:30Z; the agent is
 back on "deploy dashboard publicly" as of 17:40Z, 12 min into the step.
 
-Committed `79be7bd` since the last heartbeat — stops a reverted balance blip
-being read as phantom spend, reasoned against a provider burning 0.28 USD/h.
-That is the kind of correction that only comes from looking at real captured
-data, which is what the 6 h window is for.
+Four commits since the last heartbeat. The one that matters most is a retraction:
+
+**`fdd04b8` — the repository's headline claim was wrong, and Task 1 withdrew it.**
+`README.md` asserted under "Measured, not assumed" that *429 is injected across
+providers, not per-provider*, and derived a design rule from it. The evidence was
+reconnaissance at 16:01Z — **twelve minutes before T0**, so outside the captured
+window. Re-tested over 66 exact poll cycles: 429 hit **exactly one** provider
+every time, never two, confined to `tremendous` (16×) and `findymail` (12×) in
+runs of 1–2 cycles. The sustained per-provider signal is 5xx, 11–16 consecutive
+cycles on one provider.
+
+Grouping availability pool-wide, as the README prescribed, **would have hidden
+all four genuine multi-minute outages**. The shipped rule is per-provider with a
+900 s staleness window, plus a pool-wide rule thresholded above the worst cycle
+observed (4 of 15). The superseded row is struck through rather than deleted,
+which is the right call: a wrong measurement that reached a design decision is
+worth leaving visible.
+
+This is the "claim without evidence" failure mode caught by the agent that made
+it, against its own headline claim, before anyone asked. Also `347b115` (report
+a trailing-window cost as a rate, not its derivative) and `79be7bd` (stop reading
+a reverted balance blip as phantom spend).
+
+Durability evidence on the deployment, measured rather than asserted:
+`alerts.jsonl` is **byte-identical across a container restart** — same `sha256`,
+not merely the same line count — all six `last_fired` timestamps survive, and the
+restart resumed from the stored offset with `[replay] 0 records`.
 
 DNS itself is still unresolved as a public-hostname question; it remains
 escalation #4 until a URL answers in incognito.
@@ -255,6 +281,10 @@ before each push, never after:
 |---|---|---|
 | 17:32Z | 84 passed, ruff clean, both exit 0 | `f086fe9..9c11385`, 7 commits |
 | 17:41Z | **93 passed**, ruff clean, both exit 0 | `ae2c7cb..79be7bd`, 2 commits |
+| 17:53Z | **101 passed**, ruff clean, both exit 0 | `dc0125d..`, 4 commits |
+
+Test count 84 → 93 → 101 across the session; each rise came with the change it
+covers rather than after it.
 
 The test count rose 84 → 93 because Task 3 shipped tests with its exporter fix
 rather than asserting it worked.
@@ -295,3 +325,4 @@ entries promptly, at the same time as the `--list` warning.
 | 17:14Z | `active`, 1904 lines, +31.9/min, 0 gaps | T1 monitor deployed and measured, now **blocked on DNS** → escalated; T3 committed `f9ef23b` but its `TRACE.md` carries a **rule-3 leak** (unrelated client ×20) → returned to owner, escalated; T2 unchanged |
 | 17:25Z | `active`, 2288 lines, +32.1/min, 0 gaps | T3 quarantined the trace cleanly (`2eeaefc`) and root-caused it to the shared exporter — Tasks 1 and 2 are exposed to the same defect; T1 still holding the DNS menu, unchanged; T2 unchanged |
 | 17:40Z | `active`, 2768 lines, +31.8/min, 0 gaps | T1 unblocked, deploying dashboard, committed `79be7bd`; T3 fixed both exporter defects in `d7c2b24`, verified by running `--list` (0 foreign slugs) — cross-cutting risk **closed**; gates green at 93 passed, pushed to `origin/main`; T2 unchanged |
+| 17:52Z | `active`, 3152 lines, +32.0/min, 0 gaps | T1 withdrew the pool-wide 429 claim against 66 cycles of captured data (`fdd04b8`) and proved restart durability by `sha256`; README status table corrected by this session — it still said Task 3 "not started" and promised a trace for every task; T3 idle, artifact done, parked on the owner's trace decision; T2 unchanged |
