@@ -45,7 +45,7 @@ is the honest state, not a formatting placeholder.
 
 | # | Deliverable | Path / URL | Owner | Status | Verification command | Final SHA / hash |
 |---|---|---|---|---|---|---|
-| 2.1 | Task directory | `task2-stt-benchmark/` | `surface:5` | **ABSENT** | `test -d task2-stt-benchmark` | — |
+| 2.1 | Task directory | `task2-stt-benchmark/` | `surface:5` | **PRESENT** as of 18:54Z — `surface:5` active, writing metric tests | `test -d task2-stt-benchmark` | — |
 | 2.2 | Brief | `docs/briefs/task2.md` | `surface:3` | present, committed this pass | `git ls-files --error-unmatch docs/briefs/task2.md` | — |
 | 2.3 | Corpus manifest + frozen audio hash | TBD | `surface:5` | ABSENT | `sha256sum <audio>` recorded before any engine is run | — |
 | 2.4 | Gold reference transcript | TBD | `surface:5` | ABSENT | two annotators + adjudication, policy pre-registered | — |
@@ -58,7 +58,7 @@ is the honest state, not a formatting placeholder.
 
 | # | Deliverable | Path / URL | Owner | Status | Verification command | Final SHA / hash |
 |---|---|---|---|---|---|---|
-| 3.1 | Harness artifact | `task3-harness-artifact/reviewer-protocol.md` | `surface:8` | EXISTS-UNVERIFIED | `sha256sum` of source *and* submitted file, plus `diff` — identity is claimed, not yet proven | — |
+| 3.1 | Harness artifact | `task3-harness-artifact/reviewer-protocol.md` | `surface:8` | **DONE** — verified independently by `surface:3` at 18:55Z, all three copies agree | `shasum -a 256 task3-harness-artifact/reviewer-protocol.md`; same on the installed plugin copy; and `gh api repos/nddev-it-com/rldyour-claudecode/contents/…?ref=33c9185 --jq .content \| base64 -d \| shasum -a 256` | `f4f1424b2f5b75a62e7e9864d5cfd3a4150d16aee6760d270911abbb2e816e04` |
 | 3.2 | 2–3 line explanation | `task3-harness-artifact/README.md` | `surface:8` | EXISTS-UNVERIFIED | `git ls-files --error-unmatch $_` | — |
 | 3.3 | Clean trace | `task3-harness-artifact/TRACE.md` | `surface:8` | **BLOCKED** — decision 2 | export without truncation, then scan | — |
 

@@ -5,9 +5,38 @@ single place that says what is true right now, with the measurement behind each
 claim. Maintained by the orchestrator (`surface:3`); workers report, they do not
 edit this file.
 
-**Last heartbeat: 2026-08-23T18:40Z.**
+**Last heartbeat: 2026-08-23T18:54Z.**
 
-## STATE CHANGE 18:28Z — all three workers are idle
+## STATE CHANGE 18:54Z — all three workers active for the first time
+
+The 18:28Z stall is over. `surface:2` is probing DNS for
+`spend.nddev.it.com`, `surface:5` is running Task 2 metric tests, and
+`surface:8` is fixing the dynamic-import pattern behind the pyright count.
+Task 2 exists on disk for the first time — the review called its absence the
+largest recoverable threat to the submission.
+
+**Row 3.1 verified rather than accepted.** `surface:8` produced
+`PROVENANCE.md` claiming the harness artifact is byte-identical to its published
+source. This session checked all three copies independently instead of taking
+the claim:
+
+| Copy | SHA-256 |
+|---|---|
+| Submitted file | `f4f1424b…e816e04` |
+| Installed plugin copy | `f4f1424b…e816e04` |
+| Published, fetched from the GitHub API at pinned commit `33c9185` | `f4f1424b…e816e04` |
+
+All three agree, so row 3.1 is the first `DONE` on a task deliverable. This is
+what the matrix is for: the claim was true, and it is now *provable by a reader
+who trusts nothing we say* — which is the standard the external reviewer had to
+apply and could not meet with anything else in the repository.
+
+`PROVENANCE.md` also volunteers both artifact defects the review found, and
+explains why neither is fixed here: the submitted file must stay byte-identical
+to its source, so the fix belongs upstream and then gets re-copied. Declining to
+quietly patch a file whose whole claim is byte-identity is the right call.
+
+## Earlier: STATE CHANGE 18:28Z — all three workers idle
 
 Every pane is stopped, and every remaining item is a decision only the owner can
 make. The pipeline is not progressing, with **3 h 46 m** left on the observation
@@ -171,13 +200,20 @@ endpoint, so an interruption is unrecoverable and cannot be faked.
 |---|---|
 | State | `active` |
 | T0 | `2026-08-23T16:13:26.775Z` (first record, matches the logged T0) |
-| Last record | `2026-08-23T18:39:34.477Z`, 25 s before the check |
-| Lines | 4688 (+384 since 18:27Z) |
-| Growth | 32.0 lines/min over 12.0 min — matches the expected ~32 |
-| Gaps > 45 s | **0**, verified across every consecutive record pair |
+| First record | `2026-08-23T16:13:26.775Z` |
+| Last record | `2026-08-23T18:53:35.265Z`, 27 s before the check |
+| Lines | 5136 (+448 since 18:39Z) |
+| Growth | 31.8 lines/min over 14.1 min |
+| **Max consecutive gap** | **29.661 s** — below the 30 s sample interval, so no cycle has been missed |
+| Gaps > 45 s | 0 |
 | Malformed lines | 0 |
-| Elapsed | 2 h 26 m of the 6 h minimum |
-| 6 h mark | `2026-08-23T22:14Z` — **3 h 34 m remaining** |
+| Span | 9608 s = 2 h 40 m; `>= 21600 s`: **False**, as expected at this hour |
+| 6 h mark | `2026-08-23T22:14Z` — **3 h 20 m remaining** |
+
+Now reporting **max consecutive gap** rather than only a count over a threshold,
+per the review. It is the stronger statement: a count of zero gaps over 45 s is
+consistent with a 44 s stall, whereas a maximum of 29.661 s against a 30 s
+interval says positively that no cycle was ever skipped.
 
 Eleven consecutive checks, 16:48Z → 18:40Z, every one `active` with zero gaps and
 growth within 31.5–32.2 lines/min. The collector has been the least troublesome
@@ -478,3 +514,4 @@ entries promptly, at the same time as the `--list` warning.
 | 18:16Z | `active`, 3920 lines, +32.2/min, 0 gaps | T1 shipped 4 commits (concurrency check, replay determinism, testable `/healthz`, per-provider discontinuities computed once) and armed a second 5-min watch on rule 1; **new decision surfaced — third-party tunnel as a DNS alternative, flagged not taken**; gates 117 passed, pushed; T3 and T2 unchanged |
 | 18:28Z | `active`, 4304 lines, +32.0/min, 0 gaps | **All three workers idle**; no commits, nothing to push. `alerts.jsonl` confirmed missing from the repo while Task 1 sits behind a feedback overlay. Every open item is now an owner decision |
 | 18:40Z | `active`, 4688 lines, +32.0/min, 0 gaps | Stall unchanged, ~24 min for `surface:2`. Confirmed on the host that `alerts.jsonl` exists with 10 alerts across 3 rules — the deliverable is real, only the copy into the repo is missing. Escalation not repeated; already open since 18:28Z |
+| 18:54Z | `active`, 5136 lines, +31.8/min, **max gap 29.661 s**, 0 malformed | **All three workers active** — stall over. `task2-stt-benchmark/` exists for the first time. Row 3.1 independently verified `DONE` across three copies. DNS for `spend.nddev.it.com` still does not resolve; `surface:2` is retrying |
