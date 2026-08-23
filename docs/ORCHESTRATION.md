@@ -5,7 +5,7 @@ single place that says what is true right now, with the measurement behind each
 claim. Maintained by the orchestrator (`surface:3`); workers report, they do not
 edit this file.
 
-**Last heartbeat: 2026-08-23T17:25Z.**
+**Last heartbeat: 2026-08-23T17:40Z.**
 
 ## ESCALATIONS — open, for the human
 
@@ -20,6 +20,8 @@ the owner reserves it, which supersedes the escalation instruction in
 | 2 | **Task 3 ships with no trace?** Its trace is quarantined; the submission requires one per task. | Submission scope |
 | 3 | **Task 2 has no brief.** `surface:5` idle since 16:48Z; STT scope undecided. | Business scope |
 | 4 | **Task 1 DNS.** `spend.nddev.it.com` needs an A record; GoDaddy zone, no token, rule 2 forbids pasting one. | Access the agents do not have |
+| 5 | **`docs/briefs/review-agent-prompt.md` is untracked.** Owner-authored draft; not committed or pushed by this session. Say the word and it goes up. | It is the owner's draft |
+| 6 | **Pre-existing pyright error**, `tools/export_trace.py:205` from `e7af3a4` — `ROLE_LABEL.get` returns `str \| None`, then `+=`. Outside every current diff; does not affect `pytest` or `ruff`. Flagged by Task 3, not fixed. | Whether a green-gates repo should also be pyright-clean |
 
 ### Repository is PRIVATE — and both directions cost something
 
@@ -46,13 +48,13 @@ endpoint, so an interruption is unrecoverable and cannot be faked.
 |---|---|
 | State | `active` |
 | T0 | `2026-08-23T16:13:26.775Z` (first record, matches the logged T0) |
-| Last record | `2026-08-23T17:24:30.796Z`, 22 s before the check |
-| Lines | 2288 (+384 since 17:12Z) |
-| Growth | 32.1 lines/min over 12.0 min — matches the expected ~32 |
+| Last record | `2026-08-23T17:39:31.410Z`, 27 s before the check |
+| Lines | 2768 (+480 since 17:24Z) |
+| Growth | 31.8 lines/min over 15.1 min — matches the expected ~32 |
 | Gaps > 45 s | **0**, verified across every consecutive record pair |
 | Malformed lines | 0 |
-| Elapsed | 1 h 11 m of the 6 h minimum |
-| 6 h mark | `2026-08-23T22:14Z` — **4 h 49 m remaining** |
+| Elapsed | 1 h 26 m of the 6 h minimum |
+| 6 h mark | `2026-08-23T22:14Z` — **4 h 34 m remaining** |
 
 Task 1 deployed its monitor against this log at 17:10Z with the data directory
 mounted **read-only**, which makes rule 1 structural rather than a promise, and
@@ -71,7 +73,16 @@ one invalidates the submission.
 
 ### Task 1 — spend observability (`surface:2`, `task1-spend-observability/`)
 
-**Blocked on a human decision — DNS.** Escalated to `surface:7` at 17:14Z.
+**Unblocked and working.** The owner closed the DNS menu at ~17:30Z; the agent is
+back on "deploy dashboard publicly" as of 17:40Z, 12 min into the step.
+
+Committed `79be7bd` since the last heartbeat — stops a reverted balance blip
+being read as phantom spend, reasoned against a provider burning 0.28 USD/h.
+That is the kind of correction that only comes from looking at real captured
+data, which is what the 6 h window is for.
+
+DNS itself is still unresolved as a public-hostname question; it remains
+escalation #4 until a URL answers in incognito.
 
 - Done: raw-data characterization; `monitor.py` built and committed (`8df4d72`,
   adapters, robust burn, alert rules); monitor deployed at 17:10Z as a container
@@ -199,11 +210,32 @@ session id another way.
 matches the bare word, so any trace that quotes the rule fails it. Matching
 `HostName\s+\S+` would test SSH config content instead of the word.
 
-**Delivered.** The owner sent the `--list` warning to `surface:2` directly at
-~17:30Z, having closed its DNS menu with Escape first, so the open-menu hazard is
-resolved. Task 3 owns both source fixes: the `--list` project scoping and the
-unsatisfiable `HostName` gate in `AGENTS.md`. `surface:5` still needs the warning
-before it exports, and has no session to contaminate yet.
+**Closed at 17:40Z — fixed at the source, so the warning is now moot.**
+
+The owner delivered the warning to `surface:2` at ~17:30Z after closing its menu
+with Escape. Task 3 then fixed both defects in `d7c2b24`, and I verified the fix
+by running it rather than reading the diff:
+
+```
+uv run tools/export_trace.py --list
+→ 3 rows, all -Users-rldyourmnd-Developer-rldyourmnd-explee-ai-dev-test
+→ 0 foreign project slugs
+```
+
+`list_sessions()` now takes a single project and scopes the error path too, so a
+missing project cannot leak the names of the projects it found instead — the
+failure mode one level past the obvious one.
+
+It also **corrected my proposed regex.** I suggested `HostName\s+\S+` for the
+`AGENTS.md` gate; Task 3 pointed out that is still self-matching, because in
+`grep -c HostName TRACE.md` the filename is the non-space token. The gate is now
+anchored to line start (`^[[:space:]]*HostName[[:space:]]+`), which tests what an
+SSH config block actually looks like. The better fix came from the agent that
+owned the file.
+
+**No warning sent to `surface:5`.** It is at a clean prompt, but the defect it
+warned about no longer exists, and typing into it would open its session ahead of
+the owner's brief. Stale advice delivered early is worse than no advice.
 
 ## Deadlines
 
@@ -216,9 +248,21 @@ before it exports, and has no session to contaminate yet.
 
 ## Push state
 
-**Synced at 17:32Z.** Gates were run first and both passed; 7 commits pushed
-`f086fe9..9c11385` to `origin/main`. Working tree is clean apart from `.serena/`
-tooling churn, which is not committed.
+**Synced at 17:41Z, `origin/main` = `79be7bd`, 0 commits ahead.** Gates run
+before each push, never after:
+
+| Time | Gate result | Pushed |
+|---|---|---|
+| 17:32Z | 84 passed, ruff clean, both exit 0 | `f086fe9..9c11385`, 7 commits |
+| 17:41Z | **93 passed**, ruff clean, both exit 0 | `ae2c7cb..79be7bd`, 2 commits |
+
+The test count rose 84 → 93 because Task 3 shipped tests with its exporter fix
+rather than asserting it worked.
+
+Not committed: `.serena/` tooling churn, and `docs/briefs/review-agent-prompt.md`
+— an untracked draft the owner authored in a directory this session owns. Left
+alone deliberately: committing someone's open draft captures whatever half-state
+it happens to be in, and pushing it publishes it. Flagged as escalation #5.
 
 The push includes commit `f9ef23b`, which carries the Task 3 trace under its
 original name with the leak intact. That is acceptable **only while the
@@ -250,3 +294,4 @@ entries promptly, at the same time as the `--list` warning.
 | 17:02Z | `active`, 1520 lines, +31.5/min, 0 gaps | T1 building `monitor.py`, iterating on diagnostics; T3 artifact written but idle, untracked, no trace → nudged, leak scan clean; T2 unchanged, still awaiting human |
 | 17:14Z | `active`, 1904 lines, +31.9/min, 0 gaps | T1 monitor deployed and measured, now **blocked on DNS** → escalated; T3 committed `f9ef23b` but its `TRACE.md` carries a **rule-3 leak** (unrelated client ×20) → returned to owner, escalated; T2 unchanged |
 | 17:25Z | `active`, 2288 lines, +32.1/min, 0 gaps | T3 quarantined the trace cleanly (`2eeaefc`) and root-caused it to the shared exporter — Tasks 1 and 2 are exposed to the same defect; T1 still holding the DNS menu, unchanged; T2 unchanged |
+| 17:40Z | `active`, 2768 lines, +31.8/min, 0 gaps | T1 unblocked, deploying dashboard, committed `79be7bd`; T3 fixed both exporter defects in `d7c2b24`, verified by running `--list` (0 foreign slugs) — cross-cutting risk **closed**; gates green at 93 passed, pushed to `origin/main`; T2 unchanged |
