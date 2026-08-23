@@ -290,6 +290,126 @@ def build(
     )
 
 
+#: Seed for the from-scratch slice. Fixed here, in the same commit that
+#: declares the rule, so the slice cannot be reselected after someone has seen
+#: which segments are easy.
+SCRATCH_SLICE_SEED = 20260823
+SCRATCH_SLICE_SIZE = 6
+
+
+def select_scratch_slice(
+    segment_ids: Sequence[str],
+    size: int = SCRATCH_SLICE_SIZE,
+    seed: int = SCRATCH_SLICE_SEED,
+) -> list[str]:
+    """Pick the segments one annotator transcribes from scratch, unaided.
+
+    These segments measure the residual bias of the draft-assisted reference:
+    errors that both drafting engines made, and that a correcting annotator
+    therefore never saw, show up as the difference between the unaided
+    transcript and the draft-corrected one on exactly these segments.
+
+    The rule is declared and seeded before anyone listens. Deterministic from
+    the segment ids alone, so anybody can recompute the selection and confirm
+    it was not chosen after the fact.
+    """
+    import random
+
+    ordered = sorted(segment_ids)
+    if size >= len(ordered):
+        return ordered
+    return sorted(random.Random(seed).sample(ordered, size))
+
+
+@dataclass
+class ResidualBias:
+    """How much the draft-assisted reference missed, measured not asserted."""
+
+    segments: tuple[str, ...]
+    unaided_words: int
+    missed_errors: int
+
+    @property
+    def rate(self) -> float | None:
+        return self.missed_errors / self.unaided_words if self.unaided_words else None
+
+    def sentence(self) -> str:
+        if self.rate is None:
+            return "residual bias not measurable: the from-scratch slice is empty."
+        return (
+            f"On {len(self.segments)} segments transcribed from scratch, the "
+            f"draft-assisted reference differed from the unaided one in "
+            f"{self.missed_errors} of {self.unaided_words} words "
+            f"({self.rate:.2%}). Treat that as the floor on this benchmark's "
+            f"resolution: engine differences smaller than it are not separable."
+        )
+
+
+def measure_residual_bias(
+    unaided: Sequence[Annotation],
+    draft_assisted: dict[str, Transcript],
+) -> ResidualBias:
+    """Compare unaided transcripts against the draft-assisted reference.
+
+    Every disagreement is counted against the draft-assisted reference. That is
+    deliberately unflattering: some disagreements will be annotator slips
+    rather than draft contamination, so the number is an upper bound on the
+    reference's own error, and an upper bound is the safe direction here.
+    """
+    missed = 0
+    words = 0
+    covered: list[str] = []
+    for annotation in unaided:
+        reference = draft_assisted.get(annotation.segment_id)
+        if reference is None:
+            continue
+        covered.append(annotation.segment_id)
+        truth = tokens(annotation.text)
+        alignment = align(truth, tokens(reference.text))
+        words += len(truth)
+        missed += (
+            alignment.substitutions + alignment.deletions + alignment.insertions
+        )
+    return ResidualBias(tuple(sorted(covered)), words, missed)
+
+
+@dataclass
+class DisagreementSpan:
+    """Where two drafting engines disagree — the spans worth a human's time."""
+
+    segment_id: str
+    density: float
+    disputed_words: int
+    total_words: int
+
+
+def disagreement_spans(
+    draft_a: dict[str, Transcript], draft_b: dict[str, Transcript]
+) -> list[DisagreementSpan]:
+    """Rank segments by how much the two drafts disagree, densest first.
+
+    Errors concentrate where independent engines diverge, so this is where an
+    annotator's attention buys the most reference quality per minute. Segments
+    the drafts agree on are not skipped — they are simply annotated later, and
+    the from-scratch slice measures what agreeing on a shared error costs.
+    """
+    spans: list[DisagreementSpan] = []
+    for segment_id in sorted(set(draft_a) & set(draft_b)):
+        a, b = tokens(draft_a[segment_id].text), tokens(draft_b[segment_id].text)
+        if not a and not b:
+            continue
+        alignment = align(a, b)
+        disputed = (
+            alignment.substitutions + alignment.deletions + alignment.insertions
+        )
+        total = max(len(a), 1)
+        spans.append(
+            DisagreementSpan(segment_id, disputed / total, disputed, len(a))
+        )
+    spans.sort(key=lambda s: (-s.density, s.segment_id))
+    return spans
+
+
 def _word_to_json(word: Word) -> dict:
     return {"text": word.text, "start": word.start, "end": word.end,
             "speaker": word.speaker}

@@ -190,6 +190,67 @@ def test_build_reports_agreement_and_annotators():
     assert result.agreement_wer == pytest.approx(1 / 5)
 
 
+# --- residual bias and draft targeting ----------------------------------------
+
+def test_the_scratch_slice_is_deterministic_and_declared_in_advance():
+    from harness.reference import select_scratch_slice
+
+    ids = [f"rt1027-{i:04d}" for i in range(120)]
+    first = select_scratch_slice(ids)
+    second = select_scratch_slice(ids)
+    assert first == second           # recomputable by any reader
+    assert len(first) == 6
+    assert set(first) <= set(ids)
+    # Order of the input must not change the selection: a caller cannot reshuffle
+    # the manifest until a convenient slice falls out.
+    assert select_scratch_slice(list(reversed(ids))) == first
+
+
+def test_a_small_corpus_yields_the_whole_corpus_as_the_slice():
+    from harness.reference import select_scratch_slice
+    assert select_scratch_slice(["a", "b"], size=6) == ["a", "b"]
+
+
+def test_residual_bias_counts_every_disagreement_against_the_reference():
+    from harness.metrics import Transcript
+    from harness.reference import measure_residual_bias
+
+    unaided = [ann("s0", "human", "перенесли витрину в ClickHouse вчера")]
+    contaminated = {"s0": Transcript("перенесли витрину в Lead House вчера")}
+    bias = measure_residual_bias(unaided, contaminated)
+    assert bias.unaided_words == 5
+    assert bias.missed_errors == 2       # ClickHouse -> Lead House
+    assert bias.rate == pytest.approx(0.4)
+    assert "not separable" in bias.sentence()
+
+
+def test_residual_bias_is_zero_when_the_reference_matches_the_unaided_pass():
+    from harness.metrics import Transcript
+    from harness.reference import measure_residual_bias
+
+    unaided = [ann("s0", "human", "мы подняли Kafka")]
+    bias = measure_residual_bias(unaided, {"s0": Transcript("мы подняли Kafka")})
+    assert bias.missed_errors == 0
+    assert bias.rate == 0.0
+
+
+def test_residual_bias_is_unmeasurable_rather_than_zero_without_a_slice():
+    from harness.reference import measure_residual_bias
+    assert measure_residual_bias([], {}).rate is None
+
+
+def test_disagreement_spans_rank_the_densest_first():
+    from harness.metrics import Transcript
+    from harness.reference import disagreement_spans
+
+    a = {"quiet": Transcript("раз два три четыре"), "noisy": Transcript("раз два три четыре")}
+    b = {"quiet": Transcript("раз два три пять"), "noisy": Transcript("шесть семь восемь девять")}
+    ranked = disagreement_spans(a, b)
+    assert [s.segment_id for s in ranked] == ["noisy", "quiet"]
+    assert ranked[0].density == 1.0
+    assert ranked[1].disputed_words == 1
+
+
 # --- round trip ---------------------------------------------------------------
 
 def test_annotation_pass_round_trips(tmp_path):

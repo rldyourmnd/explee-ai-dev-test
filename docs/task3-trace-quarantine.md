@@ -1,9 +1,15 @@
-# Why the Task 3 trace was withheld
+# Task 3 trace quarantine — internal record, not part of the submitted package
 
-The trace this record describes was exported as
-`task3-harness-artifact/TRACE-task3-quarantined.md`. That file is no longer in
-the working tree, and this record is deliberately not deleted with it: the
-incident staying documented is the point.
+Nothing is withheld from the submission: Task 3 ships a real, untruncated
+`TRACE.md` from a genuine session, like every other task. This record covers an
+earlier export that was quarantined and removed, and is kept because the
+incident staying documented is the point. The packaging step must exclude it,
+along with `docs/task3-artifact-provenance.md`.
+
+
+The trace in question was exported as
+`task3-harness-artifact/TRACE-task3-quarantined.md` and is no longer in the
+working tree.
 
 Disposition, same as `TRACE-orchestration.md`: quarantined in place, then
 removed from the working tree at 18:52Z on the way to publication. **The content
