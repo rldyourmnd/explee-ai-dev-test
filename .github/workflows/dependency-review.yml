@@ -1,0 +1,13 @@
+# Dependency Review — pull_request only, and free on public repositories.
+# Pinned to a full commit SHA for the same reason as security.yml.
+name: dependency-review
+on:
+  pull_request: { branches: [main] }
+permissions: {}
+jobs:
+  dependency-review:
+    permissions: { contents: read, pull-requests: write }
+    uses: NDDev-it-com/ci-workflows/.github/workflows/public-dependency-review.yml@00546f1c601a106d560d92e316f332891ac6f840
+    with:
+      runner: ubuntu-latest
+      fail_on_severity: moderate

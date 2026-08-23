@@ -1,0 +1,49 @@
+# Public OSS security suite — the free set that a public repository gets at no
+# cost: CodeQL, native secret scanning, actionlint and zizmor with SARIF.
+#
+# Composed from NDDev-it-com/ci-workflows rather than hand-rolled, and pinned to
+# a full commit SHA. A tag or branch reference would let the behaviour of these
+# jobs change under us without a commit here, which is the same class of defect
+# as the unpinned ruff that made a green local run and a red CI run describe the
+# same tree.
+#
+# `runner: ubuntu-latest` is not redundant, and this is the subtle part. On a
+# public repository `pull_request` executes untrusted fork code, and several of
+# these reusables default `runner` to a private self-hosted label. That default
+# lives in the pinned commit, so omitting the input would let a routine pin bump
+# silently move fork PRs onto private infrastructure. Public callers name their
+# runner.
+#
+# ci.yml is deliberately untouched: it holds the correctness gates — pinned
+# pytest, ruff and pyright, plus the repository consistency check — and this file
+# only adds security scanning alongside them.
+name: security
+on:
+  push: { branches: [main] }
+  pull_request: { branches: [main] }
+permissions: {}
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  codeql:
+    permissions: { actions: read, contents: read, security-events: write }
+    uses: NDDev-it-com/ci-workflows/.github/workflows/public-codeql.yml@00546f1c601a106d560d92e316f332891ac6f840
+    with:
+      runner: ubuntu-latest
+      languages: '["python","actions"]'
+  secret-scan:
+    permissions: { contents: read }
+    uses: NDDev-it-com/ci-workflows/.github/workflows/secret-scan.yml@00546f1c601a106d560d92e316f332891ac6f840
+    with:
+      runner: ubuntu-latest
+  actionlint:
+    permissions: { contents: read }
+    uses: NDDev-it-com/ci-workflows/.github/workflows/actionlint.yml@00546f1c601a106d560d92e316f332891ac6f840
+    with:
+      runner: ubuntu-latest
+  zizmor:
+    permissions: { actions: read, contents: read, security-events: write }
+    uses: NDDev-it-com/ci-workflows/.github/workflows/zizmor-sarif.yml@00546f1c601a106d560d92e316f332891ac6f840
+    with:
+      runner: ubuntu-latest

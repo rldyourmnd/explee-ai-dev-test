@@ -1,0 +1,21 @@
+# OSSF Scorecard — push-to-default and a weekly schedule ONLY.
+#
+# Kept separate from security.yml on purpose: the Scorecard action supports only
+# `push` and `schedule` on the default branch, and `pull_request` is
+# experimental. Folding it into the pull_request-triggered suite would produce a
+# job that fails for reasons unrelated to the change under review.
+name: scorecard
+on:
+  push: { branches: [main] }
+  schedule:
+    - cron: "31 2 * * 1"
+permissions: {}
+jobs:
+  scorecard:
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+    uses: NDDev-it-com/ci-workflows/.github/workflows/public-scorecard-json.yml@00546f1c601a106d560d92e316f332891ac6f840
+    with:
+      runner: ubuntu-latest
