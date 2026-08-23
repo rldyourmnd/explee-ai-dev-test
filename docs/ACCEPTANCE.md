@@ -274,41 +274,47 @@ separation is what the T0 replay-from-raw design bought, and this is the case it
 was bought for.
 
 
-## Live and replay have diverged — and it changes which artifact we ship
+## Live-versus-replay divergence: CLAIM RETRACTED — but the ruling survives it
 
-**The counterfactual guard was built, tested, and suppressed nothing.** Task 1
-replayed the same 7.03 h window under old and new code: 17 lines each,
-**byte-identical alert sets**, nothing suppressed. It then reported that rather
-than claiming the fix, which is the report it would have been easiest not to
-write.
+**Retracted at 23:39Z in `5553aec`.** I recorded an hour earlier that the live and
+replay paths had been *shown* to diverge. **No such case was ever demonstrated**,
+and both cited counterexamples dissolved:
 
-**What removed the `findymail` line was nothing we did — it never reproduces on
-replay at all**, under either build. `bounceban` behaved the same way. That is
-**two lines the live incremental path emitted which the replay path does not
-reproduce**, and `task1-spend-observability/README.md` states as a *design
-guarantee* that "the live path and the replay path cannot drift apart." **That
-claim is disproven.** Mechanism not yet identified.
+- **`findymail` 23:05:25Z** was audited against a raw copy whose last record was
+  **22:59:20Z**. The audit was reconstructing provider state across six minutes it
+  had no readings for, and **a rule that cannot see the data does not fire**. Given
+  the full window it reconciles. The defect was in `--audit`, not the monitor.
+- **`bounceban` 18:44:34Z** was written by a build predating the uncertainty
+  guard. Re-running today's rule against that instant **compares two builds, not
+  two paths**.
 
-### Ruling: the deliverable is the LIVE file, and the planned regeneration is cancelled
+**The guarantee is deliberately not reinstated**, and that restraint is the best
+part of the retraction: *"no counterexample survived"* and *"cannot happen"* are
+different claims, and conflating them is how the original overclaim got written.
+State carried between evaluations — which a replay rebuilds from zero and a
+long-running process does not — remains untested.
 
+The fix: `audit_alerts` now bounds itself by `Store.last_reading_ts()` and reports
+anything after it as **out of range**, excluded from the failure count. *"The rule
+did not fire"* and *"this window does not reach that far"* are different findings
+that **looked identical until one was mistaken for the other.**
+
+### Ruling 2 stands, on grounds that never depended on the divergence
+
+The deliverable remains the **live `alerts.jsonl`**, and the regeneration stays
+cancelled — but the reason is the one I gave first, not the one that dissolved.
 `docs/TASK.md`: *"when your system decides a human should look, it appends a line
-to `alerts.jsonl`."* The artifact is **the record of decisions the system actually
-made**. A replayed file is a reconstruction of what a *different run* would have
-decided — so where the two disagree, shipping the reconstruction means shipping
-alerts nobody was ever shown and omitting ones they were.
+to `alerts.jsonl`."* **The artifact is the record of decisions actually made.** A
+replay is a reconstruction of what a *different run* would have decided, and that
+is true whether or not the two agree.
 
-**We regenerate to understand; we ship what was emitted.** This reverses my
-earlier agreement to regenerate the submitted artifact from a clean replay, and
-it is stated plainly here rather than quietly changed.
+Divergence was the trigger for examining the question, never the justification for
+the answer. **A ruling whose stated basis evaporates deserves re-derivation rather
+than quiet retention** — this one survives it; the wording that leaned on the
+false claim did not, and is replaced above.
 
-**The guard stays** regardless of biting today: an auditor that knows an alert is
-top-up-caused while the alerter that fired it does not has the knowledge one
-component too late.
-
-**`scrapfly` is pre-existing and newly exposed by duration** — two lines 6.44 h
-apart against an `incident_forget_s` of 6 h, a threshold interacting with a window
-that finally outgrew it. **Nothing in a six-hour window could have surfaced it**,
-which is the clearest single argument for continuing to collect.
+Consequence, unchanged: `alerts.jsonl` only ever grows. A future change alters
+future lines only.
 
 ## Cross-cutting
 
