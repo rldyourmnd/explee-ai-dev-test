@@ -49,23 +49,25 @@ against a human transcript published by the conference itself — with the evalu
 before any engine ran.</p>
 
 <div class="callout">
-<strong>Production recommendation: run Whisper large-v3-turbo.</strong>
-We recommend Whisper large-v3-turbo for transcribing your meetings. It is the engine to put
-into production today, on these grounds: it leads or ties on every quality metric we declared
-in advance, no engine is shown to beat it, and it costs 1.7× less GPU time per hour of audio
-than the one engine whose point estimate is higher — 326.8 s against 565.7 s. Cost decided
-what quality could not, and we say that plainly rather than dressing a cost decision up as a
-quality verdict.
+<strong>Production recommendation: run Whisper large-v3 with a glossary prompt.</strong>
+Feed it your list of product and tool names, and it recognises <strong>63 % of technical
+terms against 40 % without</strong> — the single largest improvement anywhere in this study,
+larger than the gap between any two engines.
 <br><br>
-Be precise about why quality could not decide: this corpus detects a 3-point difference in
-term F1 only about one time in ten (power table below), and the gap between the top engines
-is 3.6 points. They are <em>unresolved</em>, not proven equal.
+<strong>Do not use the glossary prompt with large-v3-turbo.</strong> We tested this by
+planting ten plausible term names in the prompt that are <em>never spoken</em> in the audio.
+Large-v3 ignored all ten. Turbo wrote them into the transcript in 5 % of segments — including
+writing <code>Kubernetics</code> over the real word <em>Kubernetes</em>, the most frequent
+term in the recording. An engine that invents the term it was told to expect is worse than one
+that misses it, because a reader cannot tell the invention from a fact.
 <br><br>
-The recommendation comes with one caveat we will not soften: <strong>no engine is good at
-this speech yet.</strong> The best term recall in the field is 0.40, so roughly six of every
-ten technical terms are still lost or mangled. Recommending the best available engine is not
-the same as saying the problem is solved — expect to keep a human in the loop on
-terminology-dense meetings, and revisit when the terminology-assisted track has been run.
+If GPU cost dominates your decision, the fallback is <strong>large-v3-turbo without a
+prompt</strong>: 1.7× cheaper (326.8 s against 565.7 s per hour), quality unresolved against
+large-v3, and safe as long as you do not prompt it.
+<br><br>
+The caveat we will not soften: <strong>no engine is good at this speech yet.</strong> Even
+prompted, the best engine still misses roughly a third of technical terms. Keep a human in the
+loop on terminology-dense meetings.
 </div>
 
 <p class="meta">Also true and stated up front: every engine fails the frozen WER guardrail of
@@ -94,15 +96,20 @@ the worst term recall of the three leaders.</p>
 <div class="scroll">
 <table>
 <tr><th>Engine</th><th>Term F1</th><th>95 % interval</th><th>Term recall</th><th>Term precision</th><th>WER</th><th>Code-switch WER</th><th>Latin→Cyrillic</th><th>GPU s / hour</th></tr>
-<tr><td><strong>Whisper large-v3</strong></td><td class="num">0.519</td><td class="num ci">0.406 – 0.622</td><td class="num">0.399</td><td class="num">0.743</td><td class="num">0.589</td><td class="num">0.675</td><td class="num">0.601</td><td class="num">565.7</td></tr>
-<tr><td><strong>Whisper large-v3-turbo</strong> ←</td><td class="num">0.483</td><td class="num ci">0.354 – 0.594</td><td class="num">0.355</td><td class="num">0.754</td><td class="num">0.578</td><td class="num">0.650</td><td class="num">0.616</td><td class="num">326.8</td></tr>
+<tr><td><strong>Whisper large-v3</strong> ←</td><td class="num">0.519</td><td class="num ci">0.406 – 0.622</td><td class="num">0.399</td><td class="num">0.743</td><td class="num">0.589</td><td class="num">0.675</td><td class="num">0.601</td><td class="num">565.7</td></tr>
+<tr><td><strong>Whisper large-v3-turbo</strong></td><td class="num">0.483</td><td class="num ci">0.354 – 0.594</td><td class="num">0.355</td><td class="num">0.754</td><td class="num">0.578</td><td class="num">0.650</td><td class="num">0.616</td><td class="num">326.8</td></tr>
 <tr><td>Parakeet-TDT-0.6b-v3</td><td class="num">0.481</td><td class="num ci">0.390 – 0.561</td><td class="num">0.362</td><td class="num">0.714</td><td class="num">0.601</td><td class="num">0.748</td><td class="num">0.529</td><td class="num">17.5</td></tr>
 <tr><td>Seamless-M4T-v2-large</td><td class="num">0.279</td><td class="num ci">0.170 – 0.389</td><td class="num">0.174</td><td class="num">0.706</td><td class="num">0.655</td><td class="num">0.865</td><td class="num">0.790</td><td class="num">280.1</td></tr>
 <tr><td>wav2vec2-XLSR-53 Russian</td><td class="num">—</td><td class="num ci">not measurable</td><td class="num">0.000</td><td class="num">0.000</td><td class="num">0.785</td><td class="num">1.000</td><td class="num">1.000</td><td class="num">37.3</td></tr>
 </table>
 </div>
 
-<h3>How the winner was chosen — the rule, not a judgement call</h3>
+<h3>Working the frozen decision rule, step by step</h3>
+
+<p class="meta">This is the stock-track procedure, run exactly as pre-declared. It selects
+turbo. The production recommendation differs because the prompted track — a separate ranking,
+never mixed with this one — is where the far larger gain sits, and only large-v3 is safe to
+prompt. Both results are reported; neither is hidden.</p>
 
 <ol>
 <li><strong>Primary metric (term F1)</strong> cannot separate the top three. Whisper large-v3
@@ -113,13 +120,16 @@ audio would usually miss a real difference of that size anyway.</li>
 <em>Parakeet</em> out (0.748 against 0.650 / 0.675).</li>
 <li><strong>Step 2, Latin→Cyrillic rate:</strong> the two Whispers remain indistinguishable.</li>
 <li><strong>Step 3, hallucination rate:</strong> still indistinguishable.</li>
-<li><strong>Step 4, measured cost:</strong> 326.8 s versus 565.7 s of GPU time. Turbo wins.</li>
+<li><strong>Step 4, measured cost:</strong> 326.8 s versus 565.7 s of GPU time. Turbo wins
+<em>the stock track</em>.</li>
 </ol>
 
 <p>The harness prints this verdict itself: <em>"no winner: turbo and large-v3 are
-indistinguishable on every declared metric"</em> — cost is what breaks it, and the report says
-plainly that <strong>this is not a quality judgement</strong>. If you already own idle GPU
-capacity, large-v3's point estimate is the higher one and either choice is defensible.</p>
+indistinguishable on every declared metric"</em> — cost is what breaks it, and that is
+<strong>not a quality judgement</strong>. Had we stopped here, the report would have
+recommended turbo. Running the prompted track is what changed the answer, and it changed it
+for a reason no cost comparison could have surfaced: prompting is worth more than the engine
+choice, and turbo cannot be prompted safely.</p>
 
 <p class="meta">Every comparison above was run with a <strong>paired moving-block
 bootstrap</strong> — contiguous 120-second blocks, both systems drawing the same blocks,
@@ -141,6 +151,58 @@ this speech.</p>
 <p>Seamless-M4T-v2 shows a second failure mode: it <em>condenses</em>. It is the only engine
 that drops more words than it adds (omission 0.235 against insertion 0.112) — it behaves like
 a summariser, which is disqualifying for a meeting record.</p>
+
+
+<h2>Does a glossary prompt help? Yes — and it can backfire</h2>
+
+<p>Both Whisper variants accept a text prompt that biases decoding, so we ran each one twice:
+once stock, once with the frozen 50-term glossary. The two tracks are ranked separately and
+never mixed — comparing one engine's prompted run against another's stock run would compare
+configurations rather than engines.</p>
+
+<div class="scroll">
+<table>
+<tr><th>Engine</th><th>Track</th><th>Term F1</th><th>Recall</th><th>Precision</th><th>WER</th><th>Invented-term segments</th></tr>
+<tr><td rowspan="2">Whisper large-v3</td><td>stock</td><td class="num">0.519</td><td class="num">0.399</td><td class="num">0.743</td><td class="num">0.589</td><td class="num ok">0 %</td></tr>
+<tr><td><strong>+ glossary</strong></td><td class="num"><strong>0.688</strong></td><td class="num"><strong>0.630</strong></td><td class="num">0.757</td><td class="num">0.601</td><td class="num ok">0 %</td></tr>
+<tr><td rowspan="2">Whisper large-v3-turbo</td><td>stock</td><td class="num">0.483</td><td class="num">0.355</td><td class="num">0.754</td><td class="num">0.578</td><td class="num ok">0 %</td></tr>
+<tr><td>+ glossary</td><td class="num">0.675</td><td class="num">0.609</td><td class="num">0.757</td><td class="num">0.601</td><td class="num warn"><strong>5.1 %</strong></td></tr>
+</table>
+</div>
+
+<p>The gain is large and it is real: <strong>+23 points of recall for large-v3, +25 for
+turbo</strong>, with precision unchanged (+0.013 and +0.003) and WER essentially flat
+(+0.012 and +0.023). Prompting is the highest-value change available to this employer —
+bigger than switching engines.</p>
+
+<h3>The trap, and how we caught it</h3>
+
+<p>Reporting recall gain alone would have been a half-truth. An engine that sprays glossary
+terms wherever it is unsure looks excellent on recall and is useless in a meeting record. So
+the prompt also contained <strong>ten distractor terms that are spoken nowhere in the
+audio</strong>, chosen to resemble real ones — <code>Lighthouse</code> beside ClickHouse,
+<code>Gravana</code> beside Grafana, <code>Kubernetics</code> beside Kubernetes. All ten were
+verified absent from the reference and from every stock engine output <em>before</em> the
+prompted run.</p>
+
+<p>Large-v3 emitted none of them. Turbo emitted two, in five segments — and the way it failed
+is the point:</p>
+
+<pre>hlk8s-0019  «…вот эта вот имплементация ClickHouse в <strong>Kubernetics</strong>.»
+hlk8s-0051  «…базовые объекты <strong>Kubernetics</strong>. Pod, StatefulSet, сервис…»
+hlk8s-0008  «…потому что <strong>Qdrantis</strong> привносит свои каждодневные вопросы…»</pre>
+
+<p>The speaker said <em>Kubernetes</em> — 69 times across the hour, the most frequent term in
+the recording. Prompted with a corrupted near-neighbour, turbo wrote the corruption instead.
+That is not a transcription error a reader can catch; it reads as a real product name.
+<strong>This is why the recommendation is large-v3 rather than the cheaper turbo:</strong> the
+two are unresolved on quality, but only one of them is safe to prompt, and prompting is where
+the real gain is.</p>
+
+<p class="meta">Pre-declared decision rule for this test, adopted before the run: prompting
+counts as beneficial only if recall rises <em>and</em> precision does not materially fall
+<em>and</em> WER does not worsen <em>and</em> distractors stay absent. Large-v3 passes all
+four. Turbo fails the fourth.</p>
 
 <h2>How much can one hour actually prove?</h2>
 

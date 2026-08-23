@@ -1,0 +1,53 @@
+{
+  "whisper-large-v3": {
+    "default": {
+      "term_precision": 0.7432432432432432,
+      "term_recall": 0.39855072463768115,
+      "term_f1": 0.5188679245283019,
+      "wer": 0.5889744629104176,
+      "distractor_segment_rate": 0.0,
+      "distractor_hits": {}
+    },
+    "tuned": {
+      "term_precision": 0.7565217391304347,
+      "term_recall": 0.6304347826086957,
+      "term_f1": 0.6877470355731226,
+      "wer": 0.6007296311309283,
+      "distractor_segment_rate": 0.0,
+      "distractor_hits": {}
+    },
+    "delta": {
+      "term_precision": 0.013278495887191544,
+      "term_recall": 0.23188405797101452,
+      "term_f1": 0.16887911104482067,
+      "wer": 0.011755168220510703
+    }
+  },
+  "whisper-large-v3-turbo": {
+    "default": {
+      "term_precision": 0.7538461538461538,
+      "term_recall": 0.35507246376811596,
+      "term_f1": 0.4827586206896552,
+      "wer": 0.5780299959464937,
+      "distractor_segment_rate": 0.0,
+      "distractor_hits": {}
+    },
+    "tuned": {
+      "term_precision": 0.7567567567567568,
+      "term_recall": 0.6086956521739131,
+      "term_f1": 0.674698795180723,
+      "wer": 0.6011349817592218,
+      "distractor_segment_rate": 0.050505050505050504,
+      "distractor_hits": {
+        "kubernetics": 4,
+        "qdrantis": 1
+      }
+    },
+    "delta": {
+      "term_precision": 0.0029106029106029663,
+      "term_recall": 0.2536231884057971,
+      "term_f1": 0.19194017449106776,
+      "wer": 0.02310498581272802
+    }
+  }
+}

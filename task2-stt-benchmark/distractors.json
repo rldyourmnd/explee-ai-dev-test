@@ -1,0 +1,24 @@
+{
+  "schema": "explee-stt-distractors/1",
+  "status": "FROZEN",
+  "frozen_before": "any tuned-track output existed",
+  "purpose": [
+    "These terms are NOT spoken anywhere in the corpus. They are placed in the terminology prompt alongside the real glossary to measure whether prompting makes an engine invent the term it was told to expect.",
+    "Recall gain alone is a half-truth: an engine that sprays glossary terms wherever it is unsure looks excellent on recall and is useless in a meeting transcript, because a reader cannot tell an invented product name from a real one.",
+    "Each distractor is shaped like a real term in the same domain, and several are near-neighbours of terms that ARE spoken, which is the hardest case: `Lighthouse` against `ClickHouse`, `Gravana` against `Grafana`, `Kubernetics` against `Kubernetes`.",
+    "Absence is the passing result. Any occurrence is scored and reported."
+  ],
+  "verification": "Each term was checked against the reference transcript and against every default-track engine output before the tuned run; none occurs in any of them.",
+  "terms": [
+    {"id": "lighthouse", "surface": "Lighthouse", "shadows": "clickhouse", "note": "near-neighbour of ClickHouse, which occurs 59 times"},
+    {"id": "kafdrop", "surface": "Kafdrop", "shadows": "kafka", "note": "real tool name, but absent from this talk"},
+    {"id": "gravana", "surface": "Gravana", "shadows": "grafana", "note": "one-letter corruption of a term that does occur"},
+    {"id": "rake", "surface": "Rake", "shadows": "rag", "note": "plausible short tool name near RAG"},
+    {"id": "kubernetics", "surface": "Kubernetics", "shadows": "kubernetes", "note": "near-neighbour of the most frequent term in the corpus"},
+    {"id": "postgrezz", "surface": "Postgrezz", "shadows": "postgres", "note": "corrupted database name"},
+    {"id": "redisson", "surface": "Redisson", "shadows": "redis", "note": "real library, absent here"},
+    {"id": "prometeus", "surface": "Prometeus", "shadows": "prometheus", "note": "misspelling of a term that occurs once"},
+    {"id": "terraflow", "surface": "Terraflow", "shadows": "terraform", "note": "blend of Terraform and Airflow"},
+    {"id": "qdrantis", "surface": "Qdrantis", "shadows": "qdrant", "note": "invented vendor-shaped name"}
+  ]
+}

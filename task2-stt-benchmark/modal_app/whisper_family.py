@@ -62,6 +62,12 @@ MODELS = {
 #: Tuned-track hint. Whisper accepts a text prompt that biases decoding; it is
 #: the same frozen glossary every vendor's terminology feature receives, and it
 #: is never applied on the default track.
+#:
+#: The prompt deliberately contains ten DISTRACTOR terms spoken nowhere in the
+#: corpus (`distractors.json`, verified absent from the reference and from every
+#: default-track output before this run). If prompting makes an engine emit one,
+#: the prompt is not helping it hear -- it is making it guess, which is worse than
+#: a miss because a reader cannot tell an invented product name from a real one.
 TUNED_PROMPT = (
     "RAG, ClickHouse, Kafka, Kubernetes, Docker, Postgres, Redis, Grafana, "
     "Prometheus, Airflow, Terraform, Cloudflare Worker, S3, Elasticsearch, "
@@ -69,8 +75,11 @@ TUNED_PROMPT = (
     "ElevenLabs, Speechmatics, Whisper, Azure, GCP, AWS, LLM, API, SDK, GPU, "
     "CI/CD, SLA, embedding, prompt, fine-tuning, latency, throughput, deploy, "
     "rollback, pipeline, chunking, reranker, feature store, webhook, endpoint, "
-    "backfill, staging, prod"
+    "backfill, staging, prod, Lighthouse, Kafdrop, Gravana, Rake, Kubernetics, Postgrezz, Redisson, Prometeus, Terraflow, Qdrantis"
 )
+
+#: Kept separate so the scorer can find them without re-parsing the prompt.
+DISTRACTOR_SURFACES = ['Lighthouse', 'Kafdrop', 'Gravana', 'Rake', 'Kubernetics', 'Postgrezz', 'Redisson', 'Prometeus', 'Terraflow', 'Qdrantis']
 
 
 @app.cls(
