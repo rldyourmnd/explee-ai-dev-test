@@ -77,7 +77,23 @@ Ground truth, computed from the raw log without reference to any threshold: **16
 | 1800 s                           |    11 |         7 |
 | 3600 s                           |     8 |         5 |
 
-## Why 15 minutes, when it misses every outage in the window
+## Why 15 minutes — and the alert that has since vindicated it
+
+> **Update, 21:14Z.** The tables above were computed over a window in which no
+> outage exceeded 10.5 minutes, and the honest summary at the time was that the
+> shipped tolerance fired *nothing*. Collection continued past the six-hour
+> minimum, and at 21:14Z `zerobounce` went dark for **15.6 minutes — 31
+> consecutive failed polls, HTTP 500** — and produced the first `unavailable`
+> line of the run.
+>
+> That is the threshold behaving exactly as designed: silent through 16
+> self-healing outages, and speaking the first time something stayed dark longer
+> than anything previously measured. A threshold calibrated on one afternoon and
+> never tested by a real event would have been a guess; this one now has a
+> positive case as well as sixteen negative ones. It is also the clearest single
+> argument for the longer window — six hours would have shipped the guess.
+>
+> These tables are regenerated against the full window before submission.
 
 This is the trade-off the table exists to make visible, not a defect it hides.
 

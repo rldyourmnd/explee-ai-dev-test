@@ -1055,6 +1055,44 @@ def test_a_recurrence_long_after_the_last_line_is_a_new_incident(tmp_path):
     assert len(lines) == 2, "a recurrence past the forget window is a new incident"
 
 
+def test_an_anomaly_line_states_the_change_not_just_the_rate():
+    """The headline number must be the one the reader thinks it is.
+
+    The live line read "trailing-24h cost is climbing 12.50 USD/h faster than
+    usual" — but 12.50 was the recent *rate*; the change was +27.82/h. The
+    sentence attached "faster than usual" to the wrong quantity and understated
+    the move by more than half. An alert that misstates its own headline number
+    is worse than no alert.
+    """
+    state = _state(provider="meta_ads", pay_model="spend_report", unit="usd",
+                   value=286.75)
+    state.last_ok = m.Reading("meta_ads", T0, m.STATE_OK, 286.75, 200, 110.0,
+                              "spend_report_24h", {"window": "trailing_24h"})
+    m._project(state, T0)
+    state.burn = m.Estimate(-15.325717, -15.325717, 300, 7200.0, 3.9)
+    state.recent_burn = m.Estimate(12.497206, 12.497206, 60, 1800.0, 3.9)
+
+    candidate = m.rule_burn_anomaly(state, T0)
+    assert candidate is not None
+    text = candidate.text
+    assert "12.50" in text, "the recent rate is still reported"
+    assert "-15.33" in text or "15.33" in text, "so is the baseline"
+    assert "27.82" in text, "and so is the change, which is the point"
+    assert "12.50 USD/h faster" not in text, "the rate must not be labelled as the change"
+    assert candidate.evidence["delta_per_h"] == pytest.approx(27.82, abs=0.01)
+
+
+def test_a_depleting_anomaly_line_also_states_the_change():
+    state = _state(provider="resend", pay_model="credits_package", unit="credits",
+                   value=40_000.0)
+    state.burn = m.Estimate(240.0, -240.0, 300, 7200.0, 4.0)
+    state.recent_burn = m.Estimate(700.0, -700.0, 60, 1800.0, 4.0)
+    candidate = m.rule_burn_anomaly(state, T0)
+    assert candidate is not None
+    assert "460" in candidate.text, "the change must appear, not only the two rates"
+    assert candidate.evidence["delta_per_h"] == pytest.approx(460.0)
+
+
 def test_a_recovering_condition_is_not_announced(tmp_path):
     """An anomaly easing from 20 MAD to 14 is not something anyone acts on."""
     store = m.Store(str(tmp_path / "monitor.sqlite"))

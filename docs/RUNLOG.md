@@ -739,3 +739,40 @@ monitor.py --since <T1> --raw raw_samples.jsonl          # scoped derivation
 `--since` verified against the captured log: scoping to 19:00:00Z produced a
 2.002 h window of 3,615 samples out of a 4.8 h log, and a test asserts the raw
 file's digest is unchanged by the operation.
+
+### 21:14Z — the longer window earned its keep within an hour
+
+Two things happened past the six-hour minimum that the shorter window could not
+have produced.
+
+**The unavailability threshold has a positive case now.** `zerobounce` went dark
+for **15.6 minutes — 31 consecutive failed polls, HTTP 500** — and produced the
+first `unavailable` line of the entire run. Until then the honest summary in
+`POLICY-SENSITIVITY.md` was that the shipped 15-minute tolerance fired nothing
+at all: it had sixteen negative cases and none positive.
+
+That is the threshold behaving exactly as designed — silent through sixteen
+self-healing outages, none longer than 10.5 minutes, and speaking the first time
+something stayed dark longer than anything previously measured. A threshold
+calibrated on one afternoon and never exercised by a real event is a guess with
+a table attached. Six hours would have shipped the guess.
+
+**An alert was misstating its own headline number.** `meta_ads` fired:
+
+```
+trailing-24h cost is climbing 12.50 USD/h faster than usual,
+against a window baseline of -15.33 USD/h
+```
+
+12.50 is the *recent rate*, not the excess. The change was **+27.82 USD/h** —
+the baseline was −15.33 and the recent rate +12.50, so the cost went from
+falling to rising. The sentence attached "faster than usual" to the wrong
+quantity and understated the move by more than half.
+
+The evidence dict had `delta_per_h` right all along; only the prose was wrong,
+which is the worst version of this failure — the number a human reads is the one
+in the sentence. Both anomaly messages now state three separate quantities: the
+recent rate, the baseline, and the change between them. Two tests pin it,
+including the exact live numbers.
+
+Neither of these is deployed. Both land with the T1 build.

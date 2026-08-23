@@ -1470,11 +1470,18 @@ def rule_burn_anomaly(state: ProviderState, now: datetime) -> Candidate | None:
     # that means something else entirely.
     if state.pay_model in ACCUMULATING:
         window = state.trailing_window_h or DEFAULT_TRAILING_H
+        # State the rate, the baseline and the change as three separate numbers.
+        # An earlier version read "climbing 12.50 USD/h faster than usual", which
+        # attached "faster than usual" to the recent *rate* — the actual change
+        # was +27.82/h, so the line understated the move by more than half. An
+        # alert that misstates its own headline number is worse than silence.
+        direction = "rising" if recent.rate_per_h >= 0 else "falling"
         headline = (
-            f"{state.provider} ({state.name}) trailing-{window:.0f}h cost is climbing "
-            f"{_fmt(recent.rate_per_h, state.unit)}/h faster than usual over the last "
+            f"{state.provider} ({state.name}) trailing-{window:.0f}h cost is now "
+            f"{direction} at {_fmt(recent.rate_per_h, state.unit)}/h over the last "
             f"{recent.span_s / 60:.0f} min, against a window baseline of "
-            f"{_fmt(base.rate_per_h, state.unit)}/h; reported cost now "
+            f"{_fmt(base.rate_per_h, state.unit)}/h — a change of "
+            f"{'+' if delta >= 0 else ''}{_fmt(delta, state.unit)}/h; reported cost now "
             f"{_fmt(state.value, state.unit)} per {window:.0f} h "
             f"({_fmt(state.trailing_rate_per_h, state.unit)}/h average)"
         )
@@ -1483,8 +1490,9 @@ def rule_burn_anomaly(state: ProviderState, now: datetime) -> Candidate | None:
             f"{state.provider} ({state.name}) burn accelerated to "
             f"{_fmt(recent.rate_per_h, state.unit)}/h over the last "
             f"{recent.span_s / 60:.0f} min against a window baseline of "
-            f"{_fmt(base.rate_per_h, state.unit)}/h"
-            + (f" ({factor:.1f}x)" if factor else "")
+            f"{_fmt(base.rate_per_h, state.unit)}/h — a change of "
+            f"{'+' if delta >= 0 else ''}{_fmt(delta, state.unit)}/h"
+            + (f", {factor:.1f}x" if factor else "")
         )
     return Candidate(
         key=f"burn_anomaly:{state.provider}",
