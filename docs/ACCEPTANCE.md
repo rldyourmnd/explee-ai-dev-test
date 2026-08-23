@@ -124,6 +124,47 @@ still the old dark build (`--warn:#d29922`, no shared tokens). Cross-page checks
 therefore stay build-to-build until the deploy lands and are re-verified live
 afterwards — recorded so a reviewer curling both URLs today sees why they differ.
 
+
+## DELIVERY — P3 IS CANCELLED, and that retires the largest risk in the project
+
+The submission form takes **seven files and two URLs**. The repository is never
+submitted — not as a link, not as an archive. So:
+
+**Cancelled, with the reason:** no fresh public repository, no allowlisted
+package, no orphan history, no `filter-repo` rewrite, no all-refs identifier
+scan, no force-push, no post-rewrite CI. **Row X.8 — "history still contaminated"
+— is closed, not by cleaning the history but by the history never leaving.** The
+quarantined traces cannot reach the employer because nothing that contains them
+is uploaded. Repository visibility stops being a decision at all.
+
+That removes the single largest irreversible-action risk here. A history rewrite
+plus force-push under four live sessions was the one step that could have
+destroyed work, and it is now simply unnecessary.
+
+**What it does not remove:** the two `TRACE.md` files *are* uploaded, so rule-3
+discipline applies to their contents exactly as before. Scanning now targets the
+seven artifacts and nothing else.
+
+**It also settles the one-file argument.** *"Code — one file (zip it if
+several)"* permits an archive, so `monitor.py` goes alone as the code file and
+`raw_sampler.py` gets a sentence in Notes as the bootstrap collector that
+protected the window. Nothing about the running system changes for compliance.
+
+| # | Upload artifact | Source | Status |
+|---|---|---|---|
+| S.1 | Alert log — **the only required file** | `task1-spend-observability/alerts.jsonl` | **12 lines, 0 unreconciled**, audit gate exits 0 — but regenerates on the clean T1 window |
+| S.2 | Task 1 code, one file | `task1-spend-observability/monitor.py` | self-sufficient with `--poll`; ships alone |
+| S.3 | Dashboard URL | `https://spend.nddev.it.com/` | live, no login |
+| S.4 | Task 1 trace | — | **not exported** — session live |
+| S.5 | Task 2 report URL | `https://stt.nddev.it.com/` | live, no login |
+| S.6 | Task 2 trace | — | **not exported** — session live |
+| S.7 | Task 3 artifact | `task3-harness-artifact/flow-memory-sync.md` | verified `a16009988b18…` |
+| S.8 | `submission/LINKS.md` + `NOTES.md` | — | drafted with the package |
+
+**Assembled LAST**, after the clean-window `alerts.jsonl` passes its audit and
+both traces are exported at genuine session end. Assembling early ships an
+artifact that stopped before the work did.
+
 ## Cross-cutting
 
 These rows were lost when this matrix was re-derived from `docs/TASK.md` and are
@@ -136,7 +177,7 @@ rewrite that improves structure and silently drops content.
 | X.2 | Lossless export + foreign-slug guard + `--submission` mode | `tools/export_trace.py` | `surface:8` | **hardened** — unknown block types now a whitelist, non-dict blocks and scalar/null content fail closed (`f21487f`); `--allow-secrets` no longer covers foreign slugs, which have no override at all; `--submission` refuses every override and exits 5 | `uv run --with pytest pytest tests/test_export_trace.py -q` | — |
 | X.5 | Type check clean | `pyright` | `surface:5` | **NOT GREEN — conditionally zero.** The checker reports 0 only because `pyrightconfig.json` excludes four Task 2 paths. Measured 20:47Z with the exclusion removed: **54 errors hidden** — `test_task2_bootstrap.py` 16, `hf_family.py` 10, `whisper_family.py` 9, `nemo_family.py` 7, `test_task2_metrics.py` 6, `gigaam_engine.py` 5, `test_task2_reference.py` 1. Raised by `surface:8`, correctly: hiding a file from the checker is the move it refused for the httpx import | remove the four excludes, then `uv run --with pyright --with pytest --with httpx pyright` → `0 errors` | — |
 | X.7 | Working tree free of third-party identifiers | whole repo | `surface:3` | **DONE** | `git ls-files -z \| xargs -0 grep -lEi '<client>'` → empty | — |
-| X.8 | **History** free of third-party identifiers | all refs | `surface:3` | **OPEN** — two quarantined traces remain in history; the single `filter-repo` rewrite runs last, after all workers stop | `git log -p --all \| grep -ci '<identifier>'` → `0` after the rewrite | — |
+| X.8 | History free of third-party identifiers | all refs | — | **CLOSED BY SCOPE, not by cleaning.** The repository is never submitted, so its history never reaches the employer. Quarantined traces stay internal in a private repo. No rewrite, no force-push, no publication decision | n/a — the artifact set is seven files and two URLs, none of which carry history | — |
 | X.9 | Raw-log verbatim claim bounded at the 8000-char cap | `task1-spend-observability/README.md` | `surface:2` | **DONE** — 6240 records, max stored body 6422, 0 at the cap, headroom 1578 | `python3` over `raw_samples.jsonl` | — |
 
 ## What is still missing — stated first, 20:38Z at `778af57`
