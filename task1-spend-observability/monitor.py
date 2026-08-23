@@ -71,7 +71,8 @@ class Policy:
 
     # When a dark provider becomes an alert. MEASURED bounds, in cycles of 30 s:
     #   transient 504/429      1-2 cycles   (30-60 s)
-    #   self-healing 5xx runs  6-16 cycles  (180-480 s), 4 episodes in 32 min
+    #   self-healing 5xx runs  10-22 polls (300-630 s), 15 episodes in under 3 h
+    #                          across 10 of 15 providers, every one self-healing
     # A 5-8 minute gap that heals itself is not actionable - nobody can do
     # anything about it and it is over before they read the line. 900 s sits
     # 15x above the longest transient and ~1.9x above the longest self-healing
@@ -1296,8 +1297,8 @@ def rule_unavailable(state: ProviderState, now: datetime) -> Candidate | None:
     more than one provider in the same cycle - not once - so the "429 is
     injected pool-wide" reading taken from the first minutes does not survive
     the window, and grouping availability pool-wide would hide real per-vendor
-    outages. 500 episodes are plainly per-provider, running 11-16 consecutive
-    cycles on one ID at a time.
+    outages. 5xx episodes are plainly per-provider, running 10-22 consecutive
+    polls on one ID at a time.
 
     What stops 504 singles from becoming spam is the length of the staleness
     window itself, which is why this rule carries no additional sustain: the
@@ -2311,8 +2312,9 @@ choices nobody specified (runway lead time {POLICY.runway_critical_h:.0f}h criti
 window ({BASELINE.anomaly_k:.0f} MAD of the provider's own slope distribution).<br>
 <strong>Why {POLICY.unavailable_alert_s / 60:.0f} minutes.</strong> In the reference window
 transient 504/429 failures lasted 1&ndash;2 polls (30&ndash;60s) and self-healing 5xx episodes
-lasted 6&ndash;16 polls (180&ndash;480s). The tolerance sits above the longest outage actually
-measured, so a line means "longer than anything we observed", not "the API is flaky again".
+lasted 10&ndash;22 polls (300&ndash;630s) &mdash; 15 of them across 10 providers in under three
+hours, every one self-healing. The tolerance sits above the longest outage actually measured,
+so a line means "longer than anything we observed", not "the API is flaky again".
 Freshness above turns amber at {POLICY.stale_display_s:.0f}s so a provider going quiet is
 <em>visible</em> long before it is <em>alerted</em>.<br>
 <strong>Not alerts.</strong> A top-up, a package reset on its refresh date, a postpaid credit

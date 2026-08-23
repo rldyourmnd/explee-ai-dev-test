@@ -7,15 +7,20 @@
 | `raw_sampler.py` | bootstrap collector, live on `server-nddev-amsterdam` since T0 |
 | `monitor.py` | the deliverable: adapters, metrics, alerting, dashboard, `/healthz` |
 | `alerts.jsonl` | one JSON object per line, the alerting deliverable |
+| `POLICY-SENSITIVITY.md` | what each threshold costs on the captured window |
 | `data/` | captured samples, gitignored, authoritative copy lives on the server |
+
+Live at **https://spend.nddev.it.com/** — no login, HTTPS, `/healthz`,
+`/api/state`, `/alerts.jsonl`.
 
 ## Shape of the system
 
-`raw_sampler.py` is the only client of the third-party API. It writes verbatim
-response bodies and parses nothing, so the log is a superset of anything a
-monitor could need. `monitor.py` **derives** everything from that log: it
-replays from T0, then tails. Three properties follow, and they are the reason
-for the split:
+`raw_sampler.py` is the only client of the third-party API. It writes response
+bodies and parses nothing, so the log is a superset of anything a monitor could
+need.
+
+`monitor.py` **derives** everything from that log: it replays from T0, then
+tails. Three properties follow, and they are the reason for the split:
 
 - the dashboard shows history from T0 rather than from process start;
 - a threshold change is applied to the **whole** window by deleting the SQLite
@@ -29,6 +34,20 @@ against the **data** clock, not the process clock, which is what makes a replay
 reproduce the alerts a live run would have produced.
 
 Stdlib only. The deploy target needs a Python runtime and nothing else.
+
+### What "verbatim" does and does not cover
+
+Stated because an unqualified claim would be unprovable: the sampler stores
+`r.text[:8000]`, so a body longer than 8,000 characters would be silently
+clipped, and it records no original length or hash that would let you detect
+that after the fact.
+
+Measured over the captured window: **0 records at exactly 8,000 characters**,
+largest stored body **6,422** — the HTML gateway page a `504` returns — leaving
+1,578 characters of headroom. Nothing in the window was clipped, so the log is
+verbatim in fact as well as in intent. Adding a length or hash field would mean
+restarting the sampler, which would end the observation window, so it is not
+being done before the window closes.
 
 ## Provider taxonomy
 
@@ -45,9 +64,18 @@ Provider IDs are opaque keys: `brightdata` reports as "Oxylabs", `meta_ads` as
 "Google Ads", `openrouter` as "Groq". Nothing is inferred from an ID — including
 which schema adapter to use, which is chosen by **the shape that came back**.
 
-Aggregation is keyed on `(pay_model, unit)`. USD balance, GBP balance, credits,
-trailing USD spend and postpaid USD credit are five different quantities; a
-single "total spend" across them would be fiction.
+A group is summed **only when its unit is fungible across vendors**, which for
+this catalog means a currency. Keying on `(pay_model, unit)` alone is not
+enough, and an earlier version of this dashboard was wrong for exactly the
+reason the task warns about: two USD balances add up because a dollar at one
+vendor is a dollar at another, but two "credits" balances do not. `elevenlabs`
+credits are TTS characters, `resend` credits are emails, `scrapfly` credits are
+API calls. Adding 850,199 of one to 40,076 of another produced a headline
+number that was not a quantity of anything.
+
+Non-fungible groups therefore publish no total at all — `value` and `burn` are
+`None`, not `0`, so a later caller cannot quietly add them — and report instead
+what *is* comparable: how many packages exist and which one exhausts first.
 
 ## What the captured window actually shows
 
@@ -92,9 +120,14 @@ the captured data at all, and across 66 exact cycles:
 | 503 | 1 | vastai | 6 cycles |
 | 504 | 1–2 | 10 different providers | 1–2 cycles, ~3.1 s latency |
 
+Over the longer window the 5xx episodes run **10–22 consecutive polls
+(300–630 s)**: 15 of them across 10 of 15 providers in under three hours, every
+one self-healing. The 66-cycle figures above are left as first measured, since
+they are what the design was drawn from.
+
 So availability is evaluated **per provider**. What stops 504 singles from
 becoming spam is the length of the staleness window, not a pool-wide grouping —
-and grouping pool-wide would have hidden the four genuine multi-minute outages.
+and grouping pool-wide would have hidden every one of those 15 outages.
 
 ### Burn must be robust, and robust is not enough
 
@@ -157,7 +190,7 @@ choice, the bound is quoted next to it in `monitor.py`.
 | Setting | Value | Why |
 |---|---|---|
 | runway critical / warning | 24 h / 72 h | pure policy, no SLA given |
-| unavailability tolerance | 900 s | above the longest outage measured (480 s); 15× the longest transient (60 s) |
+| unavailability tolerance | 900 s | above the longest outage measured (630 s); 15× the longest transient (60 s). Costs: see [POLICY-SENSITIVITY.md](POLICY-SENSITIVITY.md) |
 | freshness (display, `/healthz`) | 300 s | a provider going quiet is *visible* long before it is *alerted* |
 | postpaid floor | −500 USD | zero is not the boundary; no credit limit was supplied |
 | pool-wide failure | 50% for 180 s | worst single cycle measured was 4/15 = 27% |

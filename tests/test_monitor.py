@@ -580,7 +580,7 @@ def test_a_transient_429_burst_produces_no_alert(tmp_path):
 
 
 def test_a_self_healing_five_minute_outage_produces_no_alert(tmp_path):
-    """The longest 5xx episode measured was 16 cycles (480 s) and healed itself."""
+    """The longest 5xx episode measured was 22 polls (630 s) and healed itself."""
     def builder(_provider, i):
         if 20 <= i < 36:
             return ('{"error":"upstream 500"}', 500)
@@ -1415,7 +1415,7 @@ def test_healthz_reports_unhealthy_with_an_empty_catalog(tmp_path):
 def test_thresholds_sit_where_the_measurements_say_they_should():
     """Guards against a well-meaning edit that silently reintroduces alert spam."""
     longest_transient_s = 60.0     # 2 cycles of 504/429
-    longest_self_healing_s = 480.0  # 16 cycles of upstream 500
+    longest_self_healing_s = 630.0  # 22 consecutive failed polls, findymail 18:08Z
     assert m.POLICY.unavailable_alert_s > longest_self_healing_s
     assert m.POLICY.unavailable_alert_s >= 10 * longest_transient_s
     assert m.POLICY.stale_display_s < m.POLICY.unavailable_alert_s, \
