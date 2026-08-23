@@ -166,6 +166,41 @@ the identifiers are assembled at runtime and never written into a tracked file,
 because `docs/SUBMISSION.md` once spelled them out inside a `grep` example and
 the leak-detection instructions were themselves the leak.
 
+
+## The export guard refused its own author, 22:59Z
+
+`surface:8` built the foreign-project-slug guard after an unscoped `--list`
+contaminated the first Task 3 trace. As its final act it exported **its own
+session** under `--submission`. **The guard refused, exit 3.**
+
+Among the findings is the real third-party slug, appearing **18 times** — typed
+into `grep` commands and quoted in commit messages *while diagnosing and fixing
+the original leak*. The other findings are synthetic test fixtures and would be
+acknowledgeable; that one is not.
+
+**Ruling: the working session is not published, and no finding is acknowledged.**
+The only route to publishing it is `--allow-finding` on a real client identifier,
+which is precisely the act the guard exists to prevent. A guard with a
+convenience override for its author is not a guard.
+
+**This costs nothing.** The shipped Task 3 trace is the fresh selection session
+`9502fd71`, already committed, **0 occurrences** of that slug, and it re-exports
+byte-identical under `--submission`. The orchestration session was never a
+deliverable.
+
+**Worth stating plainly because it inverts this project's dominant failure
+pattern.** Eight times something reported success while doing another thing — a
+truncating exporter under a header claiming nothing was dropped, a redaction
+filter that matched nothing, a viewport that was never 390, a documented command
+that wrote to a log, a commit that reinstated what it was told to remove. Here a
+tool did *exactly* what it claimed, at the maximum possible inconvenience to the
+person who wrote it. **That is better evidence the guard works than any test in
+the suite**, because the test was written by someone hoping it would pass and
+this refusal was not.
+
+An honest record of what is unexportable is also worth more than a trace that
+was quietly trimmed until it exported.
+
 ## Cross-cutting
 
 These rows were lost when this matrix was re-derived from `docs/TASK.md` and are
@@ -176,7 +211,7 @@ rewrite that improves structure and silently drops content.
 |---|---|---|---|---|---|---|
 | X.1 | Gates green on a clean tree at the final SHA | — | `surface:3` | pending submission | `git status --porcelain` empty, then all four gates with versions and exit codes | — |
 | X.2 | Lossless export + foreign-slug guard + `--submission` mode | `tools/export_trace.py` | `surface:8` | **hardened** — unknown block types now a whitelist, non-dict blocks and scalar/null content fail closed (`f21487f`); `--allow-secrets` no longer covers foreign slugs, which have no override at all; `--submission` refuses every override and exits 5 | `uv run --with pytest pytest tests/test_export_trace.py -q` | — |
-| X.5 | Type check clean | `pyright` | `surface:5` | **NOT GREEN — conditionally zero.** The checker reports 0 only because `pyrightconfig.json` excludes four Task 2 paths. Measured 20:47Z with the exclusion removed: **54 errors hidden** — `test_task2_bootstrap.py` 16, `hf_family.py` 10, `whisper_family.py` 9, `nemo_family.py` 7, `test_task2_metrics.py` 6, `gigaam_engine.py` 5, `test_task2_reference.py` 1. Raised by `surface:8`, correctly: hiding a file from the checker is the move it refused for the httpx import | remove the four excludes, then `uv run --with pyright --with pytest --with httpx pyright` → `0 errors` | — |
+| X.5 | Type check clean | `pyright` | `surface:5` | **GREEN — cleared, not hidden.** Verified 22:59Z: `pyrightconfig.json` excludes only `**/.venv`, `**/__pycache__`, `**/node_modules`, `browser`, `docs` — `modal_app/` and all three `test_task2_*` files are gone from it, and pyright reports **0 errors with nothing task-related excluded**. The 64 were two populations: **23 real** Optional-arithmetic defects, fixed with narrowing helpers (one helper was itself wrong on first write and a test caught it); **41 were not defects** — `torch`, `librosa`, `transformers`, `soundfile`, `nemo`, `gigaam` exist only inside the container image, suppressed **by rule name, per file, with the reason written above each pragma**, so every other rule stays live there. That is the correct answer to the objection: a directory exclusion is where new defects land unseen, which is exactly how `qwen_gigaam.py` arrived carrying 10 | `uv run --with pyright --with pytest --with httpx pyright` → `0 errors`; inspect `pyrightconfig.json` excludes | at `fdb52b7` |
 | X.7 | Working tree free of third-party identifiers | whole repo | `surface:3` | **DONE** | `git ls-files -z \| xargs -0 grep -lEi '<client>'` → empty | — |
 | X.8 | History free of third-party identifiers | all refs | `surface:3` | **OPEN — reopened.** The repository is sent as supplementary material, so history does reach the employer. Two files must vanish from every commit and four paths need identifiers replaced in historical revisions. **Rewrite, not flatten** — the retraction chain across 146 commits is the evidence | `git log -p --all \| grep -cif <gitignored pattern file>` → `0`, plus an unauthenticated clone rescan, after the rewrite | — |
 | X.9 | Raw-log verbatim claim bounded at the 8000-char cap | `task1-spend-observability/README.md` | `surface:2` | **DONE** — 6240 records, max stored body 6422, 0 at the cap, headroom 1578 | `python3` over `raw_samples.jsonl` | — |
