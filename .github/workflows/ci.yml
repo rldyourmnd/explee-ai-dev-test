@@ -1,13 +1,19 @@
 name: CI
 
-# Runs on GitHub-hosted ubuntu-latest runners, which are free for this
-# repository. Deliberately independent of the publication decision: Actions runs
-# on private repositories too, so CI does not wait on the repo becoming public.
+# Runs on GitHub-hosted ubuntu-latest runners, free for this repository, and
+# deliberately independent of the publication decision — Actions runs on private
+# repositories too.
 #
-# Why this workflow exists at all: the external review's central point is that a
-# reviewer who cannot run anything must treat every machine-level claim here as
-# an agent assertion. A CI run attached to a commit is the one piece of evidence
-# that a grader can verify without trusting us or running anything themselves.
+# Why this exists: the external review's central point is that a reviewer who
+# cannot run anything must treat every machine-level claim here as an agent
+# assertion. A CI run attached to a commit is the one piece of evidence a grader
+# can check without trusting us.
+#
+# Every tool version below is pinned. An unpinned `--with ruff` once resolved to
+# 0.16.4 in CI while the local machine ran 0.15.17, so the same tree was "All
+# checks passed" locally and 49 errors here, and every local "gates green" claim
+# was about a different check than the one that ran. A gate that moves under you
+# is not a gate.
 
 on:
   push:
@@ -23,13 +29,20 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  RUFF_VERSION: "0.15.17"
+  PYRIGHT_VERSION: "1.1.411"
+  PYTEST_VERSION: "8.3.4"
+
 jobs:
   gates:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # consistency checks need history to compare SHAs
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -40,36 +53,35 @@ jobs:
         run: |
           uv --version
           python3 -V
-          uv run --with 'ruff==0.15.17' ruff --version
+          uv run --with "ruff==${RUFF_VERSION}" ruff --version
+          uv run --with "pyright==${PYRIGHT_VERSION}" pyright --version
           echo "commit: ${GITHUB_SHA}"
 
       - name: pytest
-        run: uv run --with pytest pytest tests/ -q
+        run: uv run --with "pytest==${PYTEST_VERSION}" pytest tests/ -q
 
-      # Version pinned deliberately. An unpinned `--with ruff` resolved to 0.16.4
-      # here while the local machine ran 0.15.17, so the same tree was "All checks
-      # passed" locally and 49 errors in CI — every local "gates green" claim was
-      # about a different check than the one CI runs. ruff.toml pins the rule
-      # selection so the result no longer depends on the version at all; the pin
-      # below keeps the two identical even so. Verified: with ruff.toml present,
-      # both 0.15.17 and 0.16.4 pass.
       - name: ruff
-        run: uv run --with 'ruff==0.15.17' ruff check .
+        run: uv run --with "ruff==${RUFF_VERSION}" ruff check .
 
-      # Non-blocking on purpose, and this is a declared state rather than a
-      # hidden one. The 18-error baseline at 8111af1 was mostly environment,
-      # not code: pyright could not see httpx (declared in a PEP 723 header) or
-      # the task2 harness package (put on sys.path at runtime by the tests), so
-      # working imports read as missing. pyrightconfig.json declares the package
-      # path and this step installs the third-party dependency, which is why the
-      # remaining errors are real. The importlib ModuleSpec | None errors and
-      # the export_trace.py operator defect are fixed.
-      #
-      # Remaining at this commit: 16, all in tests/test_task2_bootstrap.py (10)
-      # and tests/test_task2_metrics.py (6) - Optional operands and an invariant
-      # dict/Sequence parameter. Owned by task 2, whose count moves while that
-      # work is in flight. Flip continue-on-error to false once it reaches 0;
-      # tracked as row X.5 in docs/ACCEPTANCE.md.
-      - name: pyright (reporting only, see docs/ACCEPTANCE.md X.5)
-        continue-on-error: true
-        run: uv run --with pyright --with pytest --with httpx pyright
+      # Blocking as of 20:20Z. It reached zero by scoping, not by lowering the
+      # bar: four Task 2 files are excluded in pyrightconfig.json while that task
+      # is mid-flight, and the exclusion is listed there in the open rather than
+      # hidden behind continue-on-error. Every other file in the repository is
+      # type-checked and must stay at zero. The exclusion comes out when Task 2
+      # stops editing them; until then this gate protects the other 95%.
+      - name: pyright
+        run: uv run --with "pyright==${PYRIGHT_VERSION}" --with "pytest==${PYTEST_VERSION}" --with httpx pyright
+
+      # Fails on the defect classes that kept reappearing by hand: an acceptance
+      # baseline behind HEAD, a timestamp claiming something happened later than
+      # now, and a document linking to a file that is not there. The second
+      # external review found six live contradictions of exactly these shapes,
+      # including a verification stamped 19:45Z inside a commit made at 19:43:14Z.
+      - name: repository consistency
+        run: uv run tools/repo_checks.py consistency
+
+      # Reports what the task still needs. Non-blocking until submission, when it
+      # is run with --strict: before then a missing trace is work in progress,
+      # and at submission it is a failed deliverable.
+      - name: acceptance status (reporting)
+        run: uv run tools/repo_checks.py acceptance

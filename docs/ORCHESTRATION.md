@@ -633,7 +633,7 @@ the owner's brief. Stale advice delivered early is worse than no advice.
 
 | When | What | Standing |
 |---|---|---|
-| 2026-08-23T22:14Z | 6 h observation minimum; longer is better | on track, 0 gaps |
+| 2026-08-23T22:14Z | 6 h observation minimum, deadline; longer is better | on track, 0 gaps |
 | before submission | every `TRACE.md` exported via `tools/export_trace.py`, never hand-written | not yet due |
 | before submission | dashboard and report open in incognito, no login | not yet due |
 | before submission | `uv run --with pytest pytest tests/ -q && ruff check .` green | **green at 17:32Z** — 84 passed in 2.24 s, `ruff` all checks passed, both exit 0 |

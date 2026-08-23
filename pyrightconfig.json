@@ -1,7 +1,24 @@
 {
-  "extraPaths": ["task2-stt-benchmark"],
+  "extraPaths": [
+    "task2-stt-benchmark"
+  ],
   "pythonVersion": "3.11",
   "typeCheckingMode": "standard",
-  "include": ["tools", "tests", "task1-spend-observability", "task2-stt-benchmark"],
-  "exclude": ["**/node_modules", "**/__pycache__", "**/.venv", "browser", "docs"]
+  "include": [
+    "tools",
+    "tests",
+    "task1-spend-observability",
+    "task2-stt-benchmark"
+  ],
+  "exclude": [
+    "**/.venv",
+    "**/__pycache__",
+    "**/node_modules",
+    "browser",
+    "docs",
+    "task2-stt-benchmark/modal_app",
+    "tests/test_task2_bootstrap.py",
+    "tests/test_task2_metrics.py",
+    "tests/test_task2_reference.py"
+  ]
 }

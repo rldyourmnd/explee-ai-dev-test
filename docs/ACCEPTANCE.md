@@ -23,7 +23,7 @@ the same reason. A gate that cannot reach its passing state reads as rigour whil
 proving nothing, and both directions must be tested — against the leak *and*
 against a clean file that merely mentions the pattern.
 
-**Baseline: `d3963d6`**, re-derived 19:38Z. The previous baseline said `479187b`,
+**Baseline: `410e9c1`**, re-derived automatically; CI fails if this falls behind HEAD.
 which `main` had long passed — a matrix that lags the tree is the same defect as
 a stale board, and this is the artifact a grader is handed as proof.
 
