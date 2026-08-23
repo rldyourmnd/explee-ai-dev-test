@@ -105,6 +105,32 @@ is the test. The consistency and acceptance checks stay because they catch real
 drift — they have already caught a stale baseline, future timestamps, dead links
 and an engine count pointed at the wrong directory.
 
+
+## UI convergence — measured on both live pages 21:46Z
+
+`docs/ui-spec.md` asks both pages to declare the **same token names**, so a
+reader meets one system rather than two that happen to resemble each other.
+
+| | Dashboard (live) | Report (live) | Spec |
+|---|---|---|---|
+| Shared tokens | only `--warn`, `--ok` | only `--warn`, `--ok` | `--paper --surface --rule --ink --muted --alarm --warn --ok` |
+| `--warn` | `#d29922` | `#8a6d1f` | **`#8a6d3a`** |
+| `--ok` | `#3fb950` | `#2f6b47` | `#2f6b47` |
+| em / en dashes | 0 / 0 | **34 / 5** | 0 |
+
+**Ruling: the report moves to `#8a6d3a`.** The spec states it, Task 1's build
+matches it, and when one artifact conforms to a written contract and the other
+does not, the contract wins — amending the spec to match an artifact is how a
+shared system quietly stops being shared.
+
+**A precision correction worth recording.** Task 1 reported its dashboard work
+"verified on the rendered page". The *live* page is still the old dark build
+(`--bg:#0d1117`, no `font-family`), because the deploy correctly waits for a
+snapshot boundary — nothing changes while the window is open. What was verified
+is the local render of the committed build. The work is right; the sentence would
+have failed a reviewer who curled the URL. Cross-page checks are therefore
+build-to-build until the deploy lands, and re-verified live afterwards.
+
 ## Cross-cutting
 
 These rows were lost when this matrix was re-derived from `docs/TASK.md` and are
