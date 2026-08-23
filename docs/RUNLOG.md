@@ -90,3 +90,27 @@ target, which was reasonable locally and unacceptable in a published artifact.
 Redacting it would violate the verbatim requirement, so the trace stays internal
 instead. `AGENTS.md` rule 3 now forbids the reconnaissance pattern that created
 it, so the three task traces will be clean by construction.
+
+### 16:25Z — GDS registration
+
+Repository registered against the GDS estate standard:
+
+| | |
+|---|---|
+| Repository id | `repo_01M0QPEFY0YJFX2XGGCBG4FMZF` |
+| Provider | `rldyourmnd/explee-ai-dev-test` (id `1343959619`, private) |
+| Device | `rldyourmnd-ubuntu-1` (`device_0Q0MPJ4Z2ENZ97XWETRESKZGTH`) |
+| Plan | `plan_01M0QQ2AWAHKE9ECP3VK44DVMV`, applied |
+| Bundle | `0.4.0-dev`, digest `sha256:9bc36b13cbe2…` |
+
+`gds validate repository` passes and the projections
+(`.gds/bundle.lock.yaml`, `.gds/compiled-policy.json`) are materialized.
+`AGENTS.md` stays author-owned: the anchor sets `agent.generated_agents: false`,
+so the generator does not overwrite it.
+
+`gds doctor` still reports `GDS_CONTEXT_POLICY_EMBEDDED_TEMPLATE_MISMATCH`. That
+is estate drift, not a defect in this repository: the installed binary is
+`gds 0.6.0+source.3f98c262c605` while the control-plane source has moved on to
+`b2dea28`, so the generator's embedded templates trail their canonical source.
+The control-plane repository itself passes `gds doctor`, which confirms the
+canonical side is intact. Rebuilding the GDS release is out of scope here.
