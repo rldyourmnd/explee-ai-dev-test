@@ -85,6 +85,7 @@
   .tag { font-family: var(--sans); font-size: 0.7rem; text-transform: uppercase;
          letter-spacing: 0.05em; color: var(--ok); display: block; }
 
+  h2.first { border-top: none; padding-top: 0; margin-top: var(--s6); }
   .callout { border-left: 3px solid var(--alarm); padding: var(--s3) 0 var(--s3) var(--s4);
              margin: var(--s5) 0; }
   .callout strong { color: var(--alarm); }
@@ -95,11 +96,6 @@
   footer { margin-top: var(--s7); padding-top: var(--s4);
            border-top: 1px solid var(--rule); color: var(--muted); font-size: 0.85rem; }
   ul, ol { padding-left: var(--s5); } li { margin: var(--s1) 0; }
-  .ev { font-family: var(--mono); font-size: 12.5px; line-height: 1.6;
-        background: var(--surface); border-radius: 4px; padding: var(--s3) var(--s4);
-        overflow-x: auto; margin: var(--s3) 0; white-space: pre-wrap; }
-  .ev b { color: var(--alarm); font-weight: 600; }
-  .ev .who { color: var(--muted); }
 </style>
 <div class="wrap">
 
@@ -107,6 +103,15 @@
 <p class="lede">Five speech to text engines on the same 49 minutes of Russian technical
 talk, scored against a human transcript published by the conference itself, with the
 evaluation frozen before any engine ran.</p>
+
+<h2 class="first">Output 1: the production recommendation</h2>
+
+<p class="meta">This report has three outputs and they answer different questions. <strong>Output
+1</strong> is what to run. <strong>Output 2</strong> ranks five engines with no terminology
+help, which is the only like for like engine comparison here. <strong>Output 3</strong> tests
+whether a glossary prompt helps, within Whisper only, because only Whisper accepts one. A
+prompted result cannot show that one engine beats another that was never offered the same
+help, so the two are never mixed.</p>
 
 <div class="hero">
 <div class="callout">
@@ -151,7 +156,7 @@ Full tables, intervals and the prompt ablation are below.</p>
 </div>
 
 
-<h2>Result 1: the engine ranking</h2>
+<h2>Output 2: the engine ranking, no terminology help</h2>
 
 <p>Five engines, no terminology assistance, like for like. This is the only table that
 compares engines, because it is the only one where every engine got the same help.</p>
@@ -178,6 +183,9 @@ compares engines, because it is the only one where every engine got the same hel
 </table>
 </div>
 
+<p class="meta">This table is Output 2. It compares engines. It does not include any
+prompted configuration, because none of the other engines could be prompted.</p>
+
 <p><strong>The top three are not separated.</strong> large-v3 leads on term F1 by 3.6 points
 over turbo and 3.8 over Parakeet, and neither gap survives the paired test. Read the power
 table below before treating that ordering as a result: this corpus detects a 3 point
@@ -186,7 +194,10 @@ difference about one time in ten. Two engines are excluded by the guardrail.</p>
 <p>wav2vec2's F1 of 0.000 is an operational zero, not a missing measurement: it proposed no
 glossary term anywhere in 49 minutes against a reference containing 138 occurrences.</p>
 
-<h2>Result 2: does a glossary prompt help?</h2>
+<h2>Output 3: does a glossary prompt help? Within Whisper only</h2>
+
+<p class="meta">This table is Output 3. It compares configurations of one model family,
+not engines.</p>
 
 <p>Only Whisper accepts a text prompt, so this is a within-family ablation, not an engine
 comparison. It cannot show that Whisper beats engines that never received terminology
