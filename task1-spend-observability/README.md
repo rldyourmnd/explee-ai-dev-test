@@ -11,6 +11,19 @@ task needs six hours of observation and the API has no history endpoint — so t
 window had to start being captured before there was anything to capture it with.
 It is included as the record of what actually ran, not as something you need.
 
+> **The copy here is one line different from the process that is running.** Its
+> imports were split onto separate lines to satisfy `ruff` (`E401`). Deploying
+> that would mean restarting the sampler, which would end the observation
+> window, so it was not deployed.
+>
+> The difference is formatting only, checked rather than asserted: `diff` shows
+> exactly one hunk — `import asyncio, json, os, sys, time` split into five lines
+> — the two files import the same eight names, and the parse tree is identical
+> once the import block is excluded. The running copy is the one that produced
+> every number in this directory. This is noted because a reader comparing the
+> two would otherwise find an undocumented discrepancy, which is worse than a
+> documented one.
+
 Live at **https://spend.nddev.it.com/** — no login, HTTPS, `/healthz`,
 `/api/state`, `/alerts.jsonl`.
 
