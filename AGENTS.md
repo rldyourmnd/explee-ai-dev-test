@@ -59,6 +59,48 @@
    `git rm`. A deleted file and a purged file are different things, and only the
    second is safe to publish.
 
+## Enumeration hazards — never list what you did not come to see
+
+Three separate leaks in this run had one shape: **a tool's listing command
+enumerated the whole machine or account, and the tool output landed verbatim in a
+trace.**
+
+1. `export_trace.py --list` globbed every project under `~/.claude/projects` and
+   put an unrelated client's name into the Task 3 trace 20 times. That trace was
+   quarantined and is now deleted.
+2. The orchestration session listed SSH hosts and `Developer/` while choosing a
+   deploy target, producing 9 third-party IPs and 16 `HostName` lines. That trace
+   was quarantined and is now deleted.
+3. `modal app list` enumerates the workspace and prints a deployed app belonging
+   to an unrelated client.
+
+Three for three. Assume the pattern is general, because it is: these commands are
+*designed* to show everything you own, and a hiring-test trace is published
+verbatim to strangers.
+
+**Measured breadth of the tools on this machine** — run as counts only, never
+printing names, so this document and the trace that produced it stay clean:
+
+| Command | Reaches |
+|---|---|
+| `gh repo list` | 36 repositories |
+| `systemctl list-units` | 69 services on the droplet |
+| `doctl compute droplet list` | 8 droplets |
+| `docker ps` | 8 containers |
+| `modal app list` | the whole workspace |
+| `gddy domain list` | the whole registrar account |
+
+**The rule.** In any session that will be exported, do not run a bare listing
+command. Scope it to the object you already know you need
+(`gh repo view <this-repo>`, `systemctl is-active explee-raw-sampler`,
+`docker inspect explee-spend-monitor`), or pipe it to a count when you only need
+to know how many. If you genuinely must enumerate, do it in a session that will
+never be published, and carry only the single answer back.
+
+The general form: **a command that answers a question you did not ask is a leak
+waiting for an audience.** Redaction afterwards is not available, because a trace
+that is edited is no longer verbatim.
+
 ## Evidence
 
 Every claim in a deliverable is a hypothesis plus the data behind it. "The API

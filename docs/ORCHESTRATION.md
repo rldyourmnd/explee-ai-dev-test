@@ -108,7 +108,7 @@ are written down in advance rather than improvised at the deadline.
 **Still mine, not yet done:** the 22:14Z snapshot; the allowlisted delivery
 package (blocked on decision 3); final gates at the final SHA.
 
-## Publication track, 19:02Z — three steps done, publication deliberately not run
+## Publication track, 18:53Z — three steps done, publication deliberately not run
 
 Sequenced so that the irreversible step happens once, last.
 
@@ -145,7 +145,7 @@ history rewrite under live sessions destroys uncommitted work. Rewriting to fix 
 commit message would contradict that for cosmetics. Recorded here instead, and
 both sessions have moved to explicit `git add <paths>`.
 
-## Contradiction sweep, 19:08Z — standing order 1
+## Contradiction sweep, 18:59Z — standing order 1
 
 The three known contradictions are **closed**, each re-checked by running the
 claim rather than reading it:
@@ -338,19 +338,46 @@ escalation #4 until a URL answers in incognito.
 
 ### Task 2 — STT benchmark (`surface:5`, `task2-stt-benchmark/`)
 
-**Blocked — not started, no brief.** Unchanged at 17:02Z: session still at the
-Claude Code welcome screen with an empty prompt, no `docs/briefs/task2.md`, and
-no `task2-stt-benchmark/` directory. Escalated once at 16:48Z; not re-notified,
-because repeating an unanswered escalation every 12 minutes trains the human to
-ignore the channel.
+**Active and ahead of where this board last claimed.** Refreshed against the tree
+at 19:02Z, not against memory. The previous entry still read *"Blocked — not
+started, no brief"* from 17:02Z, hours after the brief landed and the session
+began working. **A board that reports a working task as blocked is worse than no
+board**, because it is the artifact everyone else trusts instead of looking; the
+staleness lived in the one section that most needed to be current.
 
-This is a human decision, not one the orchestrator answers: the benchmark's
-scope (which STT providers, which audio, which metrics, where the report is
-published) determines the deliverable. Escalated to `surface:7` at 16:48Z.
+On disk, verified by `find`:
 
-Cost of the delay is bounded — unlike Task 1, nothing here decays with wall
-time, so this does not threaten the 22:14Z window. It does consume the shortest
-path to a published report.
+| Artefact | Path |
+|---|---|
+| Pre-registration, frozen | `PREREGISTRATION.md` |
+| Frozen glossary | `glossary.json` |
+| Reference policy | `docs/reference-policy.md` |
+| Corpus candidates | `docs/corpus-candidates.md` |
+| Harness | `harness/` — `runner.py`, `metrics.py`, `align.py`, `normalize.py`, `manifest.py`, `glossary.py`, `bootstrap.py` |
+| Task README | `README.md` |
+
+**The design is frozen before any engine output has been seen**, which was the
+non-negotiable methodological requirement — freezing after looking at results is
+how a benchmark becomes a story about its own winner.
+
+**Pre-registration timestamp defect, found and fixed.** It was stamped
+`FROZEN 2026-08-23T19:30Z` while being written before 19:00Z. A pre-registration
+whose own timestamp is in the future destroys the single property it exists to
+establish. `surface:5` fixed it the strong way rather than the easy way: the
+status now reads `FROZEN — commit 9fd6ff8, committed 2026-08-23T19:00:14Z`,
+anchored to a git commit time nobody can retype. A self-declared stamp asks to be
+believed; a commit hash can be checked.
+
+**The same clock error was this session's too, at greater volume.** Four board
+stamps — 19:02Z, 19:05Z, 19:08Z, 19:12Z — were emitted while the real clock read
+19:01Z, because they were estimated from cadence instead of read. All four are
+corrected to the commit times that actually carried them (18:53Z, 18:59Z, 18:59Z,
+19:01Z), and a repo-wide sweep for stamps later than the present now returns
+empty. Catching it in someone else's file first is not a defence.
+
+Remaining, and it is the critical path: corpus freeze with SHA-256 and segment
+manifest (2.3), gold reference (2.4), ≥6 engines (2.5), results (2.6), published
+report (2.7), trace (2.8).
 
 ### Task 3 — harness artifact (`surface:8`, `task3-harness-artifact/`)
 

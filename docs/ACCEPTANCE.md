@@ -115,7 +115,7 @@ Every number that comes back is recorded in `docs/SNAPSHOT-22-14Z.md` and its
 SHA-256 becomes the hash in row 1.4. Collection continues past the mark; longer
 is better, and the snapshot is a copy, not a stopping point.
 
-## DNS evidence for row 1.3, 19:05Z
+## DNS evidence for row 1.3, 18:59Z
 
 Recorded because "the dashboard is up" is exactly the kind of agent assertion the
 review refuses to accept, and because the local and global answers disagree.
@@ -231,7 +231,7 @@ intended — the scan above proves the local history, not what GitHub serves.
 - Publication is decision 3 and remains the human's. This procedure is the
   *mechanism*; it does not make the choice.
 
-## Gate integrity incident, 19:12Z — every "gates green" claim was unreproducible
+## Gate integrity incident, 19:01Z — every "gates green" claim was unreproducible
 
 The most serious self-inflicted finding of this run, recorded in full because it
 invalidates earlier claims made by this session.
