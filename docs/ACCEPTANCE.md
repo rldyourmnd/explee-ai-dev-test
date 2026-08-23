@@ -135,6 +135,37 @@ reader nothing; a page where red appears exactly once tells them where to look.
 Measured by fetching both URLs and comparing extracted token values, not by
 reading either build.
 
+
+## Submission package — assembled 22:55Z, 5 of 7 artifacts placed
+
+Built by `tools/assemble_submission.py` rather than by hand, because the package
+is a placeholder for a longer window: swapping the six-hour cut for a 12- or
+24-hour one is **one command re-run**, not a reassembly under time pressure. A
+valid partial submission therefore exists from now on, which the form explicitly
+permits.
+
+| # | Artifact | State |
+|---|---|---|
+| 1 | `task1-alerts.jsonl` | **12 lines, all parse, all timezone-aware** — pre-flight verified |
+| 2 | `task1-monitor.py` | placed; 0 `raw_sampler` imports, so it ships alone as *"the code (a file)"* |
+| 3 | `task1-TRACE.md` | **absent** — session live |
+| 4 | `task2-TRACE.md` | **absent** — session live |
+| 5 | `task3-flow-memory-sync.md` | placed; **byte-identical** to its source (one distinct hash across both) |
+| 6 | `LINKS.md` | generated with both URLs, so neither is retyped from memory |
+| 7 | `NOTES.md` | drafted by the human; two bracketed numbers update at the final cut |
+
+**Pre-flight passes on the five present artifacts** and reports the two absent
+rather than faking them. The traces stay out deliberately: a trace exported
+before its session ends stops before the work does, which is worse than a missing
+one.
+
+The scan checks the package **and nothing else** — parse and offset on every
+alert line, third-party identifiers, real `HostName` config lines, unexpected
+IPs, and lossy-export markers. Patterns live in the gitignored `.leak-patterns`;
+the identifiers are assembled at runtime and never written into a tracked file,
+because `docs/SUBMISSION.md` once spelled them out inside a `grep` example and
+the leak-detection instructions were themselves the leak.
+
 ## Cross-cutting
 
 These rows were lost when this matrix was re-derived from `docs/TASK.md` and are

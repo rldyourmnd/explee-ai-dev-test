@@ -265,6 +265,33 @@ Durable form: **commit first, then mutate, then restore.** A mutation test shoul
 always run against a clean tree. It was caught one command later only because
 someone grepped for the fix instead of assuming it survived.
 
+## A documented command that succeeds and does nothing
+
+`tools/policy_sensitivity.py` writes its document to **stdout**. The documented
+regenerate command was `uv run tools/policy_sensitivity.py`, with no redirect. It
+was run exactly as documented, redirected to a log so the run could be watched —
+and after **45 minutes** every regenerated table sat in a log file while
+`POLICY-SENSITIVITY.md` kept its three-hour-old numbers. Exit code 0. The command
+succeeded and did nothing that was wanted.
+
+**A documented command must be the whole command.** If the output only lands
+because of a redirect, the redirect is part of the instruction, not a detail the
+reader is expected to supply.
+
+## A document that argues with itself
+
+The same file had grown an *"Update, 21:14Z"* block acknowledging that the prose
+above it was stale. **That is worse than being stale.** A stale document is
+wrong; a document containing its own correction proves someone noticed and
+patched around it rather than fixing it, and leaves the reader to work out which
+half to believe.
+
+Four claims in it were checkable and simply wrong once the window doubled:
+16 outages became 29, across 10 of 15 providers rather than 13 of 15; *"none
+beyond 10.5 minutes"* became a 15.5-minute outage; *"roughly eight lines an
+hour"* became 3.9; *"the single line at k=6"* became three. The update block is
+gone and the prose is current.
+
 ## The instrument can be your own reasoning
 
 On 2026-08-23 a `burn_anomaly` on `meta_ads` reported a baseline of **-14.15
