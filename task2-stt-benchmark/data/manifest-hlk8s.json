@@ -1,0 +1,820 @@
+{
+  "corpus_id": "hlk8s",
+  "created_at": "2026-08-23T20:27:53Z",
+  "notes": [
+    "Corpus amended 2026-08-23T20:45Z, before any engine output existed on it.",
+    "Reference is the publisher transcript, edited for readability: raw WER is inflated identically for all engines; the editing distance is measured and published as a property of the reference.",
+    "Duration 2953 s (49m13s) — under the ~1 h the task asks for, stated openly rather than padded."
+  ],
+  "provenance": "HighLoad Channel, YouTube z2aARjKDg4w — 'Оператор в Kubernetes для управления кластерами БД', Владислав Клименко (Altinity). Paired with the publisher's human transcript at habr.com/ru/articles/523378. Retrieved 2026-08-23. Reference is independent of every engine ranked.",
+  "segment_count": 99,
+  "segments": [
+    {
+      "end_s": 30.0,
+      "id": "hlk8s-0000",
+      "index": 0,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0000.wav",
+      "sha256": "0dff8c63aeb0c2adefc49ab69e753f5ce165e60a2907255297c22916bd5f70b7",
+      "start_s": 0.0
+    },
+    {
+      "end_s": 60.0,
+      "id": "hlk8s-0001",
+      "index": 1,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0001.wav",
+      "sha256": "deace0bb6263b226e2285e8b8a396f25f29873e6d043f0aba69e9c4bfdbc7d19",
+      "start_s": 30.0
+    },
+    {
+      "end_s": 90.0,
+      "id": "hlk8s-0002",
+      "index": 2,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0002.wav",
+      "sha256": "de0770c03050717ec94d194694c90c32a4632ec8812b75bd1aa9733f242f0470",
+      "start_s": 60.0
+    },
+    {
+      "end_s": 120.0,
+      "id": "hlk8s-0003",
+      "index": 3,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0003.wav",
+      "sha256": "806446ac3b4a0b507e61bfd89b3e82d31f15a541b326e9d3e76dbbdc585c23af",
+      "start_s": 90.0
+    },
+    {
+      "end_s": 150.0,
+      "id": "hlk8s-0004",
+      "index": 4,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0004.wav",
+      "sha256": "b3f5a7f725c3bf562c1b56d060268b6ede95970631d8bae0ff50ad460764af1c",
+      "start_s": 120.0
+    },
+    {
+      "end_s": 180.0,
+      "id": "hlk8s-0005",
+      "index": 5,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0005.wav",
+      "sha256": "bcde2aabee84cec4b8fbf3f4803195238303d846e3fb25791d76784ba1ab83fb",
+      "start_s": 150.0
+    },
+    {
+      "end_s": 210.0,
+      "id": "hlk8s-0006",
+      "index": 6,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0006.wav",
+      "sha256": "785c6d8c1c1848f8cad2c18816422ecdaead5d7a5739601016231edfcbfcbd1b",
+      "start_s": 180.0
+    },
+    {
+      "end_s": 240.0,
+      "id": "hlk8s-0007",
+      "index": 7,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0007.wav",
+      "sha256": "13c7d17cc1eb17133c97720dacc888f046597a7e4c6b33b672b8018d8aea697f",
+      "start_s": 210.0
+    },
+    {
+      "end_s": 270.0,
+      "id": "hlk8s-0008",
+      "index": 8,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0008.wav",
+      "sha256": "7a27bf04576fcd0a8bebb4b3c3115a94b4be8c762895aad20ec48bf28dafeacd",
+      "start_s": 240.0
+    },
+    {
+      "end_s": 300.0,
+      "id": "hlk8s-0009",
+      "index": 9,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0009.wav",
+      "sha256": "7fb802e7a31667c2994f309c604538cee4dd4ee02d4e0de754de8c8eab74c351",
+      "start_s": 270.0
+    },
+    {
+      "end_s": 330.0,
+      "id": "hlk8s-0010",
+      "index": 10,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0010.wav",
+      "sha256": "d72d7034defdfaab8e164de87ed3385893514c3bd40e5b7cdd7c0ce093b46379",
+      "start_s": 300.0
+    },
+    {
+      "end_s": 360.0,
+      "id": "hlk8s-0011",
+      "index": 11,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0011.wav",
+      "sha256": "015f0893676e84589fff2c9cba287bb103238449f8de0634a8ffa4c48335538d",
+      "start_s": 330.0
+    },
+    {
+      "end_s": 390.0,
+      "id": "hlk8s-0012",
+      "index": 12,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0012.wav",
+      "sha256": "8b213ac2dd91c491497ad65bc9473ed19e04059e9ce65cd22f1f945002c51cd4",
+      "start_s": 360.0
+    },
+    {
+      "end_s": 420.0,
+      "id": "hlk8s-0013",
+      "index": 13,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0013.wav",
+      "sha256": "31f5c3b50901f52fae345621db13dcdc65fef085f6c583f0cd0f44e24ca81306",
+      "start_s": 390.0
+    },
+    {
+      "end_s": 450.0,
+      "id": "hlk8s-0014",
+      "index": 14,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0014.wav",
+      "sha256": "1fb73fa64ec50bcd6d770b51463407ced7cce464a54f47e8b4977e1355f332a3",
+      "start_s": 420.0
+    },
+    {
+      "end_s": 480.0,
+      "id": "hlk8s-0015",
+      "index": 15,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0015.wav",
+      "sha256": "e69527dcc83aea2589e2b8effb6211012766a5070914c4b74f07062463067c9d",
+      "start_s": 450.0
+    },
+    {
+      "end_s": 510.0,
+      "id": "hlk8s-0016",
+      "index": 16,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0016.wav",
+      "sha256": "e01d155b916b1892e7640c37c9fdeb85520e017d0a56bb54ce0ca4fd89898568",
+      "start_s": 480.0
+    },
+    {
+      "end_s": 540.0,
+      "id": "hlk8s-0017",
+      "index": 17,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0017.wav",
+      "sha256": "f3184a7499e08a2c2fb50e4b4f53d05504d1a2ce1259776e90ba8dcdd419babc",
+      "start_s": 510.0
+    },
+    {
+      "end_s": 570.0,
+      "id": "hlk8s-0018",
+      "index": 18,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0018.wav",
+      "sha256": "967b37fc113ef5ce91bdc68658efe2ed12c3c461a01dcf35de3b02115a64dc3c",
+      "start_s": 540.0
+    },
+    {
+      "end_s": 600.0,
+      "id": "hlk8s-0019",
+      "index": 19,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0019.wav",
+      "sha256": "5f8fa0a9a450b520fbb344a615ef3be9e5a4a1a7fabe0edf3a6c85ac1778e9fd",
+      "start_s": 570.0
+    },
+    {
+      "end_s": 630.0,
+      "id": "hlk8s-0020",
+      "index": 20,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0020.wav",
+      "sha256": "27903661d7c889c8a21ececfe47433fe10353c21ed3ba8f9c81694541bba427b",
+      "start_s": 600.0
+    },
+    {
+      "end_s": 660.0,
+      "id": "hlk8s-0021",
+      "index": 21,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0021.wav",
+      "sha256": "2becfd8283b5818f37ec7a8d4643399cae8e2961bb21c9146374ff0aa4d7326f",
+      "start_s": 630.0
+    },
+    {
+      "end_s": 690.0,
+      "id": "hlk8s-0022",
+      "index": 22,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0022.wav",
+      "sha256": "bbf196e2778dd92cf3d711eac8225f1bb9aa053a183a2ab854c21408ff0e0b34",
+      "start_s": 660.0
+    },
+    {
+      "end_s": 720.0,
+      "id": "hlk8s-0023",
+      "index": 23,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0023.wav",
+      "sha256": "9f20f0d5e25ecd488d950715d4d5967abc22a8c90ae72a80eb06378c1e517d42",
+      "start_s": 690.0
+    },
+    {
+      "end_s": 750.0,
+      "id": "hlk8s-0024",
+      "index": 24,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0024.wav",
+      "sha256": "3715d568f6136fea06be7598ce74669f508edd7a6f8e9da2ca2feb4cd205679d",
+      "start_s": 720.0
+    },
+    {
+      "end_s": 780.0,
+      "id": "hlk8s-0025",
+      "index": 25,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0025.wav",
+      "sha256": "c2c1921e964933ba2b93a51061dd18e0b6c47e56e3c9c5daa759db64e906f2f4",
+      "start_s": 750.0
+    },
+    {
+      "end_s": 810.0,
+      "id": "hlk8s-0026",
+      "index": 26,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0026.wav",
+      "sha256": "48cdddfebb18365d850eac66d48f015ebe0cc0c6959147f91314879fb9d02061",
+      "start_s": 780.0
+    },
+    {
+      "end_s": 840.0,
+      "id": "hlk8s-0027",
+      "index": 27,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0027.wav",
+      "sha256": "c79464e2a78f74e7bf25b0b0e42fe0eb844e011cda582205d0b1b5e72d3dc416",
+      "start_s": 810.0
+    },
+    {
+      "end_s": 870.0,
+      "id": "hlk8s-0028",
+      "index": 28,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0028.wav",
+      "sha256": "fcf6dab755907209793ab639bd2ec224c72f7a5fe65ee438cd7bac3e389efaad",
+      "start_s": 840.0
+    },
+    {
+      "end_s": 900.0,
+      "id": "hlk8s-0029",
+      "index": 29,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0029.wav",
+      "sha256": "315c1071d308fb812607f691ec7961a083561b008294370e6bbaeddc4d09abfb",
+      "start_s": 870.0
+    },
+    {
+      "end_s": 930.0,
+      "id": "hlk8s-0030",
+      "index": 30,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0030.wav",
+      "sha256": "40aec8d0c69de2f01fc0bd3bdc7ce0ffa0818baa7f08d637c039248d72a0894f",
+      "start_s": 900.0
+    },
+    {
+      "end_s": 960.0,
+      "id": "hlk8s-0031",
+      "index": 31,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0031.wav",
+      "sha256": "b475d15f3d537051854c271f2537943e0b8f2af756da81622cdb282f853fb594",
+      "start_s": 930.0
+    },
+    {
+      "end_s": 990.0,
+      "id": "hlk8s-0032",
+      "index": 32,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0032.wav",
+      "sha256": "f561446ad1f4bcb6cdd77e5bdbe09eeb1bd2a0405dce5cce8e2f8f052f463b86",
+      "start_s": 960.0
+    },
+    {
+      "end_s": 1020.0,
+      "id": "hlk8s-0033",
+      "index": 33,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0033.wav",
+      "sha256": "ac762af6d8774aa4fbbac746f71229b40835df80fc4afb7c2ecee234a68c30bd",
+      "start_s": 990.0
+    },
+    {
+      "end_s": 1050.0,
+      "id": "hlk8s-0034",
+      "index": 34,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0034.wav",
+      "sha256": "99863860393f7d5625c4c71ea980f596509de9d036185a3654465e8d6dda5ee0",
+      "start_s": 1020.0
+    },
+    {
+      "end_s": 1080.0,
+      "id": "hlk8s-0035",
+      "index": 35,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0035.wav",
+      "sha256": "9784d15ff0eef05726c77b4fe61dd5f31f3c080ab20e128b45b66a3b71d90545",
+      "start_s": 1050.0
+    },
+    {
+      "end_s": 1110.0,
+      "id": "hlk8s-0036",
+      "index": 36,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0036.wav",
+      "sha256": "188ecb1ad9813b8ff21d0b04a5e2bcff7e418da19f222bc59b4f446ec47b2d3b",
+      "start_s": 1080.0
+    },
+    {
+      "end_s": 1140.0,
+      "id": "hlk8s-0037",
+      "index": 37,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0037.wav",
+      "sha256": "6492c99e86a420c7002972b56988b4e376e667c01831eac27d1fee74c9c37f4c",
+      "start_s": 1110.0
+    },
+    {
+      "end_s": 1170.0,
+      "id": "hlk8s-0038",
+      "index": 38,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0038.wav",
+      "sha256": "af2524288ddd0c009f4d5bee1bbf045ce7ef0c3edbe84559c05b8a4f2704777d",
+      "start_s": 1140.0
+    },
+    {
+      "end_s": 1200.0,
+      "id": "hlk8s-0039",
+      "index": 39,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0039.wav",
+      "sha256": "6d6f4f5d0aae169a04ebee8515c85e1eb9ef6c3bc58bdc9fc1178a775735b8b7",
+      "start_s": 1170.0
+    },
+    {
+      "end_s": 1230.0,
+      "id": "hlk8s-0040",
+      "index": 40,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0040.wav",
+      "sha256": "840897b298d04e4e9b45cf5eb5b07b3500efde3ba36c525f967d89506e094e37",
+      "start_s": 1200.0
+    },
+    {
+      "end_s": 1260.0,
+      "id": "hlk8s-0041",
+      "index": 41,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0041.wav",
+      "sha256": "482d6331ae1b0c159bf5db95e02eba8604dabae04ea0daa6736f9580c8561972",
+      "start_s": 1230.0
+    },
+    {
+      "end_s": 1290.0,
+      "id": "hlk8s-0042",
+      "index": 42,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0042.wav",
+      "sha256": "ef42feeac40dbde6fd966c72dcbc49a229dcc129adf53ff4af7441133879c6d8",
+      "start_s": 1260.0
+    },
+    {
+      "end_s": 1320.0,
+      "id": "hlk8s-0043",
+      "index": 43,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0043.wav",
+      "sha256": "64aa1fccab53fdba4a67453ade2c7840ef69cbe00e229de62b055db4a3988ca5",
+      "start_s": 1290.0
+    },
+    {
+      "end_s": 1350.0,
+      "id": "hlk8s-0044",
+      "index": 44,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0044.wav",
+      "sha256": "c0d84d983095791db59b0bcdaec3db2564ea20e0ca9072bcb2bc6e60184ff38d",
+      "start_s": 1320.0
+    },
+    {
+      "end_s": 1380.0,
+      "id": "hlk8s-0045",
+      "index": 45,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0045.wav",
+      "sha256": "b28334f4c824bb545924d7652d464bd38ca7bed37b2f8f478f68b26acbdaccc2",
+      "start_s": 1350.0
+    },
+    {
+      "end_s": 1410.0,
+      "id": "hlk8s-0046",
+      "index": 46,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0046.wav",
+      "sha256": "f4259a0dc5eacc1307a83dadde2b413c78c59f5eb4a50c90a88102a9b97dc626",
+      "start_s": 1380.0
+    },
+    {
+      "end_s": 1440.0,
+      "id": "hlk8s-0047",
+      "index": 47,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0047.wav",
+      "sha256": "4cea6de1df94b424feb02c6b089bd2e68226f29a04c73208c10478725b0f8456",
+      "start_s": 1410.0
+    },
+    {
+      "end_s": 1470.0,
+      "id": "hlk8s-0048",
+      "index": 48,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0048.wav",
+      "sha256": "5d81077f2e6c6a4d15f63b4873f7d8c84bf29fe01f5c50440e1e707eb5d6bfec",
+      "start_s": 1440.0
+    },
+    {
+      "end_s": 1500.0,
+      "id": "hlk8s-0049",
+      "index": 49,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0049.wav",
+      "sha256": "c31b4a7aecfd970baf471358fa056de122fe8d72dfb3c0e83f554531aa87baad",
+      "start_s": 1470.0
+    },
+    {
+      "end_s": 1530.0,
+      "id": "hlk8s-0050",
+      "index": 50,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0050.wav",
+      "sha256": "6b1658f75ee3c8768a838e93b5e7905ccd0834dec5ba3a5137934f7116b9c7c4",
+      "start_s": 1500.0
+    },
+    {
+      "end_s": 1560.0,
+      "id": "hlk8s-0051",
+      "index": 51,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0051.wav",
+      "sha256": "a00e816348363e7be561cc4fabc6ba5f84e06dfe595fb1c52f40a9ea9b5d6e6c",
+      "start_s": 1530.0
+    },
+    {
+      "end_s": 1590.0,
+      "id": "hlk8s-0052",
+      "index": 52,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0052.wav",
+      "sha256": "a4e3d29e67eaf6b222dd0f76b5a13bcd7f52bb1ee7a7443701b56eb391dc8b35",
+      "start_s": 1560.0
+    },
+    {
+      "end_s": 1620.0,
+      "id": "hlk8s-0053",
+      "index": 53,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0053.wav",
+      "sha256": "ab94576ba726bc9c9826c71f79725baa587efeaf097ae4632a55a12f4abadc97",
+      "start_s": 1590.0
+    },
+    {
+      "end_s": 1650.0,
+      "id": "hlk8s-0054",
+      "index": 54,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0054.wav",
+      "sha256": "8aa8e454386ac0830ce786f908099d244a49614289579a79882e4e86a39ab773",
+      "start_s": 1620.0
+    },
+    {
+      "end_s": 1680.0,
+      "id": "hlk8s-0055",
+      "index": 55,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0055.wav",
+      "sha256": "84c49f967343c95ef577cf40aa626217fe2fce46d1aab049c65ef085631e7b84",
+      "start_s": 1650.0
+    },
+    {
+      "end_s": 1710.0,
+      "id": "hlk8s-0056",
+      "index": 56,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0056.wav",
+      "sha256": "37ef095a44b2748f2748f7f900313f0afb67e1ef2b6d78c7154376b4ca87aac7",
+      "start_s": 1680.0
+    },
+    {
+      "end_s": 1740.0,
+      "id": "hlk8s-0057",
+      "index": 57,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0057.wav",
+      "sha256": "861c9d6469b5e1a248be1a96b038db6e0dbe5d904464caa9128de69fe8397875",
+      "start_s": 1710.0
+    },
+    {
+      "end_s": 1770.0,
+      "id": "hlk8s-0058",
+      "index": 58,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0058.wav",
+      "sha256": "c348657fe4ff9d3493838f37f2518a421d6d4281ad2e76f38c042b198cfc9a58",
+      "start_s": 1740.0
+    },
+    {
+      "end_s": 1800.0,
+      "id": "hlk8s-0059",
+      "index": 59,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0059.wav",
+      "sha256": "a64dd9722f859690b67a2b8da0adcda72bbd9f12876361002452028a36c91b5a",
+      "start_s": 1770.0
+    },
+    {
+      "end_s": 1830.0,
+      "id": "hlk8s-0060",
+      "index": 60,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0060.wav",
+      "sha256": "f02474847d71cc6f12ec804c32bdf3d8f252b16dac0f2bce87792ba292276dae",
+      "start_s": 1800.0
+    },
+    {
+      "end_s": 1860.0,
+      "id": "hlk8s-0061",
+      "index": 61,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0061.wav",
+      "sha256": "2491b43730d84f54f17dbcfa4bbb3d8131fce8bb3f92f5d3b5bff7387c23913e",
+      "start_s": 1830.0
+    },
+    {
+      "end_s": 1890.0,
+      "id": "hlk8s-0062",
+      "index": 62,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0062.wav",
+      "sha256": "561e97978113ed7b9489d388da5a51457ee7cb712aabed45a83310919cc5accc",
+      "start_s": 1860.0
+    },
+    {
+      "end_s": 1920.0,
+      "id": "hlk8s-0063",
+      "index": 63,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0063.wav",
+      "sha256": "694007b7eaea1860600b8c78ec163445f177457131f1f37779a9367c78b605de",
+      "start_s": 1890.0
+    },
+    {
+      "end_s": 1950.0,
+      "id": "hlk8s-0064",
+      "index": 64,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0064.wav",
+      "sha256": "1be65f5f52d8a62119e0b22626bcc6925fec31a5d34b110541061c99fa67ae8e",
+      "start_s": 1920.0
+    },
+    {
+      "end_s": 1980.0,
+      "id": "hlk8s-0065",
+      "index": 65,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0065.wav",
+      "sha256": "bf504b7161f292696e10862e8229c734f4993abcd6f308e4789841a11887cf58",
+      "start_s": 1950.0
+    },
+    {
+      "end_s": 2010.0,
+      "id": "hlk8s-0066",
+      "index": 66,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0066.wav",
+      "sha256": "749fa6bed66568622723e92504877d72a3233ca50b9df27c6a687bbc4045de80",
+      "start_s": 1980.0
+    },
+    {
+      "end_s": 2040.0,
+      "id": "hlk8s-0067",
+      "index": 67,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0067.wav",
+      "sha256": "9d35144d226a15eae96fef96f560cc23d9d76fc6dea561d976160a748f21bfa2",
+      "start_s": 2010.0
+    },
+    {
+      "end_s": 2070.0,
+      "id": "hlk8s-0068",
+      "index": 68,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0068.wav",
+      "sha256": "5fc5181ea525b6718dd723c7a3dffde2e4d2729157a8c3f7d33f52d16a87c57f",
+      "start_s": 2040.0
+    },
+    {
+      "end_s": 2100.0,
+      "id": "hlk8s-0069",
+      "index": 69,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0069.wav",
+      "sha256": "ba7356262bc12a08283345e3109ff815ca8a25aaade8f216ec99468c1027e7e3",
+      "start_s": 2070.0
+    },
+    {
+      "end_s": 2130.0,
+      "id": "hlk8s-0070",
+      "index": 70,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0070.wav",
+      "sha256": "a1730b2be4ae1f2b82014ddc090a2d6de95ed9ff17c903589f8f5ca7aceac551",
+      "start_s": 2100.0
+    },
+    {
+      "end_s": 2160.0,
+      "id": "hlk8s-0071",
+      "index": 71,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0071.wav",
+      "sha256": "783cad0e5f837dadd90e5a8af106e2a56dd7c4fbeda73f7eb6e27c63c9ae5dc0",
+      "start_s": 2130.0
+    },
+    {
+      "end_s": 2190.0,
+      "id": "hlk8s-0072",
+      "index": 72,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0072.wav",
+      "sha256": "e48e86621c73de8dff3938b7f92464a1b96fc26c2463122ddfaf27d55ee17c3e",
+      "start_s": 2160.0
+    },
+    {
+      "end_s": 2220.0,
+      "id": "hlk8s-0073",
+      "index": 73,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0073.wav",
+      "sha256": "c95a84f181a4cf4fea31ddf3a0ebd51f5840a54939cd83fcc341bed398ebe7f7",
+      "start_s": 2190.0
+    },
+    {
+      "end_s": 2250.0,
+      "id": "hlk8s-0074",
+      "index": 74,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0074.wav",
+      "sha256": "9f41ff1d01bb2f958c406555bc0784ae55030e41c146af01cc217ed63f09e4b1",
+      "start_s": 2220.0
+    },
+    {
+      "end_s": 2280.0,
+      "id": "hlk8s-0075",
+      "index": 75,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0075.wav",
+      "sha256": "0f5fe49597ceb64b09c129ef51e0836ac684273c5cf0ffa1bf7d73eebdf78143",
+      "start_s": 2250.0
+    },
+    {
+      "end_s": 2310.0,
+      "id": "hlk8s-0076",
+      "index": 76,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0076.wav",
+      "sha256": "27b3a3bec7ac8749ef4729f76409adf8246c4b3072006efec422ccc39839a7ed",
+      "start_s": 2280.0
+    },
+    {
+      "end_s": 2340.0,
+      "id": "hlk8s-0077",
+      "index": 77,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0077.wav",
+      "sha256": "e3e3a006348a076ce9c80e268e026fb0a9abd44b3e4664ee571820d33a237fab",
+      "start_s": 2310.0
+    },
+    {
+      "end_s": 2370.0,
+      "id": "hlk8s-0078",
+      "index": 78,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0078.wav",
+      "sha256": "d0302dbcfc7ec47a56e92e6f3aa8f96c59ac9075577c23c7be1b843b791c0a20",
+      "start_s": 2340.0
+    },
+    {
+      "end_s": 2400.0,
+      "id": "hlk8s-0079",
+      "index": 79,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0079.wav",
+      "sha256": "7a1bd1bf270b95539f40614c7816b19d8473c762f83afd76d33278ec8d836cec",
+      "start_s": 2370.0
+    },
+    {
+      "end_s": 2430.0,
+      "id": "hlk8s-0080",
+      "index": 80,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0080.wav",
+      "sha256": "8fed81946431b3059af63e368a6c3d3af0cda073dbeb4a3bf8a259064c1ab29c",
+      "start_s": 2400.0
+    },
+    {
+      "end_s": 2460.0,
+      "id": "hlk8s-0081",
+      "index": 81,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0081.wav",
+      "sha256": "bd198020fc848f62df47bcbfe82cc34a5fb4b7ff845487110f1dbf2f5c28afb5",
+      "start_s": 2430.0
+    },
+    {
+      "end_s": 2490.0,
+      "id": "hlk8s-0082",
+      "index": 82,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0082.wav",
+      "sha256": "ee118f63e739a5e2e07fcfb6f2ce1fd2959ad9ddb82398372e6b0e0607daef35",
+      "start_s": 2460.0
+    },
+    {
+      "end_s": 2520.0,
+      "id": "hlk8s-0083",
+      "index": 83,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0083.wav",
+      "sha256": "bfd0e2d1ec866cf6a50249bca1187375e89b28dbb3d0ceab030b237f5f83065c",
+      "start_s": 2490.0
+    },
+    {
+      "end_s": 2550.0,
+      "id": "hlk8s-0084",
+      "index": 84,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0084.wav",
+      "sha256": "702331870b55759943c70f27662b43542f5890ba7db9fb9a207acd6ed8344ca0",
+      "start_s": 2520.0
+    },
+    {
+      "end_s": 2580.0,
+      "id": "hlk8s-0085",
+      "index": 85,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0085.wav",
+      "sha256": "cdf2cb4a5b7d6a74df10b95bd35f6516659029fd6063018330164d91f7ebe60c",
+      "start_s": 2550.0
+    },
+    {
+      "end_s": 2610.0,
+      "id": "hlk8s-0086",
+      "index": 86,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0086.wav",
+      "sha256": "23694245e716dc8a94ed54667990bcc796548c938bdccf90018098aaa000337c",
+      "start_s": 2580.0
+    },
+    {
+      "end_s": 2640.0,
+      "id": "hlk8s-0087",
+      "index": 87,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0087.wav",
+      "sha256": "1c985a2979dc32a652ce6b634a77e39d3653eb3a38ccad4ca2eba98b8a938771",
+      "start_s": 2610.0
+    },
+    {
+      "end_s": 2670.0,
+      "id": "hlk8s-0088",
+      "index": 88,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0088.wav",
+      "sha256": "a250defb6261497fa3383a7cdcd0adda6ebe90d86060e61f619daada2a075516",
+      "start_s": 2640.0
+    },
+    {
+      "end_s": 2700.0,
+      "id": "hlk8s-0089",
+      "index": 89,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0089.wav",
+      "sha256": "aca6df2b1e0e27c911ce8a745a801af420568254fb2a5d81a9cd454d30d7dc53",
+      "start_s": 2670.0
+    },
+    {
+      "end_s": 2730.0,
+      "id": "hlk8s-0090",
+      "index": 90,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0090.wav",
+      "sha256": "bd459271dbb059404899b6796ecd66c3d2d008f943812686c087d921ac60a994",
+      "start_s": 2700.0
+    },
+    {
+      "end_s": 2760.0,
+      "id": "hlk8s-0091",
+      "index": 91,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0091.wav",
+      "sha256": "a578f6c3a9339e756a9c3dfeb88a4844bd410bb87c2a41dc0b3de76807e88c7d",
+      "start_s": 2730.0
+    },
+    {
+      "end_s": 2790.0,
+      "id": "hlk8s-0092",
+      "index": 92,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0092.wav",
+      "sha256": "233ef43621ae67d23dbfdd7a1f3250f91b207502f493ac96e784d4e311555b5b",
+      "start_s": 2760.0
+    },
+    {
+      "end_s": 2820.0,
+      "id": "hlk8s-0093",
+      "index": 93,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0093.wav",
+      "sha256": "2e56128a3e357435877da5171c1908bbce59a1cc63d478f6a272ee875d63a09a",
+      "start_s": 2790.0
+    },
+    {
+      "end_s": 2850.0,
+      "id": "hlk8s-0094",
+      "index": 94,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0094.wav",
+      "sha256": "e20f927e3b7fd73394496e0589842819815a7991c3305f481ef7d2d58362d201",
+      "start_s": 2820.0
+    },
+    {
+      "end_s": 2880.0,
+      "id": "hlk8s-0095",
+      "index": 95,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0095.wav",
+      "sha256": "5e489e63703e0f65e267181c5be6cc988409d14d23379acebe0836abd68fbd5e",
+      "start_s": 2850.0
+    },
+    {
+      "end_s": 2910.0,
+      "id": "hlk8s-0096",
+      "index": 96,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0096.wav",
+      "sha256": "07dc9061b6bbef6ad823327b76d42f0f21a7b626db1b52bbbca156c8d4dfb333",
+      "start_s": 2880.0
+    },
+    {
+      "end_s": 2940.0,
+      "id": "hlk8s-0097",
+      "index": 97,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0097.wav",
+      "sha256": "5b50e470e23d904e09c661936d09b75baee716b21f241ed4c4c87d507f7b5255",
+      "start_s": 2910.0
+    },
+    {
+      "end_s": 2952.821,
+      "id": "hlk8s-0098",
+      "index": 98,
+      "path": "task2-stt-benchmark/audio/segments-hl/hlk8s-0098.wav",
+      "sha256": "ed60dac622bfbe22be799cb20a5ae88ba9bc4174320de4b9b2a41df3439a2382",
+      "start_s": 2940.0
+    }
+  ],
+  "source_path": "task2-stt-benchmark/audio/hl-k8s-operator.webm",
+  "source_properties": {
+    "channels": 1,
+    "codec": "opus",
+    "duration_s": 2952.821,
+    "format_name": "matroska,webm",
+    "sample_rate": 48000
+  },
+  "source_sha256": "4b88b8d5b9d04f17f81c4dc406b8651e1ca4167d48832b7508dd676ef0f39fd9",
+  "speaker_count": null,
+  "target_channels": 1,
+  "target_codec": "pcm_s16le",
+  "target_sample_rate": 16000,
+  "total_segment_duration_s": 2952.821,
+  "window": null
+}
