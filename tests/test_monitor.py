@@ -58,6 +58,12 @@ CATALOG = [
      "unit": "usd", "endpoint": "/api/vastai/balance", "note": "Postpaid."},
     {"provider": "anthropic", "name": "Anthropic", "pay_model": "spend_report",
      "unit": "usd", "endpoint": "/api/anthropic/balance", "note": "Trailing cost."},
+    # A second credits provider and a second USD provider, so aggregation can be
+    # tested in both directions: credits must not be summed, dollars must be.
+    {"provider": "bounceban", "name": "Kickbox", "pay_model": "credits_package",
+     "unit": "credits", "endpoint": "/api/bounceban/balance", "note": "Credits."},
+    {"provider": "openai", "name": "OpenAI", "pay_model": "prepaid_balance",
+     "unit": "usd", "endpoint": "/api/openai/balance", "note": "Prepaid USD."},
 ]
 
 
@@ -914,6 +920,141 @@ def _healthy_pipeline(tmp_path, cycles=80):
     return _pipeline(tmp_path, records)
 
 
+@pytest.mark.parametrize("unit,fungible", [
+    ("usd", True), ("USD", True), ("gbp", True), ("eur", True),
+    ("credits", False), ("characters", False), ("", False), (None, False),
+])
+def test_only_currencies_are_fungible_across_vendors(unit, fungible):
+    assert m.is_fungible_unit(unit) is fungible
+
+
+def test_credits_are_never_summed_across_providers(tmp_path):
+    """The regression this exists for: a headline number that was not a quantity.
+
+    `elevenlabs` credits are TTS characters, `resend` credits are emails,
+    `scrapfly` credits are API calls. The dashboard was adding 850,199 of one to
+    40,076 of another and printing the result in the one-glance summary. Two USD
+    balances add up; two "credits" balances share a label, not a unit.
+    """
+    bodies = {
+        "findymail": lambda i: '{"package":12000,"refresh":"2026-09-01","remaining":%d}' % (10306 - i),
+        "bounceban": lambda i: '{"package":8000,"refresh":"2026-09-01","remaining":%d}' % (6800 - i * 2),
+    }
+    records = _cycles(lambda p, i: (bodies[p](i), 200), 80, providers=tuple(bodies))
+    store, _ingestor, _alerts = _pipeline(tmp_path, records)
+    snap = m.snapshot(store, T0 + timedelta(seconds=80 * 30))
+
+    credits = snap["groups"]["credits_package/credits"]
+    assert credits["fungible"] is False
+    assert credits["value"] is None, "a credits group must publish no total"
+    assert credits["burn_per_h"] is None, "a credits group must publish no summed burn"
+    assert credits["providers"] == 2
+    # The comparable quantity is time, and it is still reported.
+    assert credits["soonest"] is not None
+    assert credits["soonest"]["provider"] in bodies
+
+    html = m.render_dashboard(snap)
+    assert "not summed" in html
+    combined = 10306 + 6800
+    assert f"{combined:,}" not in html, "a summed credit total reached the page"
+
+
+def test_currency_balances_are_still_summed(tmp_path):
+    """The fix must not over-correct: dollars really are additive."""
+    bodies = {
+        "brightdata": lambda i: '{"balance":%.2f,"currency":"usd"}' % (900 - i * 0.05),
+        "openai": lambda i: '{"balance":%.2f,"currency":"usd"}' % (600 - i * 0.04),
+    }
+    records = _cycles(lambda p, i: (bodies[p](i), 200), 80, providers=tuple(bodies))
+    store, _ingestor, _alerts = _pipeline(tmp_path, records)
+    snap = m.snapshot(store, T0 + timedelta(seconds=80 * 30))
+    usd = snap["groups"]["prepaid_balance/usd"]
+    assert usd["fungible"] is True
+    assert usd["value"] == pytest.approx(900 - 79 * 0.05 + 600 - 79 * 0.04, abs=0.5)
+    assert usd["burn_per_h"] > 0
+
+
+def test_dispersion_is_measured_over_the_population_the_estimate_medians():
+    """MAD must describe the same slopes Theil-Sen takes a median of.
+
+    It was computed over *adjacent* differences while the field documented
+    pairwise. Adjacent deltas are dominated by per-poll quantisation, so the
+    MAD came out far wider than the pairwise spread and the anomaly threshold
+    inherited that inflation.
+    """
+    points = [(i * 30.0, 1000.0 - i * 0.5) for i in range(60)]
+    pairwise = m.pairwise_slopes(points)
+    adjacent = [(b[1] - a[1]) / ((b[0] - a[0]) / 3600.0) for a, b in zip(points, points[1:])]
+    assert len(pairwise) > len(adjacent), "pairwise draws from all pairs, not neighbours"
+
+    readings = [
+        m.Reading("p", T0 + timedelta(seconds=t), m.STATE_OK, v, 200, 110.0, "flat_balance", {})
+        for t, v in points
+    ]
+    estimate = m.estimate_burn(readings, "prepaid_balance")
+    assert estimate.dispersion == pytest.approx(m.mad(pairwise))
+    assert estimate.rate_per_h == pytest.approx(-statistics.median(pairwise))
+
+
+def test_dispersion_widens_when_the_rate_itself_varies():
+    steady = [(i * 30.0, 1000.0 - i * 0.5) for i in range(60)]
+    # Rate changes halfway: the slope population genuinely spreads.
+    def two_rate(i):
+        return 1000.0 - (i * 0.5 if i < 30 else 15.0 + (i - 30) * 2.0)
+    varying = [(i * 30.0, two_rate(i)) for i in range(60)]
+    assert m.mad(m.pairwise_slopes(steady)) == 0.0
+    assert m.mad(m.pairwise_slopes(varying)) > 0.0
+
+
+def test_a_minority_of_spikes_leaves_the_dispersion_at_zero():
+    """MAD is supposed to ignore a minority of outliers - that is the point.
+
+    A consequence worth pinning: for the steadiest providers the dispersion is
+    exactly 0, so the anomaly scale floor is not a defensive nicety, it is the
+    only thing standing between the rule and a division that makes every
+    deviation infinite.
+    """
+    spiky = [(i * 30.0, 1000.0 - i * 0.5 + (12.0 if i % 7 == 0 else 0.0)) for i in range(60)]
+    assert m.mad(m.pairwise_slopes(spiky)) == 0.0
+    assert m.BASELINE.anomaly_scale_floor_fraction > 0, "the floor carries this case"
+
+
+def test_the_anomaly_scale_never_collapses_to_zero():
+    state = _state(provider="twocaptcha", value=72.0)
+    state.burn = m.Estimate(0.28, -0.28, 200, 7200.0, 0.0)      # MAD exactly 0
+    state.recent_burn = m.Estimate(0.30, -0.30, 60, 1800.0, 0.0)
+    # A 7% wobble against a zero MAD must not read as an infinite deviation.
+    assert m.rule_burn_anomaly(state, T0) is None
+
+
+def test_alerts_endpoint_serves_the_path_selected_by_the_cli(tmp_path):
+    """`--alerts elsewhere.jsonl` wrote one file and served another, silently."""
+    import threading
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+
+    store, ingestor, alerts = _pipeline(tmp_path, _cycles(
+        lambda _p, i: ('{"balance":900.00,"currency":"usd"}', 200), 6))
+    custom = tmp_path / "somewhere-else.jsonl"
+    custom.write_text('{"ts":"2026-08-23T16:00:00.000Z","text":"from the custom path"}\n',
+                      encoding="utf-8")
+
+    m.Handler.store = store
+    m.Handler.ingestor = ingestor
+    m.Handler.alerts_path = str(custom)
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), m.Handler)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        port = httpd.server_address[1]
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/alerts.jsonl", timeout=10) as r:
+            body = r.read().decode()
+        assert "from the custom path" in body, "endpoint served the wrong file"
+        assert body != alerts.read_text(encoding="utf-8") if alerts.exists() else True
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 def test_aggregation_never_crosses_a_pay_model_or_a_currency(tmp_path):
     store, _ingestor, _alerts = _healthy_pipeline(tmp_path)
     snap = m.snapshot(store, T0 + timedelta(seconds=80 * 30))
@@ -977,6 +1118,38 @@ def test_alert_evidence_is_rendered_complete_not_clipped(tmp_path):
     for key in ("stale_s", "consecutive_failures", "tolerance_s", "band"):
         assert key in html, f"evidence field {key} missing from the page"
     assert '", "' not in html.split("PROVIDERS")[-1], "clipped JSON fragment on the page"
+
+
+def test_text_report_renders_for_every_group_kind(tmp_path):
+    """`--once` is a delivered entry point and must not crash on its own output.
+
+    It did: making the credits total None to stop summing non-fungible units
+    left `text_report` formatting None with `:,.2f`. The dashboard and snapshot
+    tests all passed, because none of them exercised this renderer.
+    """
+    store, _ingestor, _alerts = _healthy_pipeline(tmp_path)
+    snap = m.snapshot(store, T0 + timedelta(seconds=80 * 30))
+    report = m.text_report(snap)
+    assert "not summed (unit is vendor-specific)" in report
+    assert "prepaid_balance/usd" in report and "credits_package/credits" in report
+    for line in report.splitlines():
+        assert "None" not in line, f"unrendered None in the report: {line!r}"
+
+
+def test_once_mode_runs_end_to_end(tmp_path):
+    """Exercise the CLI path itself, not just the functions underneath it."""
+    records = _cycles(
+        lambda p, i: ({
+            "brightdata": '{"balance":%.2f,"currency":"usd"}' % (900 - i * 0.05),
+            "findymail": '{"package":12000,"refresh":"2026-09-01","remaining":%d}' % (10306 - i),
+        }[p], 200), 40, providers=("brightdata", "findymail"))
+    raw = _write(tmp_path / "raw.jsonl", records)
+    code = m.main([
+        "--once", "--raw", str(raw),
+        "--db", str(tmp_path / "monitor.sqlite"),
+        "--alerts", str(tmp_path / "alerts.jsonl"),
+    ])
+    assert code == 0
 
 
 def test_snapshot_is_json_serialisable(tmp_path):

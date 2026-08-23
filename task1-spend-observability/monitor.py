@@ -240,6 +240,18 @@ def now_utc() -> datetime:
 
 CURRENCY_KEY = re.compile(r"^[a-z]{3}$")
 
+
+def is_fungible_unit(unit: str | None) -> bool:
+    """Whether two providers' balances in this unit may be added together.
+
+    A currency is fungible across vendors: a dollar of `openai` credit and a
+    dollar of `brightdata` credit are both a dollar. A vendor quota is not.
+    The catalog calls six different things "credits" - TTS characters, emails,
+    API calls, email lookups, verifications - and they share a label, not a
+    unit.
+    """
+    return bool(unit) and bool(CURRENCY_KEY.match(str(unit).strip().lower()))
+
 # States a single poll can be in. `schema_miss` is deliberately distinct from
 # both a value and an HTTP error: MEASURED, `{}` arrived 20 times on HTTP 200,
 # spread over 11 of 15 providers, never twice in a row. Reading it as 0 would
@@ -656,6 +668,29 @@ def _subsample(points: Sequence[tuple[float, float]], cap: int) -> Sequence[tupl
     return picked
 
 
+def pairwise_slopes(points: Sequence[tuple[float, float]],
+                    min_dt_s: float = 60.0) -> list[float]:
+    """Every pairwise slope in units per hour, from an evenly subsampled series.
+
+    This is the population Theil-Sen takes a median of, so it is also the
+    population whose spread describes the uncertainty of that median. Measuring
+    dispersion over *adjacent* differences instead - which is what this used to
+    do while the docstring claimed otherwise - samples a much noisier quantity:
+    adjacent deltas are dominated by per-poll quantisation, so the MAD came out
+    far too wide and the anomaly threshold with it.
+    """
+    sample = _subsample(points, BASELINE.max_slope_points)
+    slopes: list[float] = []
+    for i in range(len(sample)):
+        t_i, v_i = sample[i]
+        for j in range(i + 1, len(sample)):
+            t_j, v_j = sample[j]
+            dt = t_j - t_i
+            if dt >= min_dt_s:
+                slopes.append((v_j - v_i) / (dt / 3600.0))
+    return slopes
+
+
 def theil_sen(points: Sequence[tuple[float, float]],
               min_dt_s: float = 60.0) -> float | None:
     """Median of pairwise slopes, in value-units per hour.
@@ -670,18 +705,8 @@ def theil_sen(points: Sequence[tuple[float, float]],
     step-shaped series: `anthropic` is flat between batch charges, so half its
     adjacent deltas are zero and the median is meaningless.
     """
-    sample = _subsample(points, BASELINE.max_slope_points)
-    slopes: list[float] = []
-    for i in range(len(sample)):
-        t_i, v_i = sample[i]
-        for j in range(i + 1, len(sample)):
-            t_j, v_j = sample[j]
-            dt = t_j - t_i
-            if dt >= min_dt_s:
-                slopes.append((v_j - v_i) / (dt / 3600.0))
-    if not slopes:
-        return None
-    return statistics.median(slopes)
+    slopes = pairwise_slopes(points, min_dt_s)
+    return statistics.median(slopes) if slopes else None
 
 
 def mad(values: Sequence[float]) -> float:
@@ -853,18 +878,14 @@ def estimate_burn(readings: Sequence[Reading], pay_model: str,
 
     origin = points[0][0]
     numeric = [((t - origin).total_seconds(), v) for t, v in points]
-    slope = theil_sen(numeric)
-    if slope is None:
+    # One pass: the median of these slopes is the estimate, the MAD of the same
+    # population is its dispersion. Computing the two over different samples is
+    # what the previous version did, and it made the anomaly scale meaningless.
+    slopes = pairwise_slopes(numeric)
+    if not slopes:
         return Estimate(None, None, len(points), span, None, "no pair far enough apart to fit")
-
-    # Dispersion of the slope estimate itself, for the anomaly rule.
-    sample = _subsample(numeric, BASELINE.max_slope_points)
-    pair_slopes = [
-        (b[1] - a[1]) / ((b[0] - a[0]) / 3600.0)
-        for a, b in zip(sample, sample[1:])
-        if b[0] - a[0] >= 1.0
-    ]
-    spread = mad(pair_slopes) if pair_slopes else 0.0
+    slope = statistics.median(slopes)
+    spread = mad(slopes)
 
     # A depleting balance falls as it is spent; a spend report rises. Both are
     # reported as a positive "spend per hour".
@@ -1773,30 +1794,59 @@ def snapshot(store: Store, now: datetime | None = None) -> dict[str, Any]:
     coverage = store.coverage()
     fresh = [s for s in states if s.available]
 
-    # Aggregate strictly within a unit. Five different things live in this
-    # dashboard - USD balance, GBP balance, credits, trailing USD spend and
-    # postpaid USD credit - and a single "total spend" across them would be
-    # fiction, so the grouping key is (pay_model, unit) and never just unit.
+    # Aggregate only where addition means something.
+    #
+    # Grouping on (pay_model, unit) is not sufficient, and the earlier version
+    # of this code was wrong for exactly the reason the task warns about. Two
+    # USD balances add up because a dollar at one vendor is a dollar at another.
+    # Two "credits" balances do not: `elevenlabs` credits are TTS characters,
+    # `resend` credits are emails, `scrapfly` credits are API calls. Summing
+    # 850,199 of one and 40,076 of another produced a headline number that was
+    # not a quantity of anything - and it sat in the one-glance summary.
+    #
+    # So a group is summed only when its unit is fungible across vendors, which
+    # for this catalog means a currency. Vendor-specific quota units are
+    # reported per provider and ranked by time-to-impact, which *is* comparable.
     groups: dict[str, dict[str, Any]] = {}
     for state in states:
         group_key = f"{state.pay_model}/{state.unit}"
         bucket = groups.setdefault(group_key, {
             "pay_model": state.pay_model,
             "unit": state.unit,
+            "fungible": is_fungible_unit(state.unit),
             "providers": 0,
             "value": 0.0,
             "burn_per_h": 0.0,
             "measurable": 0,
             "unmeasurable": [],
+            "members": [],
         })
         bucket["providers"] += 1
         rate = state.spend_rate_per_h
         if state.value is not None and rate is not None:
-            bucket["value"] += state.value
-            bucket["burn_per_h"] += rate
             bucket["measurable"] += 1
+            bucket["members"].append({
+                "provider": state.provider,
+                "value": state.value,
+                "burn_per_h": rate,
+                "runway_h": state.runway_h,
+            })
+            if bucket["fungible"]:
+                bucket["value"] += state.value
+                bucket["burn_per_h"] += rate
         else:
             bucket["unmeasurable"].append(state.provider)
+
+    # For a non-fungible group the only honest summary is the one that does not
+    # add: how many packages, and which one runs out first.
+    for bucket in groups.values():
+        if bucket["fungible"]:
+            continue
+        bucket["value"] = None
+        bucket["burn_per_h"] = None
+        with_runway = [x for x in bucket["members"] if x["runway_h"] is not None]
+        soonest = min(with_runway, key=lambda x: x["runway_h"], default=None)
+        bucket["soonest"] = soonest
 
     window_span = 0.0
     if coverage["first_ts"] and coverage["last_ts"]:
@@ -1995,18 +2045,39 @@ def render_dashboard(snap: dict[str, Any]) -> str:
         missing = group["unmeasurable"]
         note = (f'<div class="rowsub">{len(missing)} not measurable: '
                 f'{escape(", ".join(missing))}</div>') if missing else ""
+        if not group["fungible"]:
+            # No total: these balances are not denominated in the same thing.
+            # The comparable quantity is time, so lead with which runs out first.
+            soonest = group.get("soonest")
+            if soonest and soonest["runway_h"] is not None:
+                hours = soonest["runway_h"]
+                lead = f"{hours:.1f} h" if hours < 48 else f"{hours / 24:.1f} d"
+                sub = f'{escape(soonest["provider"])} exhausts first'
+                cls = "crit" if hours <= POLICY.runway_critical_h else (
+                    "warn" if hours <= POLICY.runway_warning_h else "")
+            else:
+                lead, sub, cls = "&mdash;", "no projection yet", "dim"
+            group_cards.append(f"""<div class="card">
+<h2>{escape(group["pay_model"])} &middot; {escape(unit)}</h2>
+<div class="big {cls}">{lead}</div>
+<div class="meta">{sub}</div>
+<div class="big" style="font-size:15px">{group["measurable"]}/{group["providers"]} packages</div>
+<div class="meta">not summed &mdash; one vendor's credit is not another's</div>{note}
+</div>""")
+            continue
+
         if group["pay_model"] == "spend_report":
             head = "trailing reported cost"
             rate_note = "window average, not a balance"
         else:
             head = "value on hand"
-            rate_note = "summed burn, this unit only"
+            rate_note = f"summed burn &mdash; {escape(unit.upper())} is fungible across vendors"
         group_cards.append(f"""<div class="card">
 <h2>{escape(group["pay_model"])} &middot; {escape(unit)}</h2>
 <div class="big">{escape(_fmt(group["value"], unit))}</div>
 <div class="meta">{escape(head)} across {group["measurable"]}/{group["providers"]} providers</div>
 <div class="big" style="font-size:15px">{escape(_fmt(group["burn_per_h"], unit))}/h</div>
-<div class="meta">{escape(rate_note)}</div>{note}
+<div class="meta">{rate_note}</div>{note}
 </div>""")
 
     alert_blocks = []
@@ -2063,7 +2134,7 @@ recorded as an event, never alerted</div></div>""")
 <header>
 <div><h1>Explee &middot; company spend</h1>
 <div class="meta">{snap["total_providers"]} providers &middot; four pay models &middot;
-never summed across units</div></div>
+totals only where the unit is fungible</div></div>
 <div class="meta">
 {health_line}
 <span class="pill {"p-crit" if criticals else ("p-warn" if firing else "p-ok")}">
@@ -2111,9 +2182,14 @@ a third state, never read as zero</div></div>
 <strong>How to read this.</strong> Burn is a Theil&ndash;Sen slope over the readings since the
 last top-up, not a first/last difference: in this window a first/last estimate reports
 <code>findymail</code> burning &minus;3623 credits/h, because a +1994 top-up lands inside it.
-Time to impact is hours, the only quantity comparable across providers &mdash; USD, GBP and
-credits are never added together, and each card above aggregates strictly within one
-(pay model, unit) pair.<br>
+Time to impact is hours, the only quantity comparable across every provider.<br>
+<strong>What is and is not added up.</strong> A card shows a total only when its unit is
+fungible across vendors, which here means a currency: a dollar of <code>openai</code> credit
+and a dollar of <code>brightdata</code> credit are both a dollar. The six providers whose unit
+is called &ldquo;credits&rdquo; are <em>not</em> summed &mdash; <code>elevenlabs</code> credits are
+TTS characters, <code>resend</code> credits are emails, <code>scrapfly</code> credits are API
+calls. They share a label, not a unit, so that card reports how many packages there are and
+which one runs out first.<br>
 <strong>Alert classes.</strong> <span class="pill p-info">operational_policy</span> rules encode
 choices nobody specified (runway lead time {POLICY.runway_critical_h:.0f}h critical /
 {POLICY.runway_warning_h:.0f}h warning, unavailability tolerance
@@ -2185,6 +2261,11 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "explee-spend-monitor"
     store: Store
     ingestor: Ingestor
+    # Bound from the resolved CLI argument, not read from the module global.
+    # Reading the global meant `--alerts /somewhere/else` wrote to one file and
+    # served a different one, with no error on either side - the endpoint simply
+    # published stale or absent content while looking like it worked.
+    alerts_path: str
 
     def _send(self, code: int, body: bytes, content_type: str) -> None:
         self.send_response(code)
@@ -2210,8 +2291,8 @@ class Handler(BaseHTTPRequestHandler):
                            "application/json")
             elif path == "/alerts.jsonl":
                 data = b""
-                if os.path.exists(ALERTS_PATH):
-                    with open(ALERTS_PATH, "rb") as handle:
+                if os.path.exists(self.alerts_path):
+                    with open(self.alerts_path, "rb") as handle:
                         data = handle.read()
                 self._send(200, data, "application/x-ndjson")
             else:
@@ -2281,9 +2362,18 @@ def text_report(snap: dict[str, Any]) -> str:
     lines.append("")
     for key in sorted(snap["groups"]):
         group = snap["groups"][key]
+        measurable = f"({group['measurable']}/{group['providers']} measurable)"
+        if not group["fungible"]:
+            # No total exists for a vendor-specific quota; say so rather than
+            # printing a number that is not a quantity of anything.
+            soonest = group.get("soonest")
+            first = (f"{soonest['provider']} in {soonest['runway_h']:.1f} h"
+                     if soonest and soonest["runway_h"] is not None else "no projection")
+            lines.append(f"{key:28s} not summed (unit is vendor-specific); "
+                         f"soonest exhaustion: {first}  {measurable}")
+            continue
         lines.append(f"{key:28s} value={group['value']:>16,.2f}  "
-                     f"burn/h={group['burn_per_h']:>12,.3f}  "
-                     f"({group['measurable']}/{group['providers']} measurable)")
+                     f"burn/h={group['burn_per_h']:>12,.3f}  {measurable}")
     lines.append("")
     lines.append(f"events: {len(snap['events'])}   alerts fired: {len(snap['alerts'])}")
     for alert in snap["alerts"][:10]:
@@ -2343,6 +2433,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     Handler.store = store
     Handler.ingestor = ingestor
+    Handler.alerts_path = alerter.alerts_path
     httpd = ThreadingHTTPServer((args.bind, args.port), Handler)
     print(f"[serve] http://{args.bind}:{args.port}/  (healthz at /healthz)",
           file=sys.stderr, flush=True)
