@@ -608,3 +608,47 @@ would have been undiscoverable from the log. Staging and committing are not
 atomic across sessions sharing one worktree; the index is shared state, and
 `git add` followed by a failed commit leaves that state for whoever commits
 next.
+
+### 20:52Z — trace-scan record: the droplet address is published, deliberately
+
+Recorded so the next reader does not re-litigate it. Task 1's trace contains
+seven occurrences of the amsterdam droplet's IPv4 address. **The ruling is
+publish, not scrub.**
+
+Rule 3 forbids *unrelated third-party* infrastructure appearing in a published
+trace. This address is neither:
+
+- it is the host serving `https://spend.nddev.it.com/`, a public URL we are
+  deliberately handing the grader;
+- our own `README.md` prints that hostname, so anyone who runs `dig` on it has
+  the address in one query. Redacting something the repository already publishes
+  by implication is theatre;
+- and redaction costs the verbatim guarantee, which is the one property of a
+  trace that cannot be restored once broken.
+
+What rule 3 actually protects against is the failure that killed two traces:
+*other people's* infrastructure appearing because a session enumerated something
+it did not need. Nine unrelated client IPs and sixteen `HostName` lines from
+`~/.ssh/config` are that. One address of our own deployment target, reached on
+purpose, is not.
+
+**The contrasting case, for calibration.** A `nip.io`-style wildcard hostname was
+rejected earlier in this task precisely because it *would* have encoded a server
+address into a URL we had not otherwise published — inventing a disclosure rather
+than reflecting one. Publishing our own already-public host is the opposite
+situation.
+
+Scan state at this commit:
+
+| check | result |
+|---|---|
+| secret findings | 0 |
+| foreign project slugs | 0 |
+| anchored `HostName` lines | 0 |
+| IPv4 literals | 6 distinct: loopback/bind placeholders, public DNS resolvers used to prove propagation, one synthetic address from testing a redaction filter, and the deployment target |
+
+One correction worth keeping visible: the address is in the trace partly because
+a redaction filter written during this session silently did nothing — macOS `sed`
+does not support `\b`, so the pattern matched nothing and printed exactly what it
+was meant to hide. The filter was fixed; the earlier output stays in the trace,
+because that is what verbatim means.

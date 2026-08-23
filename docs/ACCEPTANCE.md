@@ -28,6 +28,21 @@ which `main` had long passed — a matrix that lags the tree is the same defect 
 a stale board, and this is the artifact a grader is handed as proof.
 
 
+## Cross-cutting
+
+These rows were lost when this matrix was re-derived from `docs/TASK.md` and are
+restored here. Losing them was the same failure the matrix exists to prevent: a
+rewrite that improves structure and silently drops content.
+
+| # | Deliverable | Path | Owner | Status | Verification | Hash / SHA |
+|---|---|---|---|---|---|---|
+| X.1 | Gates green on a clean tree at the final SHA | — | `surface:3` | pending submission | `git status --porcelain` empty, then all four gates with versions and exit codes | — |
+| X.2 | Lossless export + foreign-slug guard + `--submission` mode | `tools/export_trace.py` | `surface:8` | **hardened** — unknown block types now a whitelist, non-dict blocks and scalar/null content fail closed (`f21487f`); `--allow-secrets` no longer covers foreign slugs, which have no override at all; `--submission` refuses every override and exits 5 | `uv run --with pytest pytest tests/test_export_trace.py -q` | — |
+| X.5 | Type check clean | `pyright` | `surface:5` | **NOT GREEN — conditionally zero.** The checker reports 0 only because `pyrightconfig.json` excludes four Task 2 paths. Measured 20:47Z with the exclusion removed: **54 errors hidden** — `test_task2_bootstrap.py` 16, `hf_family.py` 10, `whisper_family.py` 9, `nemo_family.py` 7, `test_task2_metrics.py` 6, `gigaam_engine.py` 5, `test_task2_reference.py` 1. Raised by `surface:8`, correctly: hiding a file from the checker is the move it refused for the httpx import | remove the four excludes, then `uv run --with pyright --with pytest --with httpx pyright` → `0 errors` | — |
+| X.7 | Working tree free of third-party identifiers | whole repo | `surface:3` | **DONE** | `git ls-files -z \| xargs -0 grep -lEi '<client>'` → empty | — |
+| X.8 | **History** free of third-party identifiers | all refs | `surface:3` | **OPEN** — two quarantined traces remain in history; the single `filter-repo` rewrite runs last, after all workers stop | `git log -p --all \| grep -ci '<identifier>'` → `0` after the rewrite | — |
+| X.9 | Raw-log verbatim claim bounded at the 8000-char cap | `task1-spend-observability/README.md` | `surface:2` | **DONE** — 6240 records, max stored body 6422, 0 at the cap, headroom 1578 | `python3` over `raw_samples.jsonl` | — |
+
 ## What is still missing — stated first, 20:38Z at `778af57`
 
 Named here so a reviewer does not have to discover them. Naming our own gaps is
@@ -104,7 +119,7 @@ Verbatim: *"One file, plus 2-3 lines on where it lives and what it does."*
 
 | # | Deliverable (task wording) | Path / URL | Owner | Status | Verification | Hash / SHA |
 |---|---|---|---|---|---|---|
-| 3.1 | **"One file"** | `task3-harness-artifact/flow-memory-sync.md` | `surface:8` | **DONE** — re-verified 19:37Z after the artifact *changed* from `reviewer-protocol.md`; submitted copy is byte-identical to the installed source | `shasum -a 256` on submitted and installed copies | `26d0ed17…f607a04` |
+| 3.1 | **"One file"** | `task3-harness-artifact/flow-memory-sync.md` | `surface:8` | **DONE, two-way not three-way.** Re-verified 20:46Z after an upstream fix changed the file: submitted `a16009988b18…` equals published at `e9879c2`, which is HEAD of the published default branch. The installed plugin cache still pins v1.7.14 holding the pre-fix `26d0ed17…`, so the third leg cannot match until the plugin updates — stated rather than quietly dropped | `shasum -a 256` submitted; `gh api …?ref=e9879c2 \| base64 -d \| shasum -a 256`; `gh api …/commits/<default> --jq .sha` | `a16009988b18…` |
 | 3.2 | **"plus 2-3 lines on where it lives and what it does"** | `task3-harness-artifact/README.md` | `surface:8` | **DONE** — states path, what dispatches it, what it does, and names its own tradeoff (two of seven steps call helper scripts, so it is not fully standalone) | read | — |
 | 3.3 | **TRACE.md** | `task3-harness-artifact/TRACE.md` | `surface:8` | **DONE** — decision 2 closed by the human: *nothing is withheld*. Genuine fresh session 19:30:50Z→19:34:27Z, tool-exported, 2140 lines. Scans: 0 truncation markers, 0 foreign slugs, 0 public IPs, 0 credentials, 0 real `HostName` lines | header check + four scans | — |
 | 3.4 | **"nothing more"** — package contains exactly the file, the lines, the trace | `task3-harness-artifact/` | `surface:3` | **DONE** — directory holds exactly those three. `PROVENANCE.md` and the quarantine record now live in `docs/` as internal | `ls task3-harness-artifact/` → 3 entries | — |
