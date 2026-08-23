@@ -84,10 +84,15 @@ is not a quality judgement.
   raises. Two engines transcribing the same hour are not independent samples.
 * Pooled metrics are computed from **summed counts**, never as a mean of
   per-segment rates.
-* Only segments that **every** compared engine transcribed successfully enter
-  the comparison. Failed segments are reported separately, with counts, and are
-  never imputed as empty strings.
+* Each engine is scored on every segment it returned. A *pairwise* intersection
+  is taken inside the paired bootstrap only, so one engine's failures cannot
+  delete segments from another engine's score. Failure counts are reported as
+  their own column and never imputed as empty strings; an engine failing more
+  than 10 % of the corpus is not ranked.
 * A metric with no observations is reported as unmeasured, never as `0.0`.
+* Speaker attribution and timestamp quality are **not scored** — see the
+  amendment log. The task asks which engine hears this speech correctly, not
+  who said it or exactly when.
 
 ## 6. Two rankings, never mixed
 
@@ -115,33 +120,25 @@ where exposed.
 
 ## 8. Engine slate
 
-Target ≥ 6 so that one broken account cannot drop the benchmark below the
-required 5. Under the current envelope — public or already-permitted audio, free
-tiers, existing credits, self-hosted inference; **no new spending without the
-human** — the slate is:
+Open models on the employer's own funded Modal GPUs, per the human's ruling:
+everything free for the employer, no paid signups, and **no cloud STT at all,
+not even free tiers**. Two consequences belong in the report rather than a
+footnote: the audio never leaves our perimeter, which removes the licence
+exposure question entirely, and the employer can re-run this whole benchmark
+themselves without buying anything.
 
-| Engine | Access route under this envelope | Terminology track |
+| Engine | Status | Terminology track |
 |---|---|---|
-| Whisper large-v3, full precision (self-hosted, Modal GPU) | free credits, no new spend, fully reproducible | initial-prompt biasing |
-| Parakeet-TDT-0.6b-v3, full precision (self-hosted, Modal GPU) | free credits, no new spend | none |
-| Deepgram Nova-3 multilingual | free credit on signup | keyterm prompting |
-| OpenAI GPT Transcribe | existing credit | prompt / keyword hints |
-| ElevenLabs Scribe v2 | free tier | keyterm prompting |
-| Speechmatics | free trial tier | custom dictionary |
-| Google Chirp 3 | free tier, if reachable without new payment details | phrase sets |
-| Azure Speech | free tier, if reachable without new payment details | phrase lists |
+| Whisper large-v3, full precision | **run**, 120/120 segments | initial-prompt biasing |
+| Whisper large-v3-turbo, full precision | **run**, 120/120 segments | initial-prompt biasing |
+| Parakeet-TDT-0.6b-v3, full precision | **run**, 120/120 segments | none |
+| NVIDIA Canary-1b-v2 | **blocked** — NeMo 2.1.0 asserts on the canary2 prompt format (`Expected the last token in answer_ids to be EOS`); needs a newer NeMo than the pinned image | none |
+| GigaAM v2 RNNT (Russian-specific) | **blocked** — short-form API refuses audio at 30 s and our frozen segments are exactly 30.000 s; the vendor's long-form path needs a gated pyannote VAD requiring `HF_TOKEN`. Trimming the audio for one engine only would have voided §7 | none |
+| Voxtral / Qwen2-Audio (multilingual audio LLM) | candidate if budget allows a further image build | prompt |
 
-The two self-hosted configurations are taken from `Zackriya-Solutions/meetily`,
-a shipped local meeting-transcription product; its *preprocessing* is
-deliberately not adopted, because giving the local engines cleaned audio the
-cloud engines never receive would void §7. The reasoning is in
-`docs/self-hosted-engines.md`.
-
-The two self-hosted engines are the floor: they need no account, no payment
-details and no vendor permission, so the benchmark cannot fall below two engines
-under any account failure. If the total reachable within the envelope falls
-below five, the report names the specific blocker per engine — which account,
-which requirement — rather than quietly reporting four.
+Blocked engines are named with their specific blocker rather than dropped
+silently, because "we tried six and five worked" is a finding and "we ran five"
+is a claim.
 
 Vendor claims about code-switching are hypotheses under test here, not evidence
 to cite.
@@ -195,5 +192,9 @@ Amendments are recorded, never applied silently.
 
 | When | Change | Reason |
 |---|---|---|
+| 2026-08-23, commit `c7e9e45` | **Speaker-attribution and timestamp-quality metrics dropped** from §6 and from the results table. | The task asks which transcriber hears this speech correctly; it never asks for diarisation. Scoring a capability the employer did not request spent effort on the wrong question. The report states plainly that diarisation and timestamp quality were **out of scope and therefore not scored** — which is honest, and better than a half-built forced-alignment pipeline. No engine had been ranked when this was decided. |
+| 2026-08-23, commit `c7e9e45` | **Reference protocol changed** to draft-assisted correction (two excluded engines) plus a from-scratch residual-bias slice, replacing "two independent annotators over the full corpus". | The agent cannot hear; the human declined to annotate. Recorded here because the earlier protocol change was made without an amendment, which is exactly the drift a pre-registration exists to prevent. Detail in `docs/reference-protocol.md`. |
+| 2026-08-23, commit `c7e9e45` | **Slate restricted to open models on the employer's own Modal GPUs.** No paid signups, no cloud free tiers. | The human's ruling. Two consequences worth stating rather than burying: the audio never leaves our perimeter, which removes the licence-exposure question entirely, and the employer can re-run the whole benchmark without buying anything. Engines that could not be reached are named with the specific blocker. |
+| 2026-08-23, commit `c7e9e45` | **Ranking eligibility now requires a measured failure rate ≤ 10 %** of the corpus, reported per engine. | Previously an engine's failures silently removed those segments from every other engine, making the corpus easier for the survivors. Reliability is now its own column. |
 | after the corpus ruling, 2026-08-23T19:10Z | Self-hosted engines run **full-precision** Whisper large-v3 and Parakeet-TDT-0.6b-v3 on Modal GPU (free credits), replacing the quantised whisper.cpp `q5_0` / ONNX int8 builds adopted from meetily. | The quantisation was a concession to 8 GB arm64, not a design choice. Removing it strengthens the comparison: a local model that loses can no longer be excused as a casualty of quantisation. No metric, guardrail, tie-break or corpus rule changed. |
 | the first Task 2 commit after `9fd6ff8` (`git log --oneline 9fd6ff8..HEAD -- task2-stt-benchmark`) | Replaced hand-written freeze timestamps in this file, `docs/reference-policy.md`, `glossary.json` and `docs/corpus-candidates.md` with the commit that contains them. | The typed times (19:05–19:50Z) were assumed rather than read from a clock, and were later than the work they dated — the freeze commit is 19:00:14Z. No design content changed; only the dating, and only in the direction of being checkable. |

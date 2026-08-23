@@ -1,0 +1,129 @@
+{
+  "corpus": {
+    "id": "rt1027",
+    "source_sha256": "336a6c893b33c5f6281f8245a6cbd17d5bcaee8eb0d5a25a229e6807227dd8bb",
+    "segments": 120,
+    "window": [
+      300.0,
+      3900.0
+    ],
+    "manifest_segments_total_s": 3600.0
+  },
+  "glossary_fingerprint": "214a316a5a679f13fc0694765b5a990ff5cabc5f4c6931f70ecfe13a287f7593",
+  "engines": {
+    "parakeet-tdt-0.6b-v3-default": {
+      "segments": 120,
+      "empty": 0
+    },
+    "whisper-large-v3-default": {
+      "segments": 120,
+      "empty": 0
+    },
+    "whisper-large-v3-turbo-default": {
+      "segments": 120,
+      "empty": 0
+    }
+  },
+  "pairwise_disagreement": [
+    {
+      "a": "parakeet-tdt-0.6b-v3-default",
+      "b": "whisper-large-v3-default",
+      "segments": 120,
+      "disagreement": 0.1982
+    },
+    {
+      "a": "parakeet-tdt-0.6b-v3-default",
+      "b": "whisper-large-v3-turbo-default",
+      "segments": 120,
+      "disagreement": 0.1962
+    },
+    {
+      "a": "whisper-large-v3-default",
+      "b": "whisper-large-v3-turbo-default",
+      "segments": 120,
+      "disagreement": 0.1237
+    }
+  ],
+  "term_production": {
+    "per_engine": {
+      "parakeet-tdt-0.6b-v3-default": {
+        "deploy": 2,
+        "prod": 1,
+        "worker": 1,
+        "prompt": 4,
+        "ci": 2
+      },
+      "whisper-large-v3-default": {
+        "deploy": 1,
+        "prod": 2,
+        "worker": 2,
+        "prompt": 3,
+        "ci": 1
+      },
+      "whisper-large-v3-turbo-default": {
+        "deploy": 1,
+        "anthropic": 1,
+        "prod": 2,
+        "worker": 1,
+        "prompt": 4,
+        "aws": 1,
+        "ci": 3
+      }
+    },
+    "totals": {
+      "deploy": 4,
+      "prod": 5,
+      "worker": 4,
+      "prompt": 11,
+      "ci": 6,
+      "anthropic": 1,
+      "aws": 1
+    }
+  },
+  "consensus_term_sites": {
+    "consensus_sites": 8,
+    "majority_threshold": 2,
+    "misses_per_engine": {
+      "whisper-large-v3-default": 2
+    },
+    "examples": [
+      {
+        "segment": "rt1027-0065",
+        "term": "prompt",
+        "missed_by": "whisper-large-v3-default",
+        "agreed_by": [
+          "parakeet-tdt-0.6b-v3-default",
+          "whisper-large-v3-turbo-default"
+        ],
+        "text": " Я как человек, который отучал Луну для того, чтобы она перестала обсуждать президентов, вам скажу, тут нифига не задача просто промп поменять. Хода бедна, но в конце концов соглаш"
+      },
+      {
+        "segment": "rt1027-0116",
+        "term": "ci",
+        "missed_by": "whisper-large-v3-default",
+        "agreed_by": [
+          "parakeet-tdt-0.6b-v3-default",
+          "whisper-large-v3-turbo-default"
+        ],
+        "text": " Типа ничего сделать я не могу. Ну не то, что не могу. Могу, конечно. Но типа это ж надо все. У меня бэкап сет сей нет. Я никогда не парился. Типа можно либо руками все собрать, вс"
+      }
+    ]
+  },
+  "script_mix": {
+    "parakeet-tdt-0.6b-v3-default": {
+      "tokens": 9931,
+      "latin_share": 0.01561,
+      "cyrillic_share": 0.97704
+    },
+    "whisper-large-v3-default": {
+      "tokens": 9237,
+      "latin_share": 0.02393,
+      "cyrillic_share": 0.97066
+    },
+    "whisper-large-v3-turbo-default": {
+      "tokens": 9298,
+      "latin_share": 0.02495,
+      "cyrillic_share": 0.96913
+    }
+  }
+}
