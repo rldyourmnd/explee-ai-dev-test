@@ -180,6 +180,19 @@ poll cycle at 16:01Z, 2 of 15 providers" is. If something cannot be measured,
 say so explicitly instead of estimating quietly — the top-up/spend ambiguity in
 `README.md` is the worked example.
 
+**The sentence is the claim, not the JSON beside it.** On 2026-08-23 an alert
+read *"trailing-24h cost is climbing 12.50 USD/h faster than usual, against a
+window baseline of -15.33 USD/h"*. The evidence dict had `delta_per_h` correct
+the whole time; only the prose was wrong. 12.50 was the *recent rate*, not the
+excess — the change was +27.82/h, from falling at 15.33 to rising at 12.50 — so
+the sentence attached "faster than usual" to the wrong quantity and understated
+the move by more than half.
+
+This is the worst version of the failure, because the number a human acts on is
+the one in the sentence. State a rate, a baseline and a change as three separate
+quantities rather than letting one number stand in for another, and pin the
+wording with a test carrying real values.
+
 ## Time
 
 All timestamps are timezone-aware. This machine is UTC+5 (Asia/Almaty) and the
