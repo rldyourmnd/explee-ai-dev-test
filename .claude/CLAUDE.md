@@ -18,7 +18,7 @@ Claude Code specifics, which are the only things not covered there:
 - The four gates, run before every push, all exit codes checked:
 
   ```bash
-  uv run --with pytest pytest tests/ -q
+  uv run --with 'pytest==8.3.4' pytest tests/ -q
   uv run --with 'ruff==0.15.17' ruff check .        # pinned: unpinned checks a different ruleset
   uv run --with pyright==1.1.411 --with pytest==8.3.4 --with httpx pyright  # pinned, same reason as ruff
   uv run tools/repo_checks.py consistency

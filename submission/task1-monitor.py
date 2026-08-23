@@ -13,9 +13,35 @@ capture with.
 
 Both modes reach the same code. Collection only ever appends raw records, and
 everything downstream reads them back through one parser, so the live path and
-the replay path cannot drift apart. Records come either from `--poll` or from an
-existing `raw_samples.jsonl`; the deployed instance uses the latter, because the
-API should see one client and the log should have one writer.
+the replay path share every line of parsing, estimation and alerting. Records
+come either from `--poll` or from an existing `raw_samples.jsonl`; the deployed
+instance uses the latter, because the API should see one client and the log
+should have one writer.
+
+Sharing the code is not the same as producing the same alerts, and this
+paragraph has now been wrong in both directions, so it states what was measured
+rather than what follows from the design.
+
+It first claimed the two paths "cannot drift apart", as a guarantee. Two lines
+appeared to disprove it, `bounceban` at 2026-08-23T18:44:34Z and `findymail` at
+2026-08-23T23:05:25Z, both flagged by the audit with "does not fire when re-run
+at this instant". Neither turned out to be divergence:
+
+- `findymail` was audited against a raw copy that ended at 22:59, six minutes
+  before the line it was judging, so the audit was reconstructing state for a
+  period it had no readings for. Given the full window the line reconciles. The
+  defect was in `--audit`, which now reports such lines as out of range instead
+  of as rule failures.
+- `bounceban` was written by a build whose projection rule predates the
+  uncertainty guard. Re-running today's rule against that instant is a
+  comparison between two builds, not between two paths.
+
+So no case of live-versus-replay divergence has been demonstrated. That is not
+the same as a guarantee, and the guarantee is not reinstated here: what the
+shared parser actually establishes is that neither path can *interpret a record*
+differently. It says nothing about state carried between evaluations, which a
+replay rebuilds from zero and a long-running process does not, and that gap has
+not been tested.
 
 Deriving from an append-only log rather than from memory buys three things: the
 dashboard shows history from T0 rather than from process start, any threshold
@@ -549,6 +575,16 @@ class Store:
     def catalog(self) -> dict[str, dict[str, Any]]:
         rows = self.conn().execute("SELECT * FROM catalog ORDER BY provider").fetchall()
         return {r["provider"]: dict(r) for r in rows}
+
+    def last_reading_ts(self) -> datetime | None:
+        """The newest instant this store has evidence for.
+
+        The audit needs it to tell "the rule did not fire" apart from "this
+        window does not reach that far", which are different findings that
+        looked identical until one of them was mistaken for the other.
+        """
+        row = self.conn().execute("SELECT MAX(ts) AS ts FROM readings").fetchone()
+        return parse_ts(row["ts"]) if row and row["ts"] else None
 
     # -- readings --------------------------------------------------------
     def add_readings(self, readings: Sequence[Reading]) -> None:
@@ -1575,13 +1611,63 @@ PROVIDER_RULES: tuple[Callable[[ProviderState, datetime], Candidate | None], ...
 )
 
 
+def caused_by_normal_operations(
+    state: ProviderState,
+    rule: Callable[[ProviderState, datetime], Candidate | None],
+    now: datetime,
+) -> tuple[datetime, str] | None:
+    """The event this alert does not survive the removal of, if one exists.
+
+    The task text is explicit that balances get topped up from time to time and
+    that this is normal operations, not an incident. An alert that exists only
+    because a top-up happened is therefore not a weaker alert, it is the
+    requirement being missed.
+
+    The audit has computed exactly this since it was written, and that was the
+    defect rather than the safeguard: a post-hoc auditor that knows an alert was
+    caused by a top-up, while the alerter that wrote the line does not, has the
+    knowledge one component too late. This is the same computation moved in
+    front of the firing decision.
+
+    It is not covered by the uncertainty guard, and the difference is the whole
+    point. That guard asks whether a projection survives its own burn recomputed
+    one MAD slower, which is robustness to *rate* uncertainty. A +4 credit step
+    on a 9,965 credit balance barely moves the slope and passes it comfortably.
+    What the step moves is where the series *segments*, and the segment boundary
+    is what sets the projection. `findymail` passed the guard at 23:05Z and
+    failed this check, which is what sent it back here.
+
+    Only reached when a rule has already fired, so the cost is bounded by the
+    number of alerts rather than by the number of evaluations.
+    """
+    meta = {"name": state.name, "pay_model": state.pay_model,
+            "unit": state.unit, "note": state.note}
+    for cut_ts, kind, detail in state.cuts:
+        delta = detail.get("delta")
+        if not isinstance(delta, (int, float)):
+            continue
+        without = state_from_readings(
+            state.provider, meta,
+            _readings_without(state.readings, cut_ts, float(delta)), now)
+        if rule(without, now) is None:
+            return cut_ts, kind
+    return None
+
+
 def evaluate(states: Sequence[ProviderState], now: datetime) -> list[Candidate]:
     candidates: list[Candidate] = []
     for state in states:
         for rule in PROVIDER_RULES:
             found = rule(state, now)
-            if found is not None:
-                candidates.append(found)
+            if found is None:
+                continue
+            attributed = caused_by_normal_operations(state, rule, now)
+            if attributed is not None:
+                # Normal operations, not an incident. Deliberately silent: a
+                # line saying "something normal happened" is the noise this
+                # exists to prevent.
+                continue
+            candidates.append(found)
     pool = rule_collection_health(states, now)
     if pool is not None:
         candidates.append(pool)
@@ -1910,7 +1996,10 @@ class Collector:
     second process. Everything downstream is untouched, the collector writes
     exactly the record shape the ingestor already reads, so the replay path and
     the live path share every line of parsing, estimation and alerting rather
-    than having two implementations that can drift apart.
+    than having two implementations of it. That rules out the two disagreeing
+    about what a record *means*. It does not by itself rule out them disagreeing
+    about what to *alert*; see the module docstring for two cases that looked
+    like exactly that and were not.
 
     It is off by default and must stay off wherever the standalone sampler is
     running. The API should see one client, not two, and a second poller would
@@ -2263,7 +2352,16 @@ table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;
 text-transform:uppercase;letter-spacing:.06em;padding:var(--s2) var(--s3);
 border-bottom:1px solid var(--rule);background:var(--surface)}
-td{padding:var(--s3);border-bottom:1px solid var(--rule);vertical-align:middle}
+/* Row height is the difference between comparing providers and scrolling
+   between them. At var(--s3) top and bottom only five of fifteen fit above the
+   fold, and comparing providers is the entire job of this table. */
+td{padding:var(--s2) var(--s3);border-bottom:1px solid var(--rule);
+vertical-align:middle;line-height:1.35}
+/* Trend is what the width is for. The sparkline scales with its column
+   (the svg carries viewBox and preserveAspectRatio="none"), so a wider screen
+   buys resolution in the series rather than empty space beside it. */
+td.spark,th.spark{width:20%;min-width:150px}
+td.spark svg{width:100%;height:26px;display:block}
 tr:hover td{background:var(--surface)}
 /* Numbers a reader compares down a column: monospace, tabular figures. */
 .num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;
@@ -2297,9 +2395,24 @@ word-break:break-word;overflow-wrap:anywhere;font-family:var(--mono)}
 code{background:var(--surface);padding:1px var(--s1);border-radius:3px;
 font-size:12px;font-family:var(--mono)}
 /* Prose capped at 68ch: a measure a reader can track without losing the line. */
-.foot{color:var(--muted);font-size:12px;margin-top:var(--s8);line-height:1.65;
-max-width:68ch}
-.foot strong{color:var(--ink)}
+/* Seven self-contained rules used to be poured into one 68ch column pinned to
+   the left, with two thirds of a wide screen empty beside it. That reads as a
+   broken layout rather than a choice, and nothing in it was findable.
+   As a grid each rule is its own block with a real heading, and the extra
+   width buys MORE blocks side by side rather than longer lines:
+   measure constrains the line, not the page. */
+.notes{display:grid;gap:var(--s8) var(--s8);margin-top:var(--s12);
+grid-template-columns:1fr}
+@media(min-width:900px){.notes{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:1400px){.notes{grid-template-columns:repeat(3,1fr)}}
+/* A hairline and a heading rather than a box: the page already uses cards for
+   the summary, and a second kind of box inside the same page is the nesting
+   the shared spec rules out. */
+.notes section{border-top:2px solid var(--rule);padding-top:var(--s3)}
+.notes h3{margin:0;font-size:13px;line-height:1.25;color:var(--ink)}
+.notes p{margin:var(--s3) 0 0;color:var(--muted);font-size:12px;
+line-height:1.65;max-width:64ch}
+.notes code{color:var(--ink)}
 """
 
 
@@ -2444,11 +2557,15 @@ def render_dashboard(snap: dict[str, Any]) -> str:
             pills.append(f'<span class="pill p-{cls}" title="{escape(title)}">'
                          f'{escape(a["rule"])}{mark}</span> ')
         alert_pills = "".join(pills) or '<span class="dim">-</span>'
-        events = "".join(
-            f'<div class="rowsub">{escape(e["kind"])} {escape(e["ts"][11:19])}Z '
-            f'{"+" if e["detail"].get("delta", 0) > 0 else ""}{e["detail"].get("delta", "")}</div>'
-            for e in state.events[:2]
-        ) or '<span class="dim">-</span>'
+        # One <div> per event made some rows twice the height of their
+        # neighbours, and an uneven table is harder to scan than a dense one.
+        # Flowing both events into a single line keeps them visible without
+        # spending a second line height on them.
+        events = ('<div class="rowsub">' + " &middot; ".join(
+            f'{escape(e["kind"])} {escape(e["ts"][11:19])}Z '
+            f'{"+" if e["detail"].get("delta", 0) > 0 else ""}{e["detail"].get("delta", "")}'
+            for e in state.events[:2]) + "</div>") if state.events else (
+            '<span class="dim">-</span>')
         value = _fmt(state.value, state.unit) if state.value is not None else "-"
         health = state.health_pct
         health_cls = "ok" if health and health >= 95 else ("warn" if health and health >= 80 else "crit")
@@ -2460,7 +2577,7 @@ def render_dashboard(snap: dict[str, Any]) -> str:
 <td class="num">{escape(value)}</td>
 <td class="num">{_burn_cell(state)}</td>
 <td class="num">{_impact_cell(state)}</td>
-<td>{sparkline(state.spark, spark_tone(state))}</td>
+<td class="spark">{sparkline(state.spark, spark_tone(state))}</td>
 <td class="num">{_freshness_cell(state)}</td>
 <td class="num"><span class="{health_cls}">{f"{health:.0f}%" if health is not None else "-"}</span>
 <div class="rowsub">{state.ok_samples}/{state.total_samples}</div></td>
@@ -2594,7 +2711,7 @@ def render_dashboard(snap: dict[str, Any]) -> str:
 <div class="e">{escape(str(detail.get("from")))} &rarr; {escape(str(detail.get("to")))}
 ({"+" if isinstance(delta, (int, float)) and delta > 0 else ""}{escape(str(delta))}
 {escape(str(detail.get("unit", "")))}), gap {escape(str(detail.get("gap_s")))}s,
-{escape(str(detail.get("ratio_to_typical")))}x typical decline ,
+{escape(str(detail.get("ratio_to_typical")))}x typical decline,
 recorded as an event, never alerted</div></div>""")
     if not event_blocks:
         event_blocks.append('<div class="alert"><div class="t dim">'
@@ -2608,7 +2725,7 @@ recorded as an event, never alerted</div></div>""")
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Explee spend monitor</title>
-<meta http-equiv="refresh" content="30">
+
 <style>{CSS}</style></head><body>
 <header>
 <div><h1>Explee &middot; company spend</h1>
@@ -2622,7 +2739,7 @@ totals only where the unit is fungible</div></div>
 <span class="pill p-dim">{coverage["samples"]:,} samples</span>
 <br><span class="dim">generated {escape(snap["generated_at"])} &middot;
 T0 {escape(coverage["first_ts"] or "-")} &middot; last {escape(coverage["last_ts"] or "-")}
-&middot; auto-refresh 30s</span></div>
+&middot; refreshes in place every 30s</span></div>
 </header>
 <div class="wrap">
 
@@ -2631,7 +2748,7 @@ T0 {escape(coverage["first_ts"] or "-")} &middot; last {escape(coverage["last_ts
 <h2>Providers, sorted by risk</h2>
 <div class="scroll"><table><thead><tr>
 <th>provider</th><th>pay model</th><th class="num">value</th><th class="num">burn</th>
-<th class="num">time to impact</th><th>window</th><th class="num">freshness</th>
+<th class="num">time to impact</th><th class="spark">window</th><th class="num">freshness</th>
 <th class="num">poll health</th><th>alerts</th><th>events</th>
 </tr></thead><tbody>{"".join(rows)}</tbody></table></div>
 
@@ -2658,7 +2775,7 @@ first. A line appears when a condition starts and when it crosses a materiality 
 ({100 * coverage["ok_samples"] / max(1, coverage["samples"]):.1f}%)</div></div>
 <div class="card"><h2>sample states</h2>
 <div class="meta">{"<br>".join(f"{escape(k)}: {v:,}" for k, v in sorted(coverage["by_state"].items()))}</div>
-<div class="meta" style="margin-top:6px">schema_miss is <code>{{}}</code> on HTTP 200 ,
+<div class="meta" style="margin-top:6px">schema_miss is <code>{{}}</code> on HTTP 200,
 a third state, never read as zero</div></div>
 <div class="card"><h2>stale providers</h2>
 <div class="big {"crit" if stale else "ok"}">{len(stale)}</div>
@@ -2666,43 +2783,88 @@ a third state, never read as zero</div></div>
 <div class="meta" style="margin-top:6px">tolerance {POLICY.stale_display_s:.0f}s</div></div>
 </div>
 
-<div class="foot">
-<strong>How to read this.</strong> Burn is a Theil-Sen slope over the readings since the
+<div class="notes">
+<section><h3>How to read this</h3><p>Burn is a Theil-Sen slope over the readings since the
 last top-up, not a first/last difference: in this window a first/last estimate reports
 <code>findymail</code> burning &minus;3623 credits/h, because a +1994 top-up lands inside it.
-Time to impact is hours, the only quantity comparable across every provider.<br>
-<strong>What is and is not added up.</strong> A card shows a total only when its unit is
+Time to impact is hours, the only quantity comparable across every provider.</p></section>
+
+<section><h3>Why {POLICY.unavailable_alert_s / 60:.0f} minutes</h3><p>In the reference window
+transient 504/429 failures lasted 1-2 polls (30-60s) and self-healing 5xx episodes
+lasted 10 to 22 polls (300 to 630s). There were 15 of them across 10 providers in
+under three hours, and every one healed itself. The tolerance sits above the longest outage
+actually measured, so a line means &ldquo;longer than anything we observed&rdquo;, not
+&ldquo;the API is flaky again&rdquo;. Freshness above turns amber at
+{POLICY.stale_display_s:.0f}s so a provider going quiet is <em>visible</em> long before it is
+<em>alerted</em>.</p></section>
+
+<section><h3>What is and is not added up</h3><p>A card shows a total only when its unit is
 fungible across vendors, which here means a currency: a dollar of <code>openai</code> credit
 and a dollar of <code>brightdata</code> credit are both a dollar. The six providers whose unit
 is called &ldquo;credits&rdquo; are <em>not</em> summed. <code>elevenlabs</code> credits are
 TTS characters, <code>resend</code> credits are emails, and <code>scrapfly</code> credits are
 API calls. They share a label, not a unit, so that card reports how many packages there are and
-which one runs out first.<br>
-<strong>Alert classes.</strong> <span class="pill p-info">operational_policy</span> rules encode
+which one runs out first.</p></section>
+
+<section><h3>Alert classes</h3><p><span class="pill p-info">operational_policy</span> rules encode
 choices nobody specified (runway lead time {POLICY.runway_critical_h:.0f}h critical /
 {POLICY.runway_warning_h:.0f}h warning, unavailability tolerance
 {POLICY.unavailable_alert_s / 60:.0f}min, postpaid floor {POLICY.postpaid_floor:.0f}).
 <span class="pill p-acc">data_derived</span> rules compute their threshold from the observed
-window ({BASELINE.anomaly_k:.0f} MAD of the provider's own slope distribution).<br>
-<strong>Why {POLICY.unavailable_alert_s / 60:.0f} minutes.</strong> In the reference window
-transient 504/429 failures lasted 1-2 polls (30-60s) and self-healing 5xx episodes
-lasted 10 to 22 polls (300 to 630s). There were 15 of them across 10 providers in
-under three hours, and every one healed itself. The tolerance sits above the longest outage actually measured,
-so a line means "longer than anything we observed", not "the API is flaky again".
-Freshness above turns amber at {POLICY.stale_display_s:.0f}s so a provider going quiet is
-<em>visible</em> long before it is <em>alerted</em>.<br>
-<strong>Not alerts.</strong> A top-up, a package reset on its refresh date, a postpaid credit
+window ({BASELINE.anomaly_k:.0f} MAD of the provider&rsquo;s own slope distribution).</p></section>
+
+<section><h3>Not alerts</h3><p>A top-up, a package reset on its refresh date, a postpaid credit
 going negative, a rise that is later handed back, and a single timeout are all normal.
-Estimate-driven rules sustain for {POLICY.estimate_sustain_s:.0f}s before firing.<br>
-<strong>Lines are written on change, not on a timer.</strong> A condition produces a line
+Estimate-driven rules sustain for {POLICY.estimate_sustain_s:.0f}s before firing, and a
+projection that only exists because of one of those events is not emitted at all.</p></section>
+
+<section><h3>Lines are written on change, not on a timer</h3><p>A condition produces a line
 when it starts, and again only when it crosses a materiality band (roughly doubling
 steps of time-to-impact). Drift inside a band is silent, because 44&nbsp;h and 43&nbsp;h call
 for the same response. This table is the live state; <code>alerts.jsonl</code> is the log of
-changes to it.<br>
-<strong>Known measurement limit.</strong> A top-up landing in the same interval as spend is not
+changes to it.</p></section>
+
+<section><h3>Known measurement limit</h3><p>A top-up landing in the same interval as spend is not
 observable: the API exposes a current value only, so the two are seen summed and never
-separately. Burn is a lower bound across such intervals.
+separately. Burn is a lower bound across such intervals.</p></section>
 </div>
+<script>
+/* The page used to auto-refresh with an http-equiv meta tag, which is a
+   navigation: every 30 seconds the reader was thrown back to the top.
+   The tag is deliberately not spelled out here, because a search for it should
+   find a live one and not this explanation of its removal. Scrolling
+   down four times in a row produced four identical screenshots, so the alerts
+   table, the events, the collection health and these notes were unreadable to
+   anyone who scrolled.
+
+   This fetches the same server-rendered page and swaps the rendered body in
+   place, which keeps scroll position and, more importantly, keeps ONE renderer.
+   Patching from JSON would mean writing a second renderer in JavaScript that
+   could disagree with the Python one, which is the drift this file avoids
+   everywhere else. */
+(function () {{
+  var PERIOD = 30000;
+  function again() {{ window.setTimeout(tick, PERIOD); }}
+  function tick() {{
+    if (document.hidden) {{ again(); return; }}
+    window.fetch(window.location.href, {{ cache: "no-store" }})
+      .then(function (r) {{ return r.ok ? r.text() : null; }})
+      .then(function (html) {{
+        if (!html) return;
+        var fresh = new DOMParser().parseFromString(html, "text/html")
+                        .querySelector(".wrap");
+        var live = document.querySelector(".wrap");
+        if (!fresh || !live) return;
+        var y = window.scrollY;
+        live.innerHTML = fresh.innerHTML;
+        window.scrollTo(0, y);
+      }})
+      .catch(function () {{ /* a failed refresh must not stop later ones */ }})
+      .then(again, again);
+  }}
+  again();
+}})();
+</script>
 </div></body></html>"""
 
 
@@ -2962,11 +3124,24 @@ def audit_alerts(store: Store, lines: Sequence[dict[str, Any]]) -> tuple[str, in
     removed was caused by normal operations and is reported as unreconciled; a
     note recording that an event happened nearby is not proof of anything.
 
+    An alert written after the last raw record cannot be re-derived, and saying
+    so is not the same as saying the rule failed. Auditing `findymail`'s
+    2026-08-23T23:05:25Z line against a raw copy that ended at 22:59 produced
+    "rule package_exhaustion does not fire when re-run at this instant", which
+    read as a defect in the monitor and was a defect in this function: it was
+    reconstructing state for six minutes it had no readings for. With the full
+    window the same line reconciles. Lines beyond coverage are now reported as
+    out of range and excluded from the failure count.
+
     Returns the report and the number of lines that failed to reconcile.
     """
     catalog = store.catalog()
     out = [f"Reconciling {len(lines)} alert lines against the raw window", ""]
     failures = 0
+
+    # The last instant this audit has evidence for. Re-deriving past it is
+    # asking what the data says about a time it does not cover.
+    covered_to = store.last_reading_ts()
 
     for index, alert in enumerate(lines, 1):
         provider = alert.get("provider")
@@ -2976,6 +3151,13 @@ def audit_alerts(store: Store, lines: Sequence[dict[str, Any]]) -> tuple[str, in
         out.append(f"[{index}] {alert['ts']}  {alert['level']}  {rule_name}  {provider}")
         out.append(f"     {alert['text'][:160]}")
         problems: list[str] = []
+
+        if covered_to is not None and when > covered_to:
+            out.append(f"     OUT OF RANGE: written {(when - covered_to).total_seconds():.0f}s "
+                       f"after the last raw record ({iso(covered_to)}), so this window "
+                       f"cannot re-derive it. Not counted as a failure.")
+            out.append("")
+            continue
 
         rule = PROVIDER_RULE_BY_NAME.get(rule_name)
         meta = catalog.get(provider) if provider else None

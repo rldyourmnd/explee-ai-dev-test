@@ -54,10 +54,34 @@ HOSTNAME_RE = re.compile(r"^[ \t]*HostName[ \t]+[A-Za-z0-9_.-]+[ \t]*$", re.M)
 # one passing on broken data. Require every octet to be a legal 0-255 AND reject
 # anything sitting inside an obvious version context.
 IP_RE = re.compile(r"(?<![\w.-])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?![\w.-])")
-VERSION_CONTEXT = re.compile(r"(cu\d+|==|>=|<=|version|torch|nvidia|cudnn|pip)", re.I)
+# Package-manager output is the dominant source of dotted quads that are not
+# addresses: "Successfully installed nvidia-cusparse-cu12-12.3.1.170" carries
+# three of them per line. Detect the installer context, not just the token.
+VERSION_CONTEXT = re.compile(
+    r"(cu\d+|==|>=|<=|version|torch|nvidia|cudnn|pip|"
+    r"successfully installed|installing collected|requirement already|"
+    r"downloading |site-packages|resolved \d+ package)", re.I)
 # The deployment target is ours and is already public via the dashboard hostname;
 # private ranges and loopback are not disclosures.
 ALLOWED_IP_PREFIXES = ("0.", "127.", "10.", "192.168.", "255.", "188.166.77.47")
+
+# Reviewed dotted quads that are not addresses, each read in context before being
+# listed here. They survive because they are NON-SENSITIVE: publishing "12.3.1.170
+# is a CUDA library version" harms nobody. That is why this list may live in a
+# tracked file while the client-name patterns may not, and why --allow-finding on
+# a real identifier stays forbidden with no equivalent escape. An override is
+# acceptable exactly when disclosing what it covers costs nothing.
+#
+# These appear in two shapes: pip's "Successfully installed nvidia-cusparse-cu12-
+# 12.3.1.170 ..." output, and a trace quoting a scan report whose own output is a
+# list of the tokens it found - the same self-referential shape that made the
+# HostName gate unsatisfiable three times.
+ACKNOWLEDGED_NON_ADDRESSES = {
+    "11.2.1.3", "11.6.1.9", "12.3.1.170", "12.4.5.8", "9.1.0.70",  # CUDA versions
+    "10.3.5.147",                                                   # CUDA version
+    "8.8.8.8",                     # public DNS, quoted while verifying a subdomain
+    "1.1.1.1", "1.2.3.4",          # literals in a sed mask self-test: "must show <ip-redacted>"
+}
 # 8.8.8.8 is public DNS quoted while verifying a subdomain, not infrastructure.
 
 
@@ -185,12 +209,22 @@ def check() -> tuple[list[str], list[str]]:
             if VERSION_CONTEXT.search(line):
                 continue                      # a package version, not a host
             ip = m.group(0)
-            if not ip.startswith(ALLOWED_IP_PREFIXES) and ip != "8.8.8.8":
+            if ip in ACKNOWLEDGED_NON_ADDRESSES:
+                continue
+            if not ip.startswith(ALLOWED_IP_PREFIXES):
                 ips.add(ip)
         if ips:
             problems.append(f"{fname}: unexpected IP address(es): {sorted(ips)}")
+        # A lossy marker only counts when the EXPORTER emitted it, not when the
+        # exporter's own source code is quoted inside a trace. task1-TRACE.md
+        # contains `f"result truncated by --max-result"` as a source line, and an
+        # unqualified substring search read that as evidence the trace was
+        # truncated. Same self-referential shape that made the HostName gate
+        # unsatisfiable three times: a document discussing a pattern is not an
+        # instance of it. Require the marker at the start of a line, which is how
+        # the exporter writes it and how quoted source never appears.
         for marker in ("This export is not verbatim", "truncated by --max-result"):
-            if marker in text:
+            if re.search(r"^[>\s]*" + re.escape(marker), text, re.M):
                 problems.append(f"{fname}: lossy-export marker present ({marker!r})")
 
     return problems, notes
