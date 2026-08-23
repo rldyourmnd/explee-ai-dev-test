@@ -1168,7 +1168,11 @@ SEVERITY = {"critical": 0, "warning": 1, "info": 2}
 
 @dataclass
 class Candidate:
-    """A rule firing before sustain/dedup/cooldown are applied."""
+    """A rule condition holding, before sustain and materiality are applied.
+
+    A candidate is not an alert. It becomes one only after it has held for its
+    sustain period and crossed a materiality band it has not already announced.
+    """
 
     key: str
     rule: str
@@ -1591,7 +1595,14 @@ def evaluate(states: Sequence[ProviderState], now: datetime) -> list[Candidate]:
 
 
 class Alerter:
-    """Sustain, dedup, cooldown and durable append to alerts.jsonl.
+    """Sustain, materiality bands, and durable append to alerts.jsonl.
+
+    There is deliberately no cooldown here. A plain hourly cooldown was tried
+    and the live log showed it restating unchanged conditions while burying the
+    one line that had genuinely deteriorated; what replaced it is a band
+    comparison, so a line is written when a condition starts and when it gets
+    materially worse, never merely because time passed.
+
 
     Sustain is evaluated against the *data* clock, not the process clock, so a
     replay of the log reproduces exactly the alerts a live run would have
