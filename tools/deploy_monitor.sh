@@ -33,7 +33,42 @@ REPLAY=false
 
 mask() { sed -E 's/[0-9]{1,3}(\.[0-9]{1,3}){3}/<ip-redacted>/g'; }
 
-before="$(ssh -o ConnectTimeout=30 "$HOST" "systemctl is-active $UNIT || true")"
+# The deploy is irreversible and the post-checks are not. A post-check that can
+# silently not-run is not a safety check, it is a comment - and this script did
+# exactly that: every `ssh` below lacked -n, so the remote command consumed the
+# script's own stdin when the script was piped, the collector-after and HTTPS
+# assertions were never reached, and the deploy reported no failure of its own.
+# The container shipped and nothing proved the sampler survived it.
+#
+# Two defences. Every ssh now takes -n so it cannot eat what it was not given.
+# And this trap makes the absence of verification louder than its failure: the
+# only path that clears VERIFIED is the last line of the script, so any exit
+# before it - error, signal, or lines that never ran - says so and exits non-zero.
+VERIFIED=false
+DEPLOYED=false
+on_exit() {
+  local rc=$?
+  if [ "$VERIFIED" != true ]; then
+    echo "" >&2
+    if [ "$DEPLOYED" = true ]; then
+      echo "!! DEPLOYED BUT NOT VERIFIED !!" >&2
+      echo "The container IS running the new code and the checks below did not both pass:" >&2
+    else
+      echo "!! ABORTED BEFORE DEPLOY !!" >&2
+      echo "Nothing was shipped. Unmet:" >&2
+    fi
+    echo "  - $UNIT is active on $HOST with no new restarts" >&2
+    echo "  - the public dashboard returns HTTP 200" >&2
+    echo "Check the sampler by hand before trusting this deploy:" >&2
+    echo "  ssh -n $HOST 'systemctl is-active $UNIT; systemctl show $UNIT -p NRestarts --value'" >&2
+    echo "The observation window cannot be recreated if the sampler stopped." >&2
+    [ "$rc" -eq 0 ] && rc=1
+  fi
+  exit "$rc"
+}
+trap on_exit EXIT
+
+before="$(ssh -n -o ConnectTimeout=30 "$HOST" "systemctl is-active $UNIT || true")"
 echo "collector before : $before"
 [ "$before" = "active" ] || { echo "collector is '$before' - aborting, the window is not recreatable" >&2; exit 1; }
 
@@ -41,11 +76,11 @@ echo "shipping monitor.py"
 scp -q "$LOCAL_MONITOR" "$HOST:/opt/explee-spend-monitor/monitor.py"
 
 local_sha="$(shasum -a 256 "$LOCAL_MONITOR" | cut -d' ' -f1)"
-remote_sha="$(ssh -o ConnectTimeout=30 "$HOST" "sha256sum /opt/explee-spend-monitor/monitor.py | cut -d' ' -f1")"
+remote_sha="$(ssh -n -o ConnectTimeout=30 "$HOST" "sha256sum /opt/explee-spend-monitor/monitor.py | cut -d' ' -f1")"
 [ "$local_sha" = "$remote_sha" ] || { echo "upload mismatch" >&2; exit 1; }
 echo "deployed code matches local: ${local_sha:0:16}"
 
-ssh -o ConnectTimeout=300 "$HOST" "
+ssh -n -o ConnectTimeout=300 "$HOST" "
   set -e
   before_replays=\$(docker logs $CONTAINER 2>&1 | grep -c '\[replay\]' || echo 0)
 
@@ -77,13 +112,15 @@ ssh -o ConnectTimeout=300 "$HOST" "
   echo \"alerts    : \$(wc -l < $STATE/alerts.jsonl 2>/dev/null || echo 0) lines\"
   echo \"data mount: rw=\$(docker inspect $CONTAINER --format '{{range .Mounts}}{{if eq .Destination \"/data\"}}{{.RW}}{{end}}{{end}}')\"
 " 2>&1 | mask
+DEPLOYED=true
 
-after="$(ssh -o ConnectTimeout=30 "$HOST" "systemctl is-active $UNIT || true")"
-restarts="$(ssh -o ConnectTimeout=30 "$HOST" "systemctl show $UNIT -p NRestarts --value")"
+after="$(ssh -n -o ConnectTimeout=30 "$HOST" "systemctl is-active $UNIT || true")"
+restarts="$(ssh -n -o ConnectTimeout=30 "$HOST" "systemctl show $UNIT -p NRestarts --value")"
 echo "collector after  : $after (NRestarts=$restarts)"
 [ "$after" = "active" ] || { echo "collector is '$after' after deploy" >&2; exit 1; }
 
 code="$(curl -sS -o /dev/null --max-time 25 -w '%{http_code}' https://spend.nddev.it.com/ || echo 000)"
 echo "public dashboard : HTTP $code"
 [ "$code" = "200" ] || { echo "public URL did not return 200" >&2; exit 1; }
+VERIFIED=true
 echo "deploy verified"
