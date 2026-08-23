@@ -48,10 +48,17 @@ ARTIFACTS = [
 GENERATED = {"LINKS.md", "NOTES.md"}
 
 HOSTNAME_RE = re.compile(r"^[ \t]*HostName[ \t]+[A-Za-z0-9_.-]+[ \t]*$", re.M)
-IP_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+# A dotted quad is not automatically an address. Package versions look identical
+# to a naive regex - nvidia-cusparse-cu12 12.3.1.170 matched, and flagging it
+# would have been a check failing on correct data, which costs as much trust as
+# one passing on broken data. Require every octet to be a legal 0-255 AND reject
+# anything sitting inside an obvious version context.
+IP_RE = re.compile(r"(?<![\w.-])(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})(?![\w.-])")
+VERSION_CONTEXT = re.compile(r"(cu\d+|==|>=|<=|version|torch|nvidia|cudnn|pip)", re.I)
 # The deployment target is ours and is already public via the dashboard hostname;
 # private ranges and loopback are not disclosures.
 ALLOWED_IP_PREFIXES = ("0.", "127.", "10.", "192.168.", "255.", "188.166.77.47")
+# 8.8.8.8 is public DNS quoted while verifying a subdomain, not infrastructure.
 
 
 def sh(*args: str) -> str:
@@ -82,11 +89,34 @@ Here so neither URL is retyped from memory into the form.
         fh.write(body)
 
 
+def alerts_audit_passes() -> bool:
+    """Does the source alerts file currently reconcile against the raw records?
+
+    The audit is a gate, so an alerts file that fails it is not shippable. This
+    matters specifically because the package is rebuilt: on 2026-08-23 the repo
+    copy moved from 12 audited-clean lines to 13 with one unreconciled while the
+    package still held the good one, and a blind re-copy would have silently
+    replaced a passing artifact with a failing one. A swap must never downgrade
+    the package.
+    """
+    return subprocess.run(["uv", "run", "tools/alert_audit_doc.py"],
+                          cwd=ROOT, capture_output=True).returncode == 0
+
+
 def assemble() -> list[str]:
     os.makedirs(OUT, exist_ok=True)
     missing = []
+    audit_ok = alerts_audit_passes()
     for src, dst in ARTIFACTS:
         s = os.path.join(ROOT, src)
+        if dst == "task1-alerts.jsonl" and not audit_ok:
+            if os.path.exists(os.path.join(OUT, dst)):
+                print("  KEEPING the existing task1-alerts.jsonl: the source copy "
+                      "does not currently pass its audit, and a swap must not "
+                      "replace a passing artifact with a failing one")
+                continue
+            print("  WARNING: task1-alerts.jsonl does not pass its audit and no "
+                  "previously-audited copy exists")
         if os.path.exists(s):
             shutil.copy2(s, os.path.join(OUT, dst))
         else:
@@ -145,8 +175,18 @@ def check() -> tuple[list[str], list[str]]:
         hostnames = HOSTNAME_RE.findall(text)
         if hostnames:
             problems.append(f"{fname}: {len(hostnames)} SSH HostName config line(s)")
-        ips = {ip for ip in IP_RE.findall(text)
-               if not ip.startswith(ALLOWED_IP_PREFIXES)}
+        ips = set()
+        for m in IP_RE.finditer(text):
+            octets = m.groups()
+            if any(int(o) > 255 for o in octets):
+                continue                      # not a legal address
+            line_start = text.rfind("\n", 0, m.start()) + 1
+            line = text[line_start:text.find("\n", m.end())]
+            if VERSION_CONTEXT.search(line):
+                continue                      # a package version, not a host
+            ip = m.group(0)
+            if not ip.startswith(ALLOWED_IP_PREFIXES) and ip != "8.8.8.8":
+                ips.add(ip)
         if ips:
             problems.append(f"{fname}: unexpected IP address(es): {sorted(ips)}")
         for marker in ("This export is not verbatim", "truncated by --max-result"):

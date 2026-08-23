@@ -201,6 +201,38 @@ this refusal was not.
 An honest record of what is unexportable is also worth more than a trace that
 was quietly trimmed until it exported.
 
+
+## Trace contamination found at the package gate, 23:08Z — fifth enumeration leak
+
+**`task2-stt-benchmark/TRACE.md` carries a real third-party client identifier
+four times** and is therefore **removed from `submission/`**. The source file is
+untouched in the repository; it is not hand-edited, because a tidied trace is not
+verbatim and is worth less than a disclosed absence.
+
+All four occurrences sit inside a **cmux Remote Control session listing** caught
+in a tool result. Same enumeration class as every previous leak: something listed
+sessions, apps or hosts and the output landed verbatim. That is now five —
+`export_trace --list`, the SSH host dump, `modal app list`, the projects
+directory, and a session listing.
+
+**Why the export guard passed it.** The guard matches **project slugs** shaped
+`-Users-<user>-Developer-<project>`. These are **bare names**, so it had nothing
+to match. Task 2's own scan reported *"project slugs: only this project's"*,
+which was **true and insufficient** — the recorded lesson landing on us again: a
+scan licenses a conclusion only about the pattern it matches.
+
+**Two checks, two answers, and the stricter one wins.** The package scanner looks
+for the identifier *anywhere*; the export guard looks for it *in a slug*. Neither
+is wrong; the narrower one is simply not sufficient to clear an artifact for
+upload. The package gate exists precisely because the per-task gates cannot see
+everything.
+
+**Consequence for the submission:** two of seven artifacts are now absent — both
+traces. Task 3's session was refused by its own guard; Task 2's is withheld by
+this one. The form permits partial submission, and an honest gap beats an
+acknowledged real client identifier. **Task 1's trace is not yet exported and
+must be scanned with this same pattern before it is placed.**
+
 ## Cross-cutting
 
 These rows were lost when this matrix was re-derived from `docs/TASK.md` and are
