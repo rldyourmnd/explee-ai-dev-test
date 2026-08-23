@@ -2686,7 +2686,7 @@ def render_dashboard(snap: dict[str, Any]) -> str:
 <div class="e">{escape(str(detail.get("from")))} &rarr; {escape(str(detail.get("to")))}
 ({"+" if isinstance(delta, (int, float)) and delta > 0 else ""}{escape(str(delta))}
 {escape(str(detail.get("unit", "")))}), gap {escape(str(detail.get("gap_s")))}s,
-{escape(str(detail.get("ratio_to_typical")))}x typical decline ,
+{escape(str(detail.get("ratio_to_typical")))}x typical decline,
 recorded as an event, never alerted</div></div>""")
     if not event_blocks:
         event_blocks.append('<div class="alert"><div class="t dim">'
@@ -2750,7 +2750,7 @@ first. A line appears when a condition starts and when it crosses a materiality 
 ({100 * coverage["ok_samples"] / max(1, coverage["samples"]):.1f}%)</div></div>
 <div class="card"><h2>sample states</h2>
 <div class="meta">{"<br>".join(f"{escape(k)}: {v:,}" for k, v in sorted(coverage["by_state"].items()))}</div>
-<div class="meta" style="margin-top:6px">schema_miss is <code>{{}}</code> on HTTP 200 ,
+<div class="meta" style="margin-top:6px">schema_miss is <code>{{}}</code> on HTTP 200,
 a third state, never read as zero</div></div>
 <div class="card"><h2>stale providers</h2>
 <div class="big {"crit" if stale else "ok"}">{len(stale)}</div>
