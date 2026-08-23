@@ -233,6 +233,46 @@ this one. The form permits partial submission, and an honest gap beats an
 acknowledged real client identifier. **Task 1's trace is not yet exported and
 must be scanned with this same pattern before it is placed.**
 
+
+## Reopened blocker: an alert can pass the guard and fail the counterfactual
+
+**Ruled at 23:12Z: fix the firing path, reset T1, re-derive.** Approved by
+`surface:3` under the mandate — it changes derived state, not the collector.
+
+A `package_exhaustion` line fired on `findymail` at 23:05:25Z, sustained 303 s
+against a 300 s minimum. Remove one `+4` top-up on a **9,965** credit balance —
+**0.04 %** — and the alert disappears. Same magnitude that flipped `bounceban`
+(+3 on 6,779).
+
+**The guard and the counterfactual test different properties**, which is why one
+passed it:
+
+| Check | Question | Verdict on this line |
+|---|---|---|
+| Uncertainty guard | does the projection survive the burn recomputed one MAD slower? | **passes** — a +4 step barely moves the slope |
+| Counterfactual | does it survive *removing a discrete event*? | **fails** — the step moves where the series **segments** |
+
+**Why (b) and not the two cheaper options.** The packaged 13-line artifact is
+clean of this class *only because it stops at 13 lines*. Shipping it would mean
+choosing the artifact that happens to exclude a known defect — the one dishonest
+move in a set built on publishing a failing audit, keeping a snapshot that fell
+12 s short, and withholding two traces. And `docs/TASK.md` is explicit that
+*"balances get topped up from time to time — that is normal operations, not an
+incident"*, so a top-up-caused alert is the requirement missed, not a nuance to
+disclose. Disclosure is right when a fix is unavailable; it is wrong when the fix
+is a contained change to the firing path.
+
+**The defect is architectural, and small.** The audit *already computes* the
+counterfactual. A post-hoc auditor that knows an alert is top-up-caused, while
+the alerter that fired it does not, has the knowledge **one component too late**.
+Moving it into the firing path is relocation, not new machinery.
+
+**T1 reset is not a human decision.** The four reserved are publishing,
+submission timing, interrupting the collector, and payment. `monitor.py` is
+derived state; the sampler is untouched and the raw log keeps appending. That
+separation is what the T0 replay-from-raw design bought, and this is the case it
+was bought for.
+
 ## Cross-cutting
 
 These rows were lost when this matrix was re-derived from `docs/TASK.md` and are
