@@ -71,7 +71,7 @@ is the honest state, not a formatting placeholder.
 | X.3 | `--max-result` removed from handoff instructions | `docs/HANDOFF.md` | `surface:3` | **DONE** — command run 18:46Z, output `0` | `awk '/^\`\`\`bash/{f=1;next} /^\`\`\`/{f=0} f' docs/HANDOFF.md \| grep -c -- '--max-result'` → **`0`** | at `479187b`+this pass |
 | X.4 | Delivery route: history rewrite + publish | this repo | `surface:3` | **procedure written, NOT RUN** — runs once, after 22:14Z and after workers finish | see "Publication procedure" below | — |
 | X.5 | Type check clean | `pyright` | `surface:8` | **18 errors at `8111af1`** — reported by CI, non-blocking until 0 | `uv run --with pyright --with pytest pyright` → `0 errors` | — |
-| X.6 | CI attached to the final commit | `.github/workflows/ci.yml` | `surface:3` | added this pass; first run pending | GitHub Actions run, green pytest + ruff, on the final SHA | — |
+| X.6 | CI attached to the final commit | `.github/workflows/ci.yml` | `surface:3` | **GREEN** at `221c28c` and `95cc83a` — first green runs of this session; every earlier push was red and unread | `gh run list --json headSha,status,conclusion` → `completed success` | pending final SHA |
 | X.7 | Working tree free of third-party identifiers | whole repo | `surface:3` | **DONE** — command run 18:58Z, empty output | `git ls-files -z \| xargs -0 grep -lEi '<client-a>\|<client-b>'` → empty; `grep -lE '^[[:space:]]*HostName[[:space:]]+'` → empty; no public IPs | at this pass |
 | X.8 | **History** free of third-party identifiers | all refs | `surface:3` | **OPEN** — working tree is clean, history is not | `git log -p --all \| grep -ci '<identifier>'` → `0`, after the rewrite | — |
 
