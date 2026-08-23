@@ -219,6 +219,52 @@ A `--max-result` flag truncated tool output while the generated header claimed
 nothing had been dropped. In all three the tool reported success while doing the
 opposite of its purpose.
 
+## A check can pass while testing something next to the break
+
+The families above are about tools reporting success while doing something else.
+This one is worse, because nothing misbehaved.
+
+On 2026-08-23 the dashboard used `var(--accent)` for the lead card's left rule
+and **`--accent` was never defined**. CSS does not fail loudly: an undefined
+custom property makes the declaration invalid at computed-value time, so
+`border-left-color` fell back to `currentColor` and rendered a near-black bar —
+which is also the untinted-neutral result the spec exists to prevent.
+
+Everything passed, honestly:
+
+| Gate | Result | Why it could not see it |
+|---|---|---|
+| `ruff` | clean | it does not read strings as CSS |
+| `pyright` | 0 errors | the stylesheet is a string literal |
+| 295 tests | passed | none looked inside the stylesheet |
+| **screenshots** | **showed the correct colour** | see below |
+
+The screenshots are the instructive row. The leading group carried `.warn` at the
+time, and `.card.lead.warn` sets `border-left-color` explicitly — so the broken
+declaration was overridden in exactly the case that was photographed. **The visual
+check confirmed a rule other than the one under test.** It was right, and useless.
+
+So: when a check passes, ask what it would have looked like had the thing been
+broken. If the answer is "the same", the check is not evidence. Both guards added
+here were validated by **reintroducing the bug and confirming they fail**, rather
+than trusting that they would.
+
+One of them encodes a judgement rather than a fact — the lead card must use
+`--accent` and never a status colour, because brick red has to keep meaning *act
+now*. That is worth a test precisely because it is a decision that would
+otherwise erode.
+
+## `git checkout -- <file>` restores HEAD, not your last edit
+
+Undoing a test mutation with `git checkout -- monitor.py` also destroyed an
+uncommitted fix in the same file. The command was correct; the mental model was
+not. Undo-my-experiment and restore-to-HEAD are the same operation **only when
+nothing else in that file is uncommitted.**
+
+Durable form: **commit first, then mutate, then restore.** A mutation test should
+always run against a clean tree. It was caught one command later only because
+someone grepped for the fix instead of assuming it survived.
+
 ## The instrument can be your own reasoning
 
 On 2026-08-23 a `burn_anomaly` on `meta_ads` reported a baseline of **-14.15
