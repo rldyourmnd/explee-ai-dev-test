@@ -273,6 +273,43 @@ derived state; the sampler is untouched and the raw log keeps appending. That
 separation is what the T0 replay-from-raw design bought, and this is the case it
 was bought for.
 
+
+## Live and replay have diverged — and it changes which artifact we ship
+
+**The counterfactual guard was built, tested, and suppressed nothing.** Task 1
+replayed the same 7.03 h window under old and new code: 17 lines each,
+**byte-identical alert sets**, nothing suppressed. It then reported that rather
+than claiming the fix, which is the report it would have been easiest not to
+write.
+
+**What removed the `findymail` line was nothing we did — it never reproduces on
+replay at all**, under either build. `bounceban` behaved the same way. That is
+**two lines the live incremental path emitted which the replay path does not
+reproduce**, and `task1-spend-observability/README.md` states as a *design
+guarantee* that "the live path and the replay path cannot drift apart." **That
+claim is disproven.** Mechanism not yet identified.
+
+### Ruling: the deliverable is the LIVE file, and the planned regeneration is cancelled
+
+`docs/TASK.md`: *"when your system decides a human should look, it appends a line
+to `alerts.jsonl`."* The artifact is **the record of decisions the system actually
+made**. A replayed file is a reconstruction of what a *different run* would have
+decided — so where the two disagree, shipping the reconstruction means shipping
+alerts nobody was ever shown and omitting ones they were.
+
+**We regenerate to understand; we ship what was emitted.** This reverses my
+earlier agreement to regenerate the submitted artifact from a clean replay, and
+it is stated plainly here rather than quietly changed.
+
+**The guard stays** regardless of biting today: an auditor that knows an alert is
+top-up-caused while the alerter that fired it does not has the knowledge one
+component too late.
+
+**`scrapfly` is pre-existing and newly exposed by duration** — two lines 6.44 h
+apart against an `incident_forget_s` of 6 h, a threshold interacting with a window
+that finally outgrew it. **Nothing in a six-hour window could have surfaced it**,
+which is the clearest single argument for continuing to collect.
+
 ## Cross-cutting
 
 These rows were lost when this matrix was re-derived from `docs/TASK.md` and are
