@@ -70,7 +70,7 @@ TRACE.md."*
 | 2.4 | **"the eval behind it"** — design frozen before results | `PREREGISTRATION.md` | `surface:5` | **DONE** — `FROZEN` anchored to commit `9fd6ff8`, not a self-declared stamp | `git show 9fd6ff8` | `9fd6ff8` |
 | 2.5 | Gold reference transcript | — | `surface:5` | **ABSENT — critical path**, two annotators + adjudication. Nothing can be scored without it | policy pre-registered; adjudication recorded | — |
 | 2.6 | Raw engine outputs, hashed before normalisation | — | `surface:5` | ABSENT | hash each raw output | — |
-| 2.7 | **"a published comparison report … host it anywhere, send the link"** | *no URL yet* | `surface:3` decides host, `surface:5` writes | **PLANNED, unbuilt** — see hosting decision below | `curl` from outside, no auth | — |
+| 2.7 | **"a published comparison report … host it anywhere, send the link"** | `https://stt.nddev.it.com/` | `surface:3` built the host, `surface:5` writes the report | **HOST LIVE, REPORT PENDING** — HTTP 200, 725 B, Let's Encrypt cert `CN=stt.nddev.it.com`, no auth, verified externally 19:45Z. Only the report content is outstanding | `curl -sSI https://stt.nddev.it.com/` + `openssl s_client` for cert subject/issuer | — |
 | 2.8 | **TRACE.md** | — | `surface:5` | ABSENT | tool header; lossy/leak scans | — |
 | 2.9 | Licence posture stated, `NC` named as the contestable leg | report | `surface:5` | **required** — not a footnote | report text | — |
 

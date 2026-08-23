@@ -470,3 +470,29 @@ Every line is a start or a deterioration; none is a restatement:
 18:03:32  runway              openrouter   47.9 h
 18:44:34  package_exhaustion  bounceban   180.4 h
 ```
+
+### 19:45Z — Task 2 report host deployed
+
+Built by the orchestrator rather than by Task 2, because `surface:5` is the
+critical path and sits at 87 % of a weekly usage limit that cannot be topped up.
+Moving deployment off the constrained worker is worth more than the tokens it
+would have spent doing it.
+
+| | |
+|---|---|
+| Host | `stt.nddev.it.com` → `188.166.77.47` |
+| Container | `explee-stt-report`, `nginx:alpine`, `restart: unless-stopped` |
+| Network | `nddev_reverse_proxy` — the existing proxy, no new infrastructure |
+| Content | `/opt/explee-stt-report/html/index.html`, replaced by the report |
+
+The DNS record already existed; `gddy dns add` refused to duplicate it rather
+than overwriting, which is exactly why `add` is the only permitted verb — the
+zone carries unrelated records that must not be touched.
+
+Verified from outside the deployment host: `HTTP/2 200`, 725 bytes, Let's Encrypt
+certificate `CN=stt.nddev.it.com`, no auth headers, no cookies.
+
+`systemctl is-active explee-raw-sampler` returned `active` before and after.
+A placeholder is deliberate: it makes the published link stable before the report
+exists, and it states that the design was frozen and the corpus hashed in
+advance, so nothing on that page was chosen after seeing results.
