@@ -9,6 +9,31 @@
    `ssh server-nddev-amsterdam systemctl is-active explee-raw-sampler` before
    and after touching that host.
 
+   **Nothing about the running system changes while the observation window is
+   open.** Not the collector, and not the monitor deriving from it. Improvements
+   are committed and tested but deployed only at a snapshot boundary. A restart
+   is a risk taken against evidence that exists exactly once, and "it will
+   probably be fine" is not a reason to take it. The consequence is that the
+   deployed build sits behind the repository for stretches, and that gap is
+   stated in `task1-spend-observability/README.md` rather than mistaken for
+   drift.
+
+   When derived state *is* dropped at such a boundary: **stop the container
+   first, then delete, then start.** The running process holds the SQLite file
+   open and its tail thread recreates it, so `rm` followed by `restart` leaves
+   the new process resuming from an offset that should not exist — that mistake
+   replayed 16 records where a full window was intended. And never detect
+   "replay finished" by grepping the log for the serve banner: the previous
+   run's banner is still there. Count `[replay]` lines before starting and wait
+   for the count to rise. `tools/deploy_monitor.sh` encodes both.
+
+   **Snapshots copy, never move, and verify by prefix.** The log is append-only
+   and still being written, so hashing the host file and then copying it
+   compares two different lengths and can never agree. Copy first, hash the
+   copy, then ask the host for the digest of the same leading byte count.
+   `tools/snapshot_window.py` does this and refuses to run at all if the
+   collector is not active.
+
 2. **Secrets only through environment variables, never echoed.** Traces are
    published verbatim, so a key printed once is a key published. Do not run
    `env`, do not `cat .env`, do not paste keys into prompts, do not log
