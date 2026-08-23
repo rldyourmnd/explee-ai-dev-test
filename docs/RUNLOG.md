@@ -48,3 +48,45 @@ superset of anything a later monitor needs, so schema decisions taken tomorrow
 still apply to data captured today.
 
 Earliest valid 6-hour mark: **2026-08-23T22:14Z**.
+
+### 16:25Z — trace exporter hardened by using it
+
+Three defects surfaced only by running the tool against a real session, each
+fixed rather than worked around:
+
+1. **40-hex pattern matched every git SHA.** A generic `[0-9a-f]{40}` rule
+   cannot tell a Deepgram key from a commit hash. Left in, it would have made
+   `--allow-secrets` routine, which is worse than having no scanner. Replaced
+   with a context-bound rule that requires an assignment (`API_KEY=…`).
+2. **`\b` never fired inside `DEEPGRAM_API_KEY`.** There is no word boundary
+   between `M` and `_`, so the assignment rule missed the most common real
+   shape. Caught by the scanner's own test table, which asserts both directions.
+3. **Turn numbers are not a stable acknowledgement key.** A live session grows
+   while it is being worked on, so every `--allow-finding 'turn 176: …'` went
+   stale within minutes — and the export correctly refused rather than silently
+   accepting a review of a different turn. Findings are now identified by
+   `sha256(matched)[:12]`, which survives renumbering.
+
+Findings acknowledged for the orchestration export, all synthetic fixtures from
+the turns that wrote the test suite, each read before acknowledging:
+`anthropic key:276f03f3a1d2`, `openai key:a4f3b2153f32`,
+`github token:620e24b63197`, `bearer token:7ecaa9898bcf`,
+`assigned api key:86cbb4aba6a3`, `private key block:03d104c669e3`,
+`aws access key:1a5d44a2dca1` (the AWS canonical documentation example).
+
+### 16:27Z — confidentiality finding on the orchestration trace
+
+Scanning the exported orchestration trace showed it carries material that has
+nothing to do with this submission:
+
+| Leak | Count |
+|---|---|
+| Distinct third-party server IPs | 9 |
+| `HostName` lines from `~/.ssh/config` | 16 |
+| Unrelated client/project names | unrelated-client-b ×45, unrelated-client-a ×10, and 9 others |
+
+Cause: early reconnaissance listed SSH hosts and `Developer/` to pick a deploy
+target, which was reasonable locally and unacceptable in a published artifact.
+Redacting it would violate the verbatim requirement, so the trace stays internal
+instead. `AGENTS.md` rule 3 now forbids the reconnaissance pattern that created
+it, so the three task traces will be clean by construction.

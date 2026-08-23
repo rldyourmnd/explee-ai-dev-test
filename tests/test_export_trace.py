@@ -36,17 +36,40 @@ def test_scanner_ignores_benign_text(text):
 
 
 @pytest.mark.parametrize("text,expected", [
-    ("ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8", "github token"),
-    ("sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCD", "openai key"),
-    ("sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345", "anthropic key"),
-    ("AKIAIOSFODNN7EXAMPLE", "aws access key"),
-    ('DEEPGRAM_API_KEY="a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"', "assigned api key"),
-    ("  api_key: AbCdEfGhIjKlMnOpQrStUvWx", "assigned api key"),
-    ("Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9abc", "bearer token"),
+    ("ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8", "github token"),  # pragma: allowlist secret
+    ("sk-proj-abcdefghijklmnopqrstuvwxyz0123456789ABCD", "openai key"),  # pragma: allowlist secret
+    ("sk-ant-api03-abcdefghijklmnopqrstuvwxyz012345", "anthropic key"),  # pragma: allowlist secret
+    ("AKIAIOSFODNN7EXAMPLE", "aws access key"),  # pragma: allowlist secret
+    ('DEEPGRAM_API_KEY="a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"', "assigned api key"),  # pragma: allowlist secret
+    ("  api_key: AbCdEfGhIjKlMnOpQrStUvWx", "assigned api key"),  # pragma: allowlist secret
+    ("Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9abc", "bearer token"),  # pragma: allowlist secret
     ("-----BEGIN OPENSSH PRIVATE KEY-----", "private key block"),
 ])
 def test_scanner_catches_credentials(text, expected):
-    assert expected in et.scan_secrets(text)
+    assert any(f.startswith(expected + ":") for f in et.scan_secrets(text)), \
+        f"expected a {expected!r} finding, got {et.scan_secrets(text)}"
+
+
+def test_fingerprint_is_stable_across_turn_renumbering():
+    """The ack key must not depend on where in the session the match appeared.
+
+    A live session grows while it is being worked on, so turn indices shift and
+    any turn-numbered acknowledgement goes stale within minutes.
+    """
+    secret = "ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"  # pragma: allowlist secret
+    early = [_turn("user", [{"type": "text", "text": secret}])]
+    later = [_turn("user", [{"type": "text", "text": "filler"}]) for _ in range(5)] + early
+    _, first = et.build(early, "T", "s", Path("x.jsonl"), None)
+    _, second = et.build(later, "T", "s", Path("x.jsonl"), None)
+    key = lambda fs: [f.split("  (first seen:")[0] for f in fs]
+    assert key(first) == key(second), "fingerprint must survive renumbering"
+    assert "turn 1" in first[0] and "turn 6" in second[0], "turn is still reported for humans"
+
+
+def test_fingerprint_distinguishes_different_secrets():
+    a = et.scan_secrets("ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8")  # pragma: allowlist secret
+    b = et.scan_secrets("ghp_Z9y8X7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2")  # pragma: allowlist secret
+    assert a != b, "two different tokens must not share one acknowledgement"
 
 
 def test_fence_survives_backticks_in_payload():
@@ -101,13 +124,21 @@ def test_build_without_max_result_keeps_full_output():
     assert "truncated" not in md
 
 
+def test_allowlist_pragma_exempts_only_its_own_line():
+    vouched = 'KEY = "ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"  # pragma: allowlist secret'
+    assert et.scan_secrets(vouched) == []
+    # the exemption must not bleed into neighbouring lines
+    mixed = vouched + "\nleaked = ghp_Z9y8X7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2"
+    assert any(f.startswith("github token:") for f in et.scan_secrets(mixed))
+
+
 def test_build_surfaces_secrets_as_findings_with_turn_number():
     records = [
         _turn("user", [{"type": "text", "text": "hello"}]),
         _turn("assistant", [{"type": "text", "text": "ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"}]),
     ]
     _, findings = et.build(records, "T", "s", Path("x.jsonl"), None)
-    assert any("turn 2" in f and "github token" in f for f in findings)
+    assert any("turn 2" in f and f.startswith("github token:") for f in findings)
 
 
 def test_build_rejects_a_session_with_no_turns():

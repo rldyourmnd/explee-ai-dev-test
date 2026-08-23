@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -91,8 +92,38 @@ def render_tool_result(content) -> str:
     return json.dumps(content, ensure_ascii=False, indent=2)
 
 
+# A line carrying this pragma is vouched for by the author as a non-secret —
+# a test fixture, a documentation example. Scoping the exemption to one line is
+# the point: a blanket --allow-secrets for a whole export would hide a real leak
+# sitting three turns away from the fixture that needed the exemption.
+ALLOWLIST_PRAGMA = re.compile(r"pragma:\s*allowlist secret", re.IGNORECASE)
+
+
+def fingerprint(name: str, matched: str) -> str:
+    """Stable id for one finding.
+
+    Deliberately derived from the matched text rather than the turn number:
+    a session grows while it is being worked on, so turn indices shift under
+    you and every acknowledgement goes stale within minutes. The digest is
+    truncated because it only needs to distinguish findings, and a full hash of
+    a credential is still a thing worth not writing down at length.
+    """
+    return f"{name}:{hashlib.sha256(matched.encode('utf-8')).hexdigest()[:12]}"
+
+
 def scan_secrets(text: str) -> list[str]:
-    return [name for name, pat in SECRET_PATTERNS if pat.search(text)]
+    """Report fingerprints of credential patterns, ignoring allowlisted lines."""
+    found: list[str] = []
+    for line in text.splitlines() or [text]:
+        if ALLOWLIST_PRAGMA.search(line):
+            continue
+        for name, pat in SECRET_PATTERNS:
+            match = pat.search(line)
+            if match:
+                ident = fingerprint(name, match.group(0))
+                if ident not in found:
+                    found.append(ident)
+    return found
 
 
 def ts_of(record: dict) -> str | None:
@@ -176,24 +207,24 @@ def build(records: list[dict], title: str, session_id: str, source: Path,
 
             if kind == "text":
                 body = block.get("text", "")
-                findings += [f"turn {index} (text): {n}" for n in scan_secrets(body)]
+                findings += [f"{n}  (first seen: turn {index}, text)" for n in scan_secrets(body)]
                 out += [body, ""]
 
             elif kind == "thinking":
                 body = block.get("thinking", "")
-                findings += [f"turn {index} (thinking): {n}" for n in scan_secrets(body)]
+                findings += [f"{n}  (first seen: turn {index}, thinking)" for n in scan_secrets(body)]
                 out += ["<details><summary>Reasoning</summary>", "", fence(body), "",
                         "</details>", ""]
 
             elif kind == "tool_use":
                 payload = json.dumps(block.get("input", {}), ensure_ascii=False, indent=2)
-                findings += [f"turn {index} (tool input): {n}" for n in scan_secrets(payload)]
+                findings += [f"{n}  (first seen: turn {index}, tool input)" for n in scan_secrets(payload)]
                 out += [f"**Tool call — `{block.get('name')}`**", "",
                         fence(payload, "json"), ""]
 
             elif kind == "tool_result":
                 body = render_tool_result(block.get("content"))
-                findings += [f"turn {index} (tool result): {n}" for n in scan_secrets(body)]
+                findings += [f"{n}  (first seen: turn {index}, tool result)" for n in scan_secrets(body)]
                 if max_result is not None and len(body) > max_result:
                     dropped = len(body) - max_result
                     body = (body[:max_result]
@@ -232,8 +263,13 @@ def main() -> int:
                         help="truncate tool results to N chars, marked inline")
     parser.add_argument("--copy-raw", action="store_true",
                         help="also copy the source JSONL next to --out")
+    parser.add_argument("--allow-finding", action="append", default=[], metavar="FINDING",
+                        help="acknowledge one exact finding string after reviewing it, e.g. "
+                             "'turn 176 (tool input): assigned api key'. Repeatable. Any "
+                             "finding not listed still blocks the export.")
     parser.add_argument("--allow-secrets", action="store_true",
-                        help="write anyway after a secret match (never do this for a submission)")
+                        help="blanket override; prefer --allow-finding, which cannot mask a "
+                             "credential that appears somewhere you did not review")
     parser.add_argument("--list", action="store_true", help="list known sessions")
     args = parser.parse_args()
 
@@ -256,12 +292,37 @@ def main() -> int:
     markdown, findings = build(load(source), args.title, args.session, source,
                                args.max_result)
 
-    if findings and not args.allow_secrets:
-        print("REFUSING to export: credential-shaped strings found.", file=sys.stderr)
-        for finding in dict.fromkeys(findings):
-            print(f"  - {finding}", file=sys.stderr)
-        print("\nFix the source (rotate and stop echoing the secret), then re-export.",
+    # One fingerprint may surface in several turns; collapse to first sighting.
+    unique: dict[str, str] = {}
+    for finding in findings:
+        unique.setdefault(finding.split("  (first seen:")[0], finding)
+    allowed = set(args.allow_finding)
+    acknowledged = [v for k, v in unique.items() if k in allowed]
+    stale = [a for a in args.allow_finding if a not in unique]
+    blocking = [v for k, v in unique.items() if k not in allowed]
+
+    if stale:
+        # An acknowledgement that no longer matches anything means the turn
+        # numbering moved. Silently accepting it would carry a stale review
+        # forward onto a finding nobody looked at.
+        print("REFUSING to export: these --allow-finding values matched nothing.",
               file=sys.stderr)
+        for finding in stale:
+            print(f"  - {finding}", file=sys.stderr)
+        print("\nRe-run without them, review the current findings, then acknowledge those.",
+              file=sys.stderr)
+        return 4
+
+    if blocking and not args.allow_secrets:
+        print("REFUSING to export: credential-shaped strings found.", file=sys.stderr)
+        for finding in blocking:
+            print(f"  - {finding}", file=sys.stderr)
+        print("\nIf the source is a real credential, rotate it and stop echoing it.",
+              file=sys.stderr)
+        print("If you have read the turn and it is a fixture or an example, acknowledge it:",
+              file=sys.stderr)
+        for finding in blocking:
+            print(f"  --allow-finding {finding.split('  (first seen:')[0]!r}", file=sys.stderr)
         return 3
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
@@ -272,9 +333,11 @@ def main() -> int:
         raw = args.out.with_suffix(".raw.jsonl")
         raw.write_bytes(source.read_bytes())
         print(f"wrote {raw} ({raw.stat().st_size/1024:.0f}K)")
-    if findings:
-        print(f"WARNING: exported with {len(set(findings))} secret match(es) because "
-              f"--allow-secrets was set", file=sys.stderr)
+    for finding in acknowledged:
+        print(f"acknowledged after review: {finding}", file=sys.stderr)
+    if blocking and args.allow_secrets:
+        print(f"WARNING: --allow-secrets waved through {len(blocking)} unreviewed match(es)",
+              file=sys.stderr)
     return 0
 
 

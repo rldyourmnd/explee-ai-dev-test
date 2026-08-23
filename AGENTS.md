@@ -16,9 +16,26 @@
    finds a credential rather than redacting one, because redaction would break
    the verbatim guarantee.
 
-3. **Traces are exported, never written.** A TRACE.md is produced only by
+3. **Do not enumerate unrelated infrastructure.** Traces are published
+   verbatim to a third party, so anything a session reads becomes something the
+   reader sees. Never dump `~/.ssh/config`, never `ls` the whole `Developer/`
+   tree, never run `docker ps` on a host for reasons unrelated to this work.
+   Touch `server-nddev-amsterdam` because it hosts this deliverable; do not
+   touch or list anything else. Scan before publishing:
+
+   ```bash
+   grep -oE '\b[0-9]{1,3}(\.[0-9]{1,3}){3}\b' TRACE.md | sort -u
+   grep -c HostName TRACE.md          # must be 0
+   ```
+
+4. **Traces are exported, never written.** A TRACE.md is produced only by
    `tools/export_trace.py` from a real session log. Do not compose, summarise,
    tidy, or reorder a trace. Failed attempts and corrections stay in.
+
+5. **`TRACE-orchestration.md` is internal.** It was produced before rule 3
+   existed and contains an SSH config dump and nine unrelated client IPs. It
+   stays in this private repository as working history and is **not** part of
+   the submission.
 
 ## Evidence
 
