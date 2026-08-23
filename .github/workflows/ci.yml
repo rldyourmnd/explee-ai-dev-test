@@ -40,14 +40,21 @@ jobs:
         run: |
           uv --version
           python3 -V
-          uv run --with ruff ruff --version
+          uv run --with 'ruff==0.15.17' ruff --version
           echo "commit: ${GITHUB_SHA}"
 
       - name: pytest
         run: uv run --with pytest pytest tests/ -q
 
+      # Version pinned deliberately. An unpinned `--with ruff` resolved to 0.16.4
+      # here while the local machine ran 0.15.17, so the same tree was "All checks
+      # passed" locally and 49 errors in CI — every local "gates green" claim was
+      # about a different check than the one CI runs. ruff.toml pins the rule
+      # selection so the result no longer depends on the version at all; the pin
+      # below keeps the two identical even so. Verified: with ruff.toml present,
+      # both 0.15.17 and 0.16.4 pass.
       - name: ruff
-        run: uv run --with ruff ruff check .
+        run: uv run --with 'ruff==0.15.17' ruff check .
 
       # Non-blocking on purpose, and this is a declared state rather than a
       # hidden one. The 18-error baseline at 8111af1 was mostly environment,

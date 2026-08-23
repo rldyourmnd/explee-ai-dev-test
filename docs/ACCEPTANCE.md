@@ -231,6 +231,54 @@ intended — the scan above proves the local history, not what GitHub serves.
 - Publication is decision 3 and remains the human's. This procedure is the
   *mechanism*; it does not make the choice.
 
+## Gate integrity incident, 19:12Z — every "gates green" claim was unreproducible
+
+The most serious self-inflicted finding of this run, recorded in full because it
+invalidates earlier claims made by this session.
+
+**What happened.** CI had been failing on **every pushed commit** —
+`ca27622`, `4db6c5b`, `a0f8885`, `d895b12` — while this session reported "gates
+green, ruff clean" each time. Both were telling the truth about different tools:
+
+| Where | Command | Ruff | Result on the same tree |
+|---|---|---|---|
+| This machine | `ruff check .` | 0.15.17 | `All checks passed!` |
+| CI | `uv run --with ruff ruff check .` | 0.16.4 | **49 errors** |
+
+There was no `ruff.toml` and no pinned version, so `ruff check .` meant
+"whatever ruff happens to be installed". The rule defaults moved between
+releases, and the gate moved with them.
+
+**Why it went unnoticed.** The local result was green, and green results do not
+get investigated. CI was added at 18:52Z and its status was never read — the
+evidence existed for twenty minutes before anyone looked at it. Adding CI and not
+checking it is worse than not adding it, because it manufactures the appearance
+of verification.
+
+**Fix.** `ruff.toml` states the rule selection explicitly, so the gate no longer
+depends on the version, and CI pins `ruff==0.15.17` as well. Verified across both
+versions after the config landed:
+
+```
+uv run --with 'ruff==0.15.17' ruff check .   → All checks passed!
+uv run --with 'ruff==0.16.4'  ruff check .   → All checks passed!
+```
+
+**Consequence for the matrix.** No row may cite a gate result produced by an
+unpinned tool. The canonical command is now:
+
+```bash
+uv run --with pytest pytest tests/ -q
+uv run --with 'ruff==0.15.17' ruff check .
+```
+
+**A second, smaller breach at the same moment.** The `d895b12` push ran the gates
+and then pushed *unconditionally* — the `&&` chained the commit to the push, not
+the gate result to either. A test was red at the time (Task 1's in-flight
+pending/firing work, uncommitted) and the push proceeded anyway. The pushed
+commit was docs-only so nothing broken was published, but the discipline failed
+before the luck held. Pushes are now gated on both exit codes explicitly.
+
 ## Final gate procedure — clean tree only
 
 The 18:04Z gate ran against a working tree holding an uncommitted Task 1 edit.

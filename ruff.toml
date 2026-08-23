@@ -1,0 +1,25 @@
+# Pinned lint configuration.
+#
+# Why this file exists: until 19:12Z on 2026-08-23 there was no ruff config and
+# no pinned version, so `ruff check .` meant "whatever ruff happens to be
+# installed". Locally that was 0.15.17 and reported "All checks passed"; CI
+# resolved `--with ruff` to 0.16.4 and reported 49 errors on the same tree. Both
+# were correct about their own ruleset, and every "gates green" claim made from
+# the local machine was therefore a claim about a different check than the one a
+# reader can reproduce.
+#
+# The gate has to be the same tool everywhere, so the version is pinned in
+# .github/workflows/ci.yml and the rule selection is pinned here rather than
+# inherited from a default that moves between releases.
+
+line-length = 100
+target-version = "py313"
+
+[lint]
+# Ruff's default selection, stated explicitly so a version bump cannot silently
+# widen or narrow the gate. Adding rules is a deliberate edit to this file.
+select = ["E4", "E7", "E9", "F"]
+
+[lint.per-file-ignores]
+# Test modules load their subject with importlib and shadow names deliberately.
+"tests/*" = ["E402"]
