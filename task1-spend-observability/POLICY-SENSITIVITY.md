@@ -4,6 +4,10 @@ Every threshold in `POLICY` is a choice nobody specified. Left as bare
 constants they are magic numbers; measured against the window they become a
 defended choice with a stated cost.
 
+This is a snapshot of a window that is still growing — the provenance row below
+says exactly which data and which commit produced these numbers, and the table
+is regenerated against the full window once collection closes.
+
 | provenance | |
 |---|---|
 | raw records | 6,112 |

@@ -27,18 +27,30 @@ It exits non-zero if any line fails to reconcile.
 
 ## State of this audit
 
-**This audit runs against the build currently deployed, and it fails.** One line
-of eleven does not reconcile, and the check that caught it is the counterfactual
-the second external review asked for:
+**This audit runs against the build currently deployed, and it fails: two lines
+of eleven do not reconcile.** Both were emitted by the running build, and
+neither would be emitted by the code now in the repository.
 
 ```
+[5]  2026-08-23T17:00:29Z  package_exhaustion  findymail
+     UNRECONCILED: rule package_exhaustion does not fire when re-run at this instant
+
 [11] 2026-08-23T18:44:34Z  package_exhaustion  bounceban
-     without the top_up at 2026-08-23T18:00:02Z (+3): the alert DISAPPEARS
+     without the reverted_blip at 2026-08-23T17:00:29Z (+3): the alert DISAPPEARS
+     without the top_up      at 2026-08-23T18:00:02Z (+3): the alert DISAPPEARS
+     UNRECONCILED: rule package_exhaustion does not fire when re-run at this instant
+     UNRECONCILED: caused solely by a reverted_blip at 2026-08-23T17:00:29Z
      UNRECONCILED: caused solely by a top_up at 2026-08-23T18:00:02Z
 ```
 
+`findymail` fails on the uncertainty guard alone. `bounceban` fails on it *and*
+is independently shown by the counterfactual to depend on two separate
+normal-operations events — remove either the reverted blip or the top-up from
+its estimation window and the alert ceases to exist. Two different checks
+reaching the same line is the reason to believe both.
+
 `bounceban` projects to exhaust with a ~17 h margin against a burn of 37.6
-credits/h whose MAD is 4.7. Remove the +3 credit top-up from its window and the
+credits/h whose MAD is 4.7. Remove a +3 credit event from its window and the
 projection no longer crosses the line. The alert exists because of a top-up,
 which is precisely the thing that must never produce one.
 
