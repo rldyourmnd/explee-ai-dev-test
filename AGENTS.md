@@ -219,6 +219,30 @@ A `--max-result` flag truncated tool output while the generated header claimed
 nothing had been dropped. In all three the tool reported success while doing the
 opposite of its purpose.
 
+## The instrument can be your own reasoning
+
+On 2026-08-23 a `burn_anomaly` on `meta_ads` reported a baseline of **-14.15
+USD/h**. The argument against it was clean: a 24-hour trailing total inside a
+5.8-hour window cannot have shed anything yet, so its derivative cannot be
+negative. Confident, and wrong.
+
+**The trailing window is the vendor's, not ours.** It held a full day of history
+at T0 and has been shedding it ever since. The 30-day figure settled it in one
+line: it fell 1,818 USD in six hours, and money cannot be un-spent. So -14.15
+USD/h is a correct measurement of current spend running below the rate of a day
+earlier.
+
+Two things to keep. **A confident derivation from an unchecked premise is still
+an unchecked premise** — four lines of arithmetic against the raw series
+disproved it, and none of that arithmetic was hard, only unattempted. And the
+real limitation surfaced only because someone looked: a rise in that derivative
+can mean current spend rose *or* spend leaving the window fell, and a six-hour
+window cannot separate them, because `r(t-24h)` predates T0. The alert may say
+the trailing total turned upward; it may not say anyone spent faster.
+
+Same family as the viewport that was never 390, except the instrument was the
+reasoning rather than the tool.
+
 ## Check that the instrument honoured the conditions you asked for
 
 A measurement is only evidence if the setup you requested is the setup that ran.
