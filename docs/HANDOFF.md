@@ -71,4 +71,6 @@ the source and re-export rather than editing the trace, which must stay verbatim
 
 One Claude Code session per task, so each `TRACE.md` is a whole conversation
 rather than a slice of one. The orchestration session that set the repository up
-is exported to `TRACE-orchestration.md` at the root.
+was exported to `TRACE-orchestration.md`; that file was quarantined for a
+confidentiality leak and deleted from the working tree at 18:52Z, so it is not a
+submission artifact and no longer exists at the root. See `AGENTS.md` rule 5.

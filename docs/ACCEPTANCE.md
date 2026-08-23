@@ -36,7 +36,7 @@ is the honest state, not a formatting placeholder.
 |---|---|---|---|---|---|---|
 | 1.1 | Monitor source | `task1-spend-observability/monitor.py` | `surface:2` | EXISTS-UNVERIFIED | `git ls-files --error-unmatch task1-spend-observability/monitor.py && sha256sum $_` | — |
 | 1.2 | Alert output | `task1-spend-observability/alerts.jsonl` | `surface:2` | **ABSENT** — exists on host (10 alerts, 7688 B, 18:03Z) but not in the repo | `wc -l task1-spend-observability/alerts.jsonl && python3 -c "import json,sys;[json.loads(l) for l in open(sys.argv[1])]" $_` | — |
-| 1.3 | Public dashboard, no login | *no URL yet* | `surface:2` | **BLOCKED** — decision 1 | `curl -sS -o /dev/null -w '%{http_code} %{ssl_verify_result}\n' <URL>` from an external network, clean profile, no `Host` override | — |
+| 1.3 | Public dashboard, no login | `https://spend.nddev.it.com/` | `surface:2` | **DNS VERIFIED, HTTPS NOT YET** — record resolves globally; end-to-end fetch still blocked by a local negative-cache entry, so this is **not** marked done | `curl -sS -o /dev/null -w '%{http_code} %{ssl_verify_result}\n' https://spend.nddev.it.com/` from outside the host, no `Host` override, no `--resolve`, no cookies; plus cert subject/issuer | — |
 | 1.4 | ≥6 h observation proof | `docs/SNAPSHOT-22-14Z.md` (to be created) | `surface:3` | pending 22:14Z | see "Six-hour snapshot procedure" below | — |
 | 1.5 | Task 1 trace | `task1-spend-observability/TRACE.md` | `surface:2` | **ABSENT** | `uv run tools/export_trace.py` without `--max-result`; then scan | — |
 | 1.6 | Task 1 README | `task1-spend-observability/README.md` | `surface:2` | EXISTS-UNVERIFIED | `git ls-files --error-unmatch $_` | — |
@@ -114,6 +114,28 @@ EOF
 Every number that comes back is recorded in `docs/SNAPSHOT-22-14Z.md` and its
 SHA-256 becomes the hash in row 1.4. Collection continues past the mark; longer
 is better, and the snapshot is a copy, not a stopping point.
+
+## DNS evidence for row 1.3, 19:05Z
+
+Recorded because "the dashboard is up" is exactly the kind of agent assertion the
+review refuses to accept, and because the local and global answers disagree.
+
+| Check | Result |
+|---|---|
+| Authoritative (`ns23.domaincontrol.com`) | `188.166.77.47` |
+| Google DoH (`dns.google/resolve`) | `Status 0`, `188.166.77.47` |
+| Cloudflare DoH | `Status 0`, `188.166.77.47` |
+| `curl https://spend.nddev.it.com/` from this machine | **fails**, `could not resolve host` |
+
+The record exists and has propagated to two independent public resolvers. The
+failure is local: this machine's stub resolver cached an `NXDOMAIN` from before
+the record was created, and `curl` goes through `getaddrinfo` while `dig` queried
+the resolver directly — which is why the two disagree.
+
+**Row 1.3 stays open.** Propagation is not the deliverable; a real HTTPS response
+from outside the deployment host is. Verification will not use `--resolve` or a
+`Host` header, because that would prove the server works while bypassing the
+exact thing under test. Waiting for the negative TTL is the honest path.
 
 ## Publication procedure — written now, **run exactly once, at the end**
 

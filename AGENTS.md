@@ -49,10 +49,15 @@
    `tools/export_trace.py` from a real session log. Do not compose, summarise,
    tidy, or reorder a trace. Failed attempts and corrections stay in.
 
-5. **`TRACE-orchestration.md` is internal.** It was produced before rule 3
-   existed and contains an SSH config dump and nine unrelated client IPs. It
-   stays in this private repository as working history and is **not** part of
-   the submission.
+5. **Two traces were quarantined and are now deleted from the working tree.**
+   `TRACE-orchestration.md` was produced before rule 3 existed and carried an SSH
+   config dump and nine unrelated client IPs; the Task 3 trace carried a
+   directory listing naming an unrelated client project. Both were first
+   quarantined in place, then removed entirely at 18:52Z on the way to
+   publication. **They still exist in git history**, which is why publication
+   requires the history rewrite in `docs/ACCEPTANCE.md` and not merely a
+   `git rm`. A deleted file and a purged file are different things, and only the
+   second is safe to publish.
 
 ## Evidence
 

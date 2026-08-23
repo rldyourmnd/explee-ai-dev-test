@@ -8,8 +8,8 @@ is not part of the submission. See
 
 | Task | Deliverable | Status |
 |---|---|---|
-| [1 — Spend observability](task1-spend-observability/) | `monitor.py`, `alerts.jsonl`, public dashboard | collector running gap-free since T0; monitor deployed and verified; dashboard awaiting a DNS record |
-| [2 — STT comparison](task2-stt-benchmark/) | published comparison report | not started — awaiting scope |
+| [1 — Spend observability](task1-spend-observability/) | `monitor.py`, `alerts.jsonl`, public dashboard | collector gap-free since T0, max gap 29.7 s; monitor deployed; `spend.nddev.it.com` resolves to the droplet, end-to-end HTTPS check pending |
+| [2 — STT comparison](task2-stt-benchmark/) | published comparison report | in progress — corpus, glossary and harness underway; design frozen before any engine output is read |
 | [3 — Harness artifact](task3-harness-artifact/) | one harness file + 2–3 lines | artifact delivered; trace quarantined, see above |
 
 Live status, with the measurement behind every claim, is in

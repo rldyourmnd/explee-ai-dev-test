@@ -145,6 +145,44 @@ history rewrite under live sessions destroys uncommitted work. Rewriting to fix 
 commit message would contradict that for cosmetics. Recorded here instead, and
 both sessions have moved to explicit `git add <paths>`.
 
+## Contradiction sweep, 19:08Z — standing order 1
+
+The three known contradictions are **closed**, each re-checked by running the
+claim rather than reading it:
+
+| Contradiction | Check | Result |
+|---|---|---|
+| `AGENTS.md` `HostName` gate cannot pass | run the gate against `AGENTS.md` itself | `0` — passes even on the file that defines it |
+| `monitor.py` sums credits while its prose denies it | read `:1782` region | now renders *"not summed — one vendor's credit is not another's"*, and separates `pending` from `firing` |
+| `docs/HANDOFF.md` prescribes a truncating export flag | grep inside fenced `bash` blocks | `0` |
+
+**Five new contradictions found in this sweep.** Three were mine and are fixed
+here; two were returned to their owners with the evidence.
+
+1. **`README.md`: "Task 2 — not started, awaiting scope"** while
+   `task2-stt-benchmark/` exists with `data/`, `docs/`, `glossary.json` and
+   `harness/`, and `surface:5` is running metric tests. Fixed.
+2. **`README.md`: "dashboard awaiting a DNS record"** while the record resolves
+   globally. Fixed — and restated as what is actually true, that DNS resolves and
+   the end-to-end HTTPS check is still outstanding.
+3. **`AGENTS.md` rule 5 and `docs/HANDOFF.md` §5** both describe
+   `TRACE-orchestration.md` as a file that "stays in this repository", after it
+   was deleted at 18:52Z. Fixed, and the fix states the part that matters: the
+   traces still exist **in git history**, so publication needs the rewrite, not a
+   `git rm`. A deleted file and a purged file are different things.
+4. **`task1-spend-observability/README.md`** lists `alerts.jsonl` in its file
+   table as "the alerting deliverable" while the file does not exist in the repo.
+   Returned to `surface:2` — a README describing a file the reader cannot open is
+   precisely what the review punished.
+5. **`task3-harness-artifact/QUARANTINE.md`** says the quarantined trace "stays
+   in this private repository", untrue since 18:52Z, and its title names a file
+   that is gone. Returned to `surface:8`.
+
+The pattern worth naming: **every one of these was a true statement that outlived
+its fact.** None was careless at the time of writing. That makes staleness the
+dominant contradiction risk here, not error — and it means the sweep has to be
+repeated near the end, not treated as done.
+
 ## ESCALATIONS — open, for the human
 
 Escalation channel is `cmux notify` plus this section plus the orchestrator's own
