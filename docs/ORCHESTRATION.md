@@ -79,6 +79,43 @@ are written down in advance rather than improvised at the deadline.
 **Still mine, not yet done:** the 22:14Z snapshot; the allowlisted delivery
 package (blocked on decision 3); final gates at the final SHA.
 
+## Publication track, 19:02Z — three steps done, publication deliberately not run
+
+Sequenced so that the irreversible step happens once, last.
+
+1. **CI is live** — `.github/workflows/ci.yml`, `ubuntu-latest`, free runners:
+   `pytest`, `ruff`, and `pyright` reporting-only at **18 errors** (row X.5). It
+   does not wait on publication, because Actions runs on private repositories.
+   A CI run attached to the final commit is the one piece of evidence a grader
+   can check without trusting us — which is the review's whole point.
+2. **Working tree is clean of third-party identifiers** (row X.7, verified):
+   both quarantined traces removed, and the names in `docs/RUNLOG.md` and
+   `docs/ORCHESTRATION.md` replaced with descriptions. **Three of those mentions
+   were mine** — documenting the leak faithfully meant quoting the identifier
+   into this board, which spread it from two files to four. Documenting a leak
+   and propagating it turn out to be the same motion unless you name the class
+   instead of the instance.
+3. **Publication procedure written, not run** (`docs/ACCEPTANCE.md`), with
+   preconditions, a rollback bundle, the exact `filter-repo` invocations, an
+   all-refs scan that must return `0` before any push, and the consequence that
+   every SHA changes. **History is still contaminated — row X.8, open.** A clean
+   working tree is not a clean repository.
+
+### Commit-attribution incident, 18:52Z
+
+`ca27622` — *"Fail closed on any lossy export path"*, authored by `surface:8` —
+also contains this session's staged work: the CI workflow, `ACCEPTANCE.md`, the
+board and runlog sanitization, and both trace deletions. They were staged when
+`surface:8` ran a broad add.
+
+Verified byte-correct in that commit; **nothing lost or altered**. The damage is
+that orchestrator changes are recorded under an unrelated message.
+
+**Not rewritten, on purpose.** The procedure written minutes earlier says a
+history rewrite under live sessions destroys uncommitted work. Rewriting to fix a
+commit message would contradict that for cosmetics. Recorded here instead, and
+both sessions have moved to explicit `git add <paths>`.
+
 ## ESCALATIONS — open, for the human
 
 Escalation channel is `cmux notify` plus this section plus the orchestrator's own
