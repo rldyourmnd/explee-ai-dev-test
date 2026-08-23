@@ -5,7 +5,7 @@ single place that says what is true right now, with the measurement behind each
 claim. Maintained by the orchestrator (`surface:3`); workers report, they do not
 edit this file.
 
-**Last heartbeat: 2026-08-23T17:14Z.**
+**Last heartbeat: 2026-08-23T17:25Z.**
 
 ## Rule 1 — raw collector (outranks everything)
 
@@ -16,13 +16,13 @@ endpoint, so an interruption is unrecoverable and cannot be faked.
 |---|---|
 | State | `active` |
 | T0 | `2026-08-23T16:13:26.775Z` (first record, matches the logged T0) |
-| Last record | `2026-08-23T17:12:30.005Z`, 25 s before the check |
-| Lines | 1904 (+384 since 17:00Z) |
-| Growth | 31.9 lines/min over 12.0 min — matches the expected ~32 |
+| Last record | `2026-08-23T17:24:30.796Z`, 22 s before the check |
+| Lines | 2288 (+384 since 17:12Z) |
+| Growth | 32.1 lines/min over 12.0 min — matches the expected ~32 |
 | Gaps > 45 s | **0**, verified across every consecutive record pair |
 | Malformed lines | 0 |
-| Elapsed | 0 h 59 m of the 6 h minimum |
-| 6 h mark | `2026-08-23T22:14Z` — **5 h 01 m remaining** |
+| Elapsed | 1 h 11 m of the 6 h minimum |
+| 6 h mark | `2026-08-23T22:14Z` — **4 h 49 m remaining** |
 
 Task 1 deployed its monitor against this log at 17:10Z with the data directory
 mounted **read-only**, which makes rule 1 structural rather than a promise, and
@@ -79,8 +79,21 @@ path to a published report.
 
 ### Task 3 — harness artifact (`surface:8`, `task3-harness-artifact/`)
 
-**Artifact clean, trace contaminated. Not done.** Committed as `f9ef23b` after
-the 17:02Z nudge, but the exported `TRACE.md` carries a rule-3 leak.
+**Artifact done and clean. Trace quarantined — one open question for the human:
+Task 3 now ships with no trace.**
+
+Resolved at 17:25Z in `2eeaefc`: the trace was renamed to
+`TRACE-task3-quarantined.md` and a `QUARANTINE.md` records the disposition,
+matching how `TRACE-orchestration.md` was handled. No hand-edit, no history
+rewrite — the route I asked for. Rescanned at 17:25Z: `README.md` and
+`reviewer-protocol.md` are clean on every pattern; the leak is confined to the
+quarantined file, which is no longer a submission artifact.
+
+**Open question, human's to answer:** the submission requires every `TRACE.md`
+to be exported via `tools/export_trace.py`, and Task 3 no longer has one. The
+agent is weighing a re-run to produce a clean trace and has stated it would
+rather submit no trace than a staged one. That is a submission-scope judgement,
+not a technical one. Escalated 17:25Z.
 
 ### Rule-3 finding on `task3-harness-artifact/TRACE.md`, 17:14Z
 
@@ -134,6 +147,33 @@ conclusion it does not reach.
 - Evidence: read from `surface:8` at 17:14Z; `git log f9ef23b`; pattern scan
   over `TRACE.md` reproduced in the table above.
 
+## Open cross-cutting risk: `tools/export_trace.py --list` leaks every project
+
+The Task 3 leak was not a Task 3 mistake. It came from the shared exporter, so
+**Tasks 1 and 2 will reproduce it identically** unless they are warned before
+they export. Root cause, verified in the source rather than taken on report:
+
+- `tools/export_trace.py:30` — `PROJECTS = ~/.claude/projects`
+- `:247` — `--list` walks every project directory on the machine, so the tool
+  result names unrelated clients
+- `:228-230` — `--max-result` truncates head-first (`body[:max_result]`), and
+  the leak sits in row 1 of the result, so no value removes it without gutting
+  every tool result in the trace
+- `--allow-finding` / `--allow-secrets` widen the credential gate only; neither
+  drops content
+
+Consequence: **do not run `--list` in a session that will be exported.** Get the
+session id another way.
+
+`AGENTS.md`'s `grep -c HostName` gate is also unsatisfiable in principle — it
+matches the bare word, so any trace that quotes the rule fails it. Matching
+`HostName\s+\S+` would test SSH config content instead of the word.
+
+Not yet delivered to `surface:2`: it is sitting on an interactive menu awaiting
+the human, and sending text into an open menu risks selecting an option and
+destroying its state. The warning goes out when the menu clears; its export is
+late in its plan, so nothing is lost by waiting.
+
 ## Deadlines
 
 | When | What | Standing |
@@ -150,10 +190,16 @@ Each agent commits only its own directory; the orchestrator owns `docs/` and the
 only on green `pytest` and `ruff`. A `.git/index.lock` means another agent is
 mid-commit — wait and retry, never delete it.
 
-Untracked at 17:02Z: `.serena/` (tooling cache),
-`task1-spend-observability/monitor.py` (Task 1, in flight) and
-`task3-harness-artifact/` (Task 3, awaiting its own commit). No scope bleed
-observed — every worker's writes are inside its own directory.
+At 17:25Z the only uncommitted work is `.serena/` (tooling cache, ignored by
+agreement) and `docs/RUNLOG.md`.
+
+**One coordination issue, not a correctness one:** Task 1 wrote its 17:10Z
+deploy entry into `docs/RUNLOG.md`, which this session owns, and left it
+uncommitted. The entry itself is accurate and belongs there — RUNLOG is the
+shared deploy record — so it was committed as written rather than rewritten. The
+risk is that an uncommitted file in a directory another session also edits can
+be clobbered by whoever saves next. Task 1 will be asked to commit RUNLOG
+entries promptly, at the same time as the `--list` warning.
 
 ## Heartbeat log
 
@@ -162,3 +208,4 @@ observed — every worker's writes are inside its own directory.
 | 16:48Z | `active`, 1104 lines, 0 gaps | T1 characterizing data; T3 reading local config; T2 unbriefed and idle → escalated to human |
 | 17:02Z | `active`, 1520 lines, +31.5/min, 0 gaps | T1 building `monitor.py`, iterating on diagnostics; T3 artifact written but idle, untracked, no trace → nudged, leak scan clean; T2 unchanged, still awaiting human |
 | 17:14Z | `active`, 1904 lines, +31.9/min, 0 gaps | T1 monitor deployed and measured, now **blocked on DNS** → escalated; T3 committed `f9ef23b` but its `TRACE.md` carries a **rule-3 leak** (unrelated client ×20) → returned to owner, escalated; T2 unchanged |
+| 17:25Z | `active`, 2288 lines, +32.1/min, 0 gaps | T3 quarantined the trace cleanly (`2eeaefc`) and root-caused it to the shared exporter — Tasks 1 and 2 are exposed to the same defect; T1 still holding the DNS menu, unchanged; T2 unchanged |

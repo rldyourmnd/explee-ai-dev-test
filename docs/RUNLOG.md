@@ -114,3 +114,47 @@ is estate drift, not a defect in this repository: the installed binary is
 `b2dea28`, so the generator's embedded templates trail their canonical source.
 The control-plane repository itself passes `gds doctor`, which confirms the
 canonical side is intact. Rebuilding the GDS release is out of scope here.
+
+### 17:10Z — monitor deployed, reachable through the existing edge proxy
+
+`monitor.py` runs as a container on the reverse-proxy network. It is the only
+consumer of the raw log; the sampler was not touched and
+`systemctl is-active explee-raw-sampler` returned `active` before and after.
+
+| | |
+|---|---|
+| Container | `explee-spend-monitor`, `python:3.13-slim`, `restart: unless-stopped` |
+| Network | `nddev_reverse_proxy` (existing `nginxproxy/nginx-proxy` + `acme-companion`) |
+| Routing | `VIRTUAL_HOST=spend.nddev.it.com`, `VIRTUAL_PORT=8770` |
+| Raw log | `/opt/explee-spend-monitor/data` mounted **read-only** |
+| Derived state | `/opt/explee-spend-monitor/state` (SQLite WAL + `alerts.jsonl`) |
+| Published ports | none — reachable only via the edge proxy |
+
+The read-only mount is deliberate: rule 1 says the capture must never be
+disturbed, and a `:ro` bind makes that structural rather than a promise. Replay
+of 1856 records took 5.3 s on the droplet.
+
+Verified through the edge proxy with an explicit `Host` header, because DNS does
+not exist yet:
+
+```
+GET /        -> HTTP 200, 42145 bytes, 0.078 s
+GET /healthz -> HTTP 200, 15 providers, 14 fresh, 1 stale (bounceban, mid-outage)
+```
+
+**Blocked on one thing that is not mine to do: DNS.** `nddev.it.com` is served by
+`ns23/ns24.domaincontrol.com` (GoDaddy), not DigitalOcean, so `doctl` cannot
+create the record; `doctl compute domain get nddev.it.com` returns 404 and the
+account manages zero domains. No GoDaddy, Cloudflare or DigitalOcean token is
+present in the environment, and rule 2 forbids obtaining one by pasting it into
+a prompt. There is no wildcard record to inherit: both `spend.nddev.it.com` and a
+control probe resolve to nothing.
+
+A wildcard-DNS shortcut such as `nip.io` was rejected rather than overlooked: it
+encodes the server address in the hostname, so the public URL would carry an IP
+straight into a published trace and fail the rule 3 scan by construction.
+
+Once an `A` record for `spend.nddev.it.com` points at the same address as the
+other hosts already served by this proxy, `acme-companion` issues the
+certificate unattended and the public HTTPS URL comes up with no further
+deploy step. Nothing else is waiting on it.
