@@ -469,6 +469,66 @@ def test_a_large_one_off_charge_stays_in_the_burn_rate():
     assert found == [], "an unmatched decline is ordinary spend"
 
 
+def test_a_top_up_in_the_same_interval_as_spend_is_under_reported():
+    """The documented measurement limit, asserted rather than only claimed.
+
+    The API exposes a current value, so when a top-up and spend land between the
+    same two polls we observe their sum and never the parts. A +100 top-up with
+    5 spent in the same interval reads as +95. The event under-reports the
+    top-up and the burn across that interval is a lower bound; nothing in the
+    data can recover the true split, so the correct behaviour is to record the
+    net honestly rather than to guess at the components.
+    """
+    true_topup, spend_in_interval = 100.0, 5.0
+    values = [1000.0 - i * 0.5 for i in range(20)]
+    at_jump = values[-1] + true_topup - spend_in_interval
+    values += [at_jump - i * 0.5 for i in range(20)]
+
+    found = m.detect_discontinuities(_series(values), "credits_package")
+    assert len(found) == 1
+    _ts_found, kind, detail = found[0]
+    assert kind == "top_up"
+    observed = detail["delta"]
+    assert observed == pytest.approx(true_topup - spend_in_interval, abs=0.01)
+    assert observed < true_topup, "the observed jump must be the net, not the top-up"
+    # And the shortfall is exactly the spend we cannot see.
+    assert true_topup - observed == pytest.approx(spend_in_interval, abs=0.01)
+
+
+def test_a_top_up_near_the_end_does_not_contaminate_the_burn_rate():
+    """A cut too recent to measure falls back to the whole series, safely.
+
+    `latest_segment` only honours a cut when what follows is long enough to fit,
+    so a top-up two minutes before the end leaves the estimate on the full
+    series. That is only safe because few pairs straddle a jump near the edge --
+    the same property that fails at the midpoint.
+    """
+    per_poll = 0.5
+    values = [1000.0 - i * per_poll for i in range(56)]
+    values += [values[-1] + 400.0 - per_poll * (i + 1) for i in range(4)]
+    readings = _series(values)
+
+    estimate = m.estimate_burn(readings, "credits_package")
+    assert estimate.ok, estimate.reason
+    # 0.5 per 30 s poll is 60 units/h of real consumption.
+    assert estimate.rate_per_h == pytest.approx(60.0, rel=0.3), \
+        f"a late top-up contaminated the rate: {estimate.rate_per_h}"
+
+
+def test_a_projection_will_not_fire_off_a_freshly_cut_segment():
+    """Right after a top-up there is not yet enough evidence to project from."""
+    state = _state(provider="findymail", pay_model="credits_package",
+                   unit="credits", value=10_000.0)
+    state.package = 12_000.0
+    state.refresh = "2026-09-01"
+    # A segment only 400 s long: past min_span_s, nowhere near min_projection_span_s.
+    state.burn = m.Estimate(500.0, -500.0, 12, 400.0, 1.0)
+    m._project(state, T0)
+    assert state.runway_h is not None, "a runway is still computed for display"
+    assert m.rule_package_exhaustion(state, T0) is None, \
+        "but nothing may be alerted from 400 s of evidence"
+
+
 def test_sampling_noise_below_the_ratio_is_not_a_top_up():
     values = [1000.0 - i * 1.0 for i in range(20)]
     values[10] = values[9] + 0.001   # a rise far below the typical 1.0 decline
