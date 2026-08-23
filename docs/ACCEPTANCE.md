@@ -106,68 +106,34 @@ drift — they have already caught a stale baseline, future timestamps, dead lin
 and an engine count pointed at the wrong directory.
 
 
-## UI convergence — re-measured on both live pages 21:47Z
+## UI convergence — **PASSES LIVE**, both pages, 22:50Z
 
-| | Dashboard (live) | Report (live) | Spec |
-|---|---|---|---|
-| Shared tokens | **none** | **all six present** | `--paper --surface --rule --ink --muted --alarm` |
-| `--warn` | `#d29922` | **`#8a6d3a`** ✔ | `#8a6d3a` |
-| em / en dashes | 0 / 0 | **0 / 0** ✔ | 0 |
+The cross-page checks could only be evaluated build-to-build while the dashboard
+deploy waited for a snapshot boundary. The boundary passed, the deploy landed,
+and both live pages now agree on every shared token:
 
-**The report has converged.** It moved to `#8a6d3a` as ruled, defined all six
-missing tokens, and cleared all 34 em dashes and 5 en dashes.
+| Token | Dashboard | Report |
+|---|---|---|
+| `--paper` | `#fbfbfa` | `#fbfbfa` |
+| `--surface` | `#f4f3f0` | `#f4f3f0` |
+| `--rule` | `#e2e2df` | `#e2e2df` |
+| `--ink` | `#1c1d1f` | `#1c1d1f` |
+| `--muted` | `#5f6570` | `#5f6570` |
+| `--alarm` | `#8a3324` | `#8a3324` |
+| `--warn` | `#8a6d3a` | `#8a6d3a` |
+| `--ok` | `#2f6b47` | `#2f6b47` |
 
-**The dashboard has not, and that is correct.** Its build carries the warm-paper
-palette, but the deploy waits for a snapshot boundary because nothing about the
-running system changes while the observation window is open. The live page is
-still the old dark build (`--warn:#d29922`, no shared tokens). Cross-page checks
-therefore stay build-to-build until the deploy lands and are re-verified live
-afterwards — recorded so a reviewer curling both URLs today sees why they differ.
+**All eight agree.** Em dashes 0/0, en dashes 0/0 on both — the report started at
+34 and 5. `--accent` (`#2f4f6b`) is defined on the dashboard, closing the
+silently-undefined variable that every gate had passed.
 
+**Colour now carries information rather than decorating.** The live lead card
+reads `class="card lead crit"` — the run's first `critical`, `openrouter` runway
+24.0 h with burn accelerating 5.10 → 8.50 USD/h. A uniformly red page tells a
+reader nothing; a page where red appears exactly once tells them where to look.
 
-## DELIVERY — P3 IS CANCELLED, and that retires the largest risk in the project
-
-The submission form takes **seven files and two URLs**. The repository is never
-submitted — not as a link, not as an archive. So:
-
-**Superseded within the hour, and the reversal is the interesting part.** The
-repository *is* sent, as supplementary material — so the history reaches the
-employer after all, and row X.8 reopens. But the fix is **not** the orphan-history
-mirror originally planned: the commit history is the evidence, and flattening it
-would delete the retraction chain a reviewer called the strongest proof of
-data-driven work in the submission. See "Publication procedure" below: rewrite
-the history, keep it.
-
-What survives from the cancellation is the seven-artifact upload path, which
-still governs what the *form* receives.
-
-That removes the single largest irreversible-action risk here. A history rewrite
-plus force-push under four live sessions was the one step that could have
-destroyed work, and it is now simply unnecessary.
-
-**What it does not remove:** the two `TRACE.md` files *are* uploaded, so rule-3
-discipline applies to their contents exactly as before. Scanning now targets the
-seven artifacts and nothing else.
-
-**It also settles the one-file argument.** *"Code — one file (zip it if
-several)"* permits an archive, so `monitor.py` goes alone as the code file and
-`raw_sampler.py` gets a sentence in Notes as the bootstrap collector that
-protected the window. Nothing about the running system changes for compliance.
-
-| # | Upload artifact | Source | Status |
-|---|---|---|---|
-| S.1 | Alert log — **the only required file** | `task1-spend-observability/alerts.jsonl` | **12 lines, 0 unreconciled**, audit gate exits 0 — but regenerates on the clean T1 window |
-| S.2 | Task 1 code, one file | `task1-spend-observability/monitor.py` | self-sufficient with `--poll`; ships alone |
-| S.3 | Dashboard URL | `https://spend.nddev.it.com/` | live, no login |
-| S.4 | Task 1 trace | — | **not exported** — session live |
-| S.5 | Task 2 report URL | `https://stt.nddev.it.com/` | live, no login |
-| S.6 | Task 2 trace | — | **not exported** — session live |
-| S.7 | Task 3 artifact | `task3-harness-artifact/flow-memory-sync.md` | verified `a16009988b18…` |
-| S.8 | `submission/LINKS.md` + `NOTES.md` | — | drafted with the package |
-
-**Assembled LAST**, after the clean-window `alerts.jsonl` passes its audit and
-both traces are exported at genuine session end. Assembling early ships an
-artifact that stopped before the work did.
+Measured by fetching both URLs and comparing extracted token values, not by
+reading either build.
 
 ## Cross-cutting
 
