@@ -960,6 +960,25 @@ def test_dashboard_renders_and_states_its_limits(tmp_path):
         assert provider in html
 
 
+def test_alert_evidence_is_rendered_complete_not_clipped(tmp_path):
+    """A panel whose job is carrying evidence must not print malformed JSON.
+
+    Clipping a json.dumps to a character budget cut it mid-token and rendered
+    things like `"threshold_h": 72.0, "` on screen.
+    """
+    def builder(_provider, i):
+        return (('{"balance":900.00,"currency":"usd"}', 200) if i < 5
+                else ('{"error":"upstream 500"}', 500))
+
+    store, _ingestor, alerts = _pipeline(tmp_path, _cycles(builder, 140))
+    fired = _alert_lines(alerts)
+    assert fired, "expected an alert to render"
+    html = m.render_dashboard(m.snapshot(store, T0 + timedelta(seconds=140 * 30)))
+    for key in ("stale_s", "consecutive_failures", "tolerance_s", "band"):
+        assert key in html, f"evidence field {key} missing from the page"
+    assert '", "' not in html.split("PROVIDERS")[-1], "clipped JSON fragment on the page"
+
+
 def test_snapshot_is_json_serialisable(tmp_path):
     store, _ingestor, _alerts = _healthy_pipeline(tmp_path)
     snap = m.snapshot(store, T0 + timedelta(seconds=80 * 30))
@@ -983,10 +1002,44 @@ def test_healthz_is_unhealthy_when_every_provider_is_stale(tmp_path):
     assert not any(s.available for s in later), "stale data must not read as fresh"
 
 
+def test_healthz_returns_503_when_every_provider_is_stale(tmp_path):
+    """The case a liveness probe cannot see: process up, every number wrong."""
+    store, _ingestor, _alerts = _healthy_pipeline(tmp_path, cycles=40)
+    fresh_at = T0 + timedelta(seconds=40 * 30)
+
+    payload, code = m.healthz(store, True, now=fresh_at)
+    assert code == 200 and payload["status"] == "ok"
+    assert payload["providers_fresh"] == payload["providers_total"] == 4
+    assert payload["reason"] is None
+
+    payload, code = m.healthz(store, True, now=fresh_at + timedelta(hours=3))
+    assert code == 503, "a live process serving stale numbers must report unhealthy"
+    assert payload["status"] == "unhealthy"
+    assert payload["providers_fresh"] == 0
+    assert len(payload["providers_stale"]) == 4
+    assert payload["reason"] == "every provider's data is stale"
+
+
+def test_healthz_stays_ok_while_one_provider_still_reports(tmp_path):
+    """Partial staleness is a per-provider alert, not a collection failure."""
+    store, _ingestor, _alerts = _healthy_pipeline(tmp_path, cycles=40)
+    catalog = store.catalog()
+    fresh_at = T0 + timedelta(seconds=40 * 30)
+    # One provider keeps reporting well past the others.
+    store.add_readings([m.Reading("brightdata", fresh_at + timedelta(hours=3),
+                                  m.STATE_OK, 500.0, 200, 110.0, "flat_balance", {})])
+    payload, code = m.healthz(store, True, now=fresh_at + timedelta(hours=3))
+    assert code == 200, "one live provider means collection is still working"
+    assert payload["providers_fresh"] == 1
+    assert len(payload["providers_stale"]) == len(catalog) - 1
+
+
 def test_healthz_reports_unhealthy_with_an_empty_catalog(tmp_path):
     store = m.Store(str(tmp_path / "monitor.sqlite"))
-    states = m.build_state(store, T0, store.catalog())
-    assert states == []
+    assert m.build_state(store, T0, store.catalog()) == []
+    payload, code = m.healthz(store, False, now=T0)
+    assert code == 503
+    assert payload["reason"] == "no providers in catalog"
 
 
 # ---------------------------------------------------------------- policy

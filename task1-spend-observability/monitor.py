@@ -1942,6 +1942,15 @@ def _burn_cell(state: ProviderState) -> str:
     return f'{escape(label)}/h<div class="rowsub">{escape(sub)}</div>'
 
 
+def _evidence_value(value: Any) -> str:
+    """Compact, complete rendering of one evidence field."""
+    if isinstance(value, float):
+        return f"{value:,.6g}"
+    if isinstance(value, list):
+        return ",".join(str(v) for v in value) or "none"
+    return str(value)
+
+
 def render_dashboard(snap: dict[str, Any]) -> str:
     states: list[ProviderState] = snap["providers"]
     coverage = snap["coverage"]
@@ -2002,7 +2011,15 @@ def render_dashboard(snap: dict[str, Any]) -> str:
 
     alert_blocks = []
     for alert in snap["alerts"][:12]:
-        evidence = escape(json.dumps(alert.get("evidence", {}), sort_keys=True)[:400])
+        # Rendered in full as key=value pairs rather than a clipped JSON dump.
+        # Truncating the dump cut it mid-token and put malformed JSON on screen,
+        # which is a poor advertisement for a panel whose whole job is to carry
+        # the evidence for a claim.
+        evidence = escape(" · ".join(
+            f"{key}={_evidence_value(val)}"
+            for key, val in sorted(alert.get("evidence", {}).items())
+            if val is not None
+        ))
         alert_blocks.append(f"""<div class="alert {escape(alert.get("level", "info"))}">
 <div class="t"><span class="pill p-{"crit" if alert.get("level") == "critical" else "warn"}">
 {escape(alert.get("level", ""))}</span>
@@ -2129,6 +2146,41 @@ separately. Burn is a lower bound across such intervals.
 # --------------------------------------------------------------------------
 
 
+def healthz(store: Store, replay_complete: bool,
+            now: datetime | None = None) -> tuple[dict[str, Any], int]:
+    """Health of the *data*, not of the process.
+
+    A live process serving stale numbers is worse than an obvious outage: the
+    dashboard looks normal and every figure on it is wrong. So this reports
+    unhealthy when the process is up and every provider has gone stale, which
+    is the case a plain liveness probe cannot see.
+
+    The dashboard itself keeps serving 200 in that state on purpose - an
+    operator investigating an unhealthy probe needs to be able to look at it.
+    """
+    now = now or now_utc()
+    states = build_state(store, now, store.catalog(),
+                         window_s=BASELINE.baseline_window_s)
+    fresh = [s for s in states if s.available]
+    coverage = store.coverage()
+    healthy = bool(states) and bool(fresh)
+    payload = {
+        "status": "ok" if healthy else "unhealthy",
+        "ts": iso(now),
+        "providers_total": len(states),
+        "providers_fresh": len(fresh),
+        "providers_stale": sorted(s.provider for s in states if not s.available),
+        "stale_tolerance_s": POLICY.stale_display_s,
+        "samples": coverage["samples"],
+        "last_sample_ts": coverage["last_ts"],
+        "replay_complete": replay_complete,
+        "reason": None if healthy else (
+            "no providers in catalog" if not states
+            else "every provider's data is stale"),
+    }
+    return payload, (200 if healthy else 503)
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "explee-spend-monitor"
     store: Store
@@ -2169,32 +2221,8 @@ class Handler(BaseHTTPRequestHandler):
                        "application/json")
 
     def _healthz(self) -> tuple[bytes, int]:
-        """Unhealthy when the process is up but no provider has fresh data.
-
-        A live process serving stale numbers is worse than an obvious outage,
-        so this deliberately reports on the data rather than on the process.
-        """
-        now = now_utc()
-        catalog = self.store.catalog()
-        states = build_state(self.store, now, catalog, window_s=BASELINE.baseline_window_s)
-        fresh = [s for s in states if s.available]
-        coverage = self.store.coverage()
-        healthy = bool(states) and bool(fresh)
-        payload = {
-            "status": "ok" if healthy else "unhealthy",
-            "ts": iso(now),
-            "providers_total": len(states),
-            "providers_fresh": len(fresh),
-            "providers_stale": sorted(s.provider for s in states if not s.available),
-            "stale_tolerance_s": POLICY.stale_display_s,
-            "samples": coverage["samples"],
-            "last_sample_ts": coverage["last_ts"],
-            "replay_complete": self.ingestor.replay_complete.is_set(),
-            "reason": None if healthy else (
-                "no providers in catalog" if not states
-                else "every provider's data is stale"),
-        }
-        return json.dumps(payload, indent=2).encode("utf-8"), (200 if healthy else 503)
+        payload, code = healthz(self.store, self.ingestor.replay_complete.is_set())
+        return json.dumps(payload, indent=2).encode("utf-8"), code
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A002 - base class name
         return  # access logs would add nothing here
