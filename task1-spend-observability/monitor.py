@@ -2245,6 +2245,13 @@ letter-spacing:.07em;font-weight:600}
 padding:var(--s4) var(--s4)}
 .card .big{font-size:21px;margin:var(--s1) 0;font-family:var(--mono);
 font-variant-numeric:tabular-nums}
+/* The most urgent group leads: larger figure, a left rule to catch the eye.
+   Five cards of equal weight make the first sentence "there are five boxes". */
+.card.lead{border-left:3px solid var(--accent);padding-left:var(--s3)}
+.card.lead.crit{border-left-color:var(--alarm)}
+.card.lead.warn{border-left-color:var(--warn)}
+.card.lead .big{font-size:28px}
+.card.lead h2{color:var(--ink)}
 /* Wide content scrolls inside its own box so the page body never does. */
 .scroll{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13px}
@@ -2273,7 +2280,9 @@ background:var(--surface);border-radius:0 3px 3px 0}
 .alert .t{font-size:12.5px}
 .alert .e{color:var(--muted);font-size:11px;margin-top:var(--s1);
 word-break:break-word;font-family:var(--mono)}
-.rowsub{color:var(--muted);font-size:11px;font-family:var(--mono)}
+/* Was 11px and unlabelled, which is text nobody reads occupying space.
+   Larger, higher contrast, and every figure says what it is. */
+.rowsub{color:var(--muted);font-size:12px;font-family:var(--mono);margin-top:var(--s1)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:var(--s6)}
 @media(max-width:1100px){.two{grid-template-columns:1fr}}
 code{background:var(--surface);padding:1px var(--s1);border-radius:3px;
@@ -2285,25 +2294,59 @@ max-width:68ch}
 """
 
 
-def sparkline(values: Sequence[float], width: int = 150, height: int = 26) -> str:
+def sparkline(values: Sequence[float], tone: str = "muted",
+              width: int = 150, height: int = 26) -> str:
+    """A one-colour trend line whose colour means something.
+
+    Every line used to be red the moment a balance declined, which is every
+    healthy prepaid provider on the page. A colour that never varies carries no
+    information: the page said "everything is bad", which reads the same as
+    saying nothing. Tone now tracks time-to-impact, so the eye lands on the two
+    providers that need a human rather than on all fifteen.
+    """
+    stroke = {
+        "alarm": "var(--alarm)",
+        "warn": "var(--warn)",
+        "ok": "var(--ok)",
+        "muted": "var(--muted)",
+    }.get(tone, "var(--muted)")
+
     if len(values) < 2:
-        return '<span class="dim">-</span>'
+        return '<span class="dim">no series yet</span>'
     low, high = min(values), max(values)
     span = high - low
     if span <= 0:
         mid = height / 2
-        return (f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
-                f'<line x1="0" y1="{mid:.1f}" x2="{width}" y2="{mid:.1f}" '
-                f'stroke="#3fb950" stroke-width="1.5"/></svg>')
+        return (f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
+                f'role="img" aria-label="flat"><line x1="0" y1="{mid:.1f}" x2="{width}" '
+                f'y2="{mid:.1f}" stroke="{stroke}" stroke-width="1.5"/></svg>')
     step = width / (len(values) - 1)
     points = " ".join(
         f"{i * step:.1f},{height - 2 - (v - low) / span * (height - 4):.1f}"
         for i, v in enumerate(values)
     )
-    colour = "#f85149" if values[-1] < values[0] else "#3fb950"
     return (f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
-            f'preserveAspectRatio="none"><polyline points="{points}" fill="none" '
-            f'stroke="{colour}" stroke-width="1.5" stroke-linejoin="round"/></svg>')
+            f'preserveAspectRatio="none" role="img" aria-label="trend over the window">'
+            f'<polyline points="{points}" fill="none" stroke="{stroke}" '
+            f'stroke-width="1.5" stroke-linejoin="round"/></svg>')
+
+
+def spark_tone(state: ProviderState) -> str:
+    """Which of the four tones a provider's trend line should carry.
+
+    Ordered so the most actionable wins: a line the reader must act on today
+    outranks one that merely rose.
+    """
+    if state.runway_h is not None:
+        if state.runway_h <= POLICY.runway_critical_h:
+            return "alarm"
+        if state.runway_h <= POLICY.runway_warning_h:
+            return "warn"
+    # A series that ends higher than it started has been topped up, which is
+    # normal operations and the one piece of good news on the row.
+    if len(state.spark) >= 2 and state.spark[-1] > state.spark[0]:
+        return "ok"
+    return "muted"
 
 
 def _freshness_cell(state: ProviderState) -> str:
@@ -2355,7 +2398,7 @@ def _burn_cell(state: ProviderState) -> str:
         return f'<span class="dim">{escape(str(reason))}</span>'
     rate = burn.rate_per_h
     label = _fmt(rate, state.unit)
-    sub = f"n={burn.samples}, {burn.span_s / 60:.0f} min"
+    sub = f"{burn.samples} samples over {burn.span_s / 60:.0f} min"
     return f'{escape(label)}/h<div class="rowsub">{escape(sub)}</div>'
 
 
@@ -2408,7 +2451,7 @@ def render_dashboard(snap: dict[str, Any]) -> str:
 <td class="num">{escape(value)}</td>
 <td class="num">{_burn_cell(state)}</td>
 <td class="num">{_impact_cell(state)}</td>
-<td>{sparkline(state.spark)}</td>
+<td>{sparkline(state.spark, spark_tone(state))}</td>
 <td class="num">{_freshness_cell(state)}</td>
 <td class="num"><span class="{health_cls}">{f"{health:.0f}%" if health is not None else "-"}</span>
 <div class="rowsub">{state.ok_samples}/{state.total_samples}</div></td>
@@ -2416,9 +2459,29 @@ def render_dashboard(snap: dict[str, Any]) -> str:
 <td>{events}</td>
 </tr>""")
 
+    # Ranked by time to impact, not alphabetically. Five equal boxes make the
+    # first sentence a reader forms "there are five boxes"; the point of the
+    # page is that one glance says which one needs them.
+    def group_urgency(item: tuple[str, dict[str, Any]]) -> tuple[float, str]:
+        _key, grp = item
+        soonest = grp.get("soonest")
+        if soonest and soonest.get("runway_h") is not None:
+            return (soonest["runway_h"], _key)
+        hours = [m["runway_h"] for m in grp.get("members", [])
+                 if m.get("runway_h") is not None]
+        return (min(hours) if hours else float("inf"), _key)
+
     group_cards = []
-    for key in sorted(snap["groups"]):
-        group = snap["groups"][key]
+    ranked = sorted(snap["groups"].items(), key=group_urgency)
+    for position, (key, group) in enumerate(ranked):
+        lead = ""
+        if position == 0:
+            soonest_h = group_urgency((key, group))[0]
+            lead = " lead"
+            if soonest_h <= POLICY.runway_critical_h:
+                lead += " crit"
+            elif soonest_h <= POLICY.runway_warning_h:
+                lead += " warn"
         unit = group["unit"]
         missing = group["unmeasurable"]
         note = (f'<div class="rowsub">{len(missing)} not measurable: '
@@ -2427,17 +2490,18 @@ def render_dashboard(snap: dict[str, Any]) -> str:
             # No total: these balances are not denominated in the same thing.
             # The comparable quantity is time, so lead with which runs out first.
             soonest = group.get("soonest")
+            lead_value, sub, cls = "none yet", "no projection yet", "dim"
             if soonest and soonest["runway_h"] is not None:
                 hours = soonest["runway_h"]
-                lead = f"{hours:.1f} h" if hours < 48 else f"{hours / 24:.1f} d"
+                lead_value = f"{hours:.1f} h" if hours < 48 else f"{hours / 24:.1f} d"
                 sub = f'{escape(soonest["provider"])} exhausts first'
                 cls = "crit" if hours <= POLICY.runway_critical_h else (
                     "warn" if hours <= POLICY.runway_warning_h else "")
             else:
-                lead, sub, cls = ",", "no projection yet", "dim"
-            group_cards.append(f"""<div class="card">
+                lead_value, sub, cls = "none yet", "no projection yet", "dim"
+            group_cards.append(f"""<div class="card{lead}">
 <h2>{escape(group["pay_model"])} &middot; {escape(unit)}</h2>
-<div class="big {cls}">{lead}</div>
+<div class="big {cls}">{lead_value}</div>
 <div class="meta">{sub}</div>
 <div class="big" style="font-size:15px">{group["measurable"]}/{group["providers"]} packages</div>
 <div class="meta">not summed: one vendor's credit is not another's</div>{note}
@@ -2450,7 +2514,7 @@ def render_dashboard(snap: dict[str, Any]) -> str:
         else:
             head = "value on hand"
             rate_note = f"summed burn, {escape(unit.upper())} is fungible across vendors"
-        group_cards.append(f"""<div class="card">
+        group_cards.append(f"""<div class="card{lead}">
 <h2>{escape(group["pay_model"])} &middot; {escape(unit)}</h2>
 <div class="big">{escape(_fmt(group["value"], unit))}</div>
 <div class="meta">{escape(head)} across {group["measurable"]}/{group["providers"]} providers</div>
