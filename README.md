@@ -1,16 +1,19 @@
 # Explee — AI Dev Test Task
 
-Three deliverables, one repository, one module per task. Each task ships a
-verbatim agent trace alongside its artifact — with one exception, recorded rather
-than papered over: Task 3's trace was quarantined for a confidentiality leak and
-is not part of the submission. See
-[`task3-harness-artifact/QUARANTINE.md`](task3-harness-artifact/QUARANTINE.md).
+Three deliverables, one repository, one module per task. **Every task ships a
+verbatim agent trace**, exported by `tools/export_trace.py` from a real session —
+never hand-written, never truncated.
+
+An earlier Task 3 trace was quarantined for a confidentiality leak and replaced
+by a genuine fresh session rather than reconstructed or edited; the incident is
+kept at [`docs/task3-trace-quarantine.md`](docs/task3-trace-quarantine.md)
+because a recorded leak is data and a concealed one is not.
 
 | Task | Deliverable | Status |
 |---|---|---|
-| [1 — Spend observability](task1-spend-observability/) | `monitor.py`, `alerts.jsonl`, public dashboard | collector gap-free since T0, max gap 29.7 s; monitor deployed; `spend.nddev.it.com` resolves to the droplet, end-to-end HTTPS check pending |
-| [2 — STT comparison](task2-stt-benchmark/) | published comparison report | in progress — corpus, glossary and harness underway; design frozen before any engine output is read |
-| [3 — Harness artifact](task3-harness-artifact/) | one harness file + 2–3 lines | artifact delivered; trace quarantined, see above |
+| [1 — Spend observability](task1-spend-observability/) | `monitor.py`, `alerts.jsonl`, public dashboard | collector gap-free since T0, max gap 29.661 s; dashboard live at [spend.nddev.it.com](https://spend.nddev.it.com/) — HTTP 200, valid certificate, no login, verified externally |
+| [2 — STT comparison](task2-stt-benchmark/) | published comparison report | in progress — design frozen before any engine output was read; corpus hashed at exactly 3600.0 s across 120 segments; report host live at [stt.nddev.it.com](https://stt.nddev.it.com/) |
+| [3 — Harness artifact](task3-harness-artifact/) | one harness file + 2–3 lines | artifact, its 2–3 lines and its trace all delivered |
 
 Live status, with the measurement behind every claim, is in
 [docs/ORCHESTRATION.md](docs/ORCHESTRATION.md).
