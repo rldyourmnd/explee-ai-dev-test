@@ -794,7 +794,8 @@ def detect_discontinuities(readings: Sequence[Reading], pay_model: str
     return found
 
 
-def latest_segment(readings: Sequence[Reading], pay_model: str) -> Segment:
+def latest_segment(readings: Sequence[Reading], pay_model: str,
+                   cuts: Sequence[tuple[datetime, str, dict[str, Any]]] | None = None) -> Segment:
     """Values since the most recent top-up or reset.
 
     Theil-Sen already survives a single large jump, but segmenting means the
@@ -804,10 +805,10 @@ def latest_segment(readings: Sequence[Reading], pay_model: str) -> Segment:
     ok = [(r.ts, r.value) for r in readings if r.state == STATE_OK and r.value is not None]
     if not ok:
         return Segment([])
-    cuts = [ts for ts, kind, _detail in detect_discontinuities(readings, pay_model)
-            if kind in CUT_KINDS]
-    if cuts:
-        last_cut = max(cuts)
+    found = detect_discontinuities(readings, pay_model) if cuts is None else cuts
+    cut_points = [ts for ts, kind, _detail in found if kind in CUT_KINDS]
+    if cut_points:
+        last_cut = max(cut_points)
         after = [(ts, v) for ts, v in ok if ts >= last_cut]
         # Only honour the cut if what follows is still long enough to measure;
         # otherwise a top-up 30 seconds ago would erase the burn rate entirely.
@@ -834,8 +835,9 @@ class Estimate:
 
 
 def estimate_burn(readings: Sequence[Reading], pay_model: str,
-                  window_s: float | None = None) -> Estimate:
-    segment = latest_segment(readings, pay_model)
+                  window_s: float | None = None,
+                  cuts: Sequence[tuple[datetime, str, dict[str, Any]]] | None = None) -> Estimate:
+    segment = latest_segment(readings, pay_model, cuts)
     points = segment.points
     if window_s is not None and points:
         cutoff = points[-1][0] - timedelta(seconds=window_s)
@@ -911,6 +913,12 @@ class ProviderState:
     projection_at_refresh: float | None = None
     hours_to_refresh: float | None = None
     extrapolation_ratio: float | None = None
+
+    # The window's readings, carried so the callers that need them do not each
+    # re-query. Excluded from the JSON view: it is working state, not a fact
+    # about the provider.
+    readings: list[Reading] = field(default_factory=list, repr=False)
+    cuts: list[tuple[datetime, str, dict[str, Any]]] = field(default_factory=list, repr=False)
 
     spark: list[float] = field(default_factory=list)
     spark_ts: list[datetime] = field(default_factory=list)
@@ -994,9 +1002,16 @@ def build_state(store: Store, now: datetime, catalog: dict[str, dict[str, Any]],
             if not state.available and oks:
                 state.unavailable_since = oks[-1].ts
 
-        state.burn = estimate_burn(readings, state.pay_model)
+        # Computed once per evaluation and shared. detect_discontinuities is
+        # O(window) and was previously being run three times per provider per
+        # tick - twice inside estimate_burn and again for event detection -
+        # which is most of why a cold replay scaled as O(n^1.85).
+        state.readings = readings
+        state.cuts = detect_discontinuities(readings, state.pay_model)
+        state.burn = estimate_burn(readings, state.pay_model, cuts=state.cuts)
         state.recent_burn = estimate_burn(readings, state.pay_model,
-                                          window_s=BASELINE.recent_window_s)
+                                          window_s=BASELINE.recent_window_s,
+                                          cuts=state.cuts)
 
         _project(state, now)
         states.append(state)
@@ -1626,21 +1641,19 @@ class Ingestor:
         if not catalog:
             return []
         states = build_state(self.store, now, catalog)
-        self._detect_events(states, now)
+        self._detect_events(states)
         candidates = evaluate(states, now)
         fired = self.alerter.process(candidates, now)
         self.last_eval = now
         self.store.put_state(self.EVAL_KEY, iso(now))
         return fired
 
-    def _detect_events(self, states: Sequence[ProviderState], now: datetime) -> None:
-        """Record top-ups and package resets. Never an alert - normal operations."""
+    def _detect_events(self, states: Sequence[ProviderState]) -> None:
+        """Record top-ups, resets and reverted blips. Never an alert - normal operations."""
         for state in states:
             if not state.depleting:
                 continue
-            readings = self.store.readings_since(
-                state.provider, now - timedelta(seconds=BASELINE.baseline_window_s))
-            for ts, kind, detail in detect_discontinuities(readings, state.pay_model):
+            for ts, kind, detail in state.cuts:
                 self.store.add_event(ts, state.provider, kind,
                                      dict(detail, unit=state.unit, pay_model=state.pay_model))
 
@@ -2191,7 +2204,7 @@ def _jsonable(value: Any) -> Any:
     if isinstance(value, ProviderState):
         out = {
             k: _jsonable(v) for k, v in vars(value).items()
-            if k not in ("spark_ts",)
+            if k not in ("spark_ts", "readings", "cuts")
         }
         out["health_pct"] = value.health_pct
         return out
