@@ -30,8 +30,9 @@ lines 1971-1990.
 ## Why it was not re-exported instead
 
 `export_trace.py` has no flag that excludes a turn or a single tool result.
-`--max-result` truncates head-first (`body[:max_result]`, `export_trace.py:272`)
-and the leak is in row 1 of the result, so no value removes it without gutting
+`--max-result` truncates head-first (the `body[:max_result]` slice in `build`;
+no line number, because that pointer has gone stale twice already as the file
+grew) and the leak is in row 1 of the result, so no value removes it without gutting
 every tool result in the trace. `--allow-finding` / `--allow-secrets` only widen
 the credential gate; they do not drop content. Since `ca27622` the point is
 moot: `--max-result` is itself a lossy path and now refuses to write at all
@@ -51,11 +52,16 @@ the patterns it actually matches.
 1. **Done** (`d7c2b24`). `--list` lists one project, defaulting to the slug for
    the current directory, and its error path does not name the projects it found
    instead. Four regression tests, verified to fail against the old code.
-2. **Open.** The exporter's refusal patterns cover credentials only. A trace that
-   publishes verbatim also needs a foreign-identifier check - at minimum, project
-   slugs under `~/.claude/projects/` other than the one being exported. `AGENTS.md`
-   now carries a manual slug scan, but manual is not the same as enforced, and the
-   scan that caught this leak should live in the tool.
+2. **Done** (`1ee633e`). The exporter refused credentials only; the leak was a
+   project slug, so the scanner never saw it. `scan_foreign_slugs` now fails the
+   export closed on any project slug other than the one being exported, naming the
+   slug and the turn. The permitted slug comes from the session file's own parent
+   directory - listing the projects directory to build an allowlist would have
+   reproduced the `--list` defect inside the fix for it. Validated against this
+   very trace: it returns exactly one finding, the real leak, while this project's
+   own slug in the same file is ignored. `--allow-secrets` deliberately does not
+   cover slugs (`f21487f`): waving through a test credential must not wave through
+   somebody else's directory name.
 3. **Done** (`d7c2b24`). The `grep -c HostName` gate matched the bare word, so it
    flagged its own instructions and could never reach 0 in a trace quoting the
    rule. `HostName\s+\S+` was tried first and rejected: in
