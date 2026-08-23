@@ -59,16 +59,21 @@ MODELS = {
 
 @app.cls(
     image=image,
-    gpu="L4",
+    # Fan-out capped at 4 of the workspace's 10 GPUs. The corpus is one hour in
+    # 30 s pieces and a single L4 clears it in ten to twenty minutes, so ten
+    # containers buy no meaningful wall-clock and simply occupy the whole quota
+    # — which is exactly what happened. Engines run sequentially, so the
+    # benchmark never holds more than four GPUs.
+    gpu=["L4", "A10"],        # smallest that fits; fallback so a busy type cannot stall
+    scaledown_window=60,      # release GPUs promptly between engines
     volumes={CACHE: model_cache},
     timeout=60 * 40,
-    scaledown_window=120,
     # One container on purpose. With several, NeMo's `from_pretrained` races on
     # the shared model volume and one container ends up trying to instantiate
     # the abstract `ASRModel` base class instead of the concrete subclass. A
     # 120-segment run at ~3 s each is a few minutes serialised, which is a
     # cheaper price than a flaky engine result.
-    max_containers=1,
+    max_containers=4,
 )
 class Nemo:
     model_key: str = modal.parameter(default="parakeet-tdt-0.6b-v3")

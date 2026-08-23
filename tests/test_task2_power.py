@@ -60,7 +60,11 @@ def test_coverage_floor_is_98_percent_and_labelled_as_policy():
     assert MIN_COVERAGE == 0.98
     status = eligibility({"flaky": scores_for("flaky", 95)}, corpus_size=99)
     assert status["flaky"]["rankable"] is False
-    assert "operational policy" in status["flaky"]["policy"]
+    policy = status["flaky"]["policy"]
+    # eligibility() returns dict[str, object]; assert the type rather than
+    # assuming it, since the whole point of this gate is catching that.
+    assert isinstance(policy, str)
+    assert "operational policy" in policy
 
 
 def test_two_failed_segments_in_a_hundred_is_still_rankable():

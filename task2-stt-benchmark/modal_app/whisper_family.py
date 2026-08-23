@@ -84,11 +84,16 @@ DISTRACTOR_SURFACES = ['Lighthouse', 'Kafdrop', 'Gravana', 'Rake', 'Kubernetics'
 
 @app.cls(
     image=image,
-    gpu="L4",
+    # Fan-out capped at 4 of the workspace's 10 GPUs. The corpus is one hour in
+    # 30 s pieces and a single L4 clears it in ten to twenty minutes, so ten
+    # containers buy no meaningful wall-clock and simply occupy the whole quota
+    # — which is exactly what happened. Engines run sequentially, so the
+    # benchmark never holds more than four GPUs.
+    gpu=["L4", "A10"],        # smallest that fits; fallback so a busy type cannot stall
+    scaledown_window=60,      # release GPUs promptly between engines
     volumes={CACHE: model_cache},
     timeout=60 * 30,
-    scaledown_window=120,
-    max_containers=10,
+    max_containers=4,
 )
 class Whisper:
     model_key: str = modal.parameter(default="whisper-large-v3")

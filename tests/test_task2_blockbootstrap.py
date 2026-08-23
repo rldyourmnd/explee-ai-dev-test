@@ -59,9 +59,14 @@ def test_block_bootstrap_is_more_conservative_than_per_segment():
     a, b = correlated_pair()
     naive = paired_bootstrap("wer", a, b, resamples=RESAMPLES)
     blocked = paired_moving_block("wer", a, b, block_len=8, resamples=RESAMPLES)
-    naive_width = naive.difference.high - naive.difference.low
-    blocked_width = blocked.difference.high - blocked.difference.low
-    assert blocked_width > naive_width
+    # Both must be measurable for the widths to mean anything; asserting it also
+    # narrows the Optionals for the type checker rather than hiding them.
+    assert naive.difference.measured and blocked.difference.measured
+    naive_low, naive_high = naive.difference.low, naive.difference.high
+    blocked_low, blocked_high = blocked.difference.low, blocked.difference.high
+    assert naive_low is not None and naive_high is not None
+    assert blocked_low is not None and blocked_high is not None
+    assert (blocked_high - blocked_low) > (naive_high - naive_low)
 
 
 def test_a_real_difference_is_still_detected_with_blocks():
