@@ -73,6 +73,42 @@ ROLE_LABEL = {"user": "User", "assistant": "Assistant"}
 # the branch that renders it.
 SUPPORTED_BLOCKS = frozenset({"text", "thinking", "tool_use", "tool_result"})
 
+# Calls that enumerate things outside the current project. Content matching
+# cannot close this class: a session or container listing prints bare names, so
+# there is no pattern to write until after the name has leaked. What the
+# exporter does know is which command produced each tool result, and an
+# enumerating command is suspect whatever its output happens to look like.
+#
+# This is a list of known enumerators, not a proof of completeness - the next
+# one will be a command nobody here has run yet. Deliberately narrow: it targets
+# calls that cross a project boundary, not ordinary listing inside this project,
+# because a guard that fires on every `ls` gets switched off.
+ENUMERATING_CALLS: list[tuple[str, re.Pattern[str]]] = [
+    ("session listing", re.compile(r"\b(cmux\s+(list|ls)\b|list-sessions|ListAgents)")),
+    ("project listing", re.compile(r"export_trace\.py\s+--list|\.claude/projects/?\s*$|"
+                                   r"ls\s+[^|;]*\.claude/projects")),
+    ("container listing", re.compile(r"\bdocker\s+(ps|container\s+ls)\b|\bmodal\s+app\s+list\b")),
+    ("repository listing", re.compile(r"\bgh\s+repo\s+list\b|\bgh\s+search\s+repos\b")),
+    ("host configuration", re.compile(r"(cat|less|head|tail|grep)[^|;]*\.ssh/config|"
+                                      r"\bknown_hosts\b")),
+    # Only when the listing targets the parent itself. `ls ~/Developer` shows
+    # every project on the machine; `ls -d ~/Developer/org/one-project` checks
+    # that one path exists and enumerates nothing, and flagging it would train
+    # the operator to wave the guard through.
+    ("home directory listing",
+     re.compile(r"\bls\b(?![^|;]*\s-\w*d\b)[^|;]*~/(?:Developer|Projects|src|work)/?(?=[\s;|\"']|\\n|$)")),
+]
+
+
+def enumerating_reason(tool_name: str, payload: str) -> str | None:
+    """Name the enumeration class of a call, or None if it does not enumerate."""
+    if tool_name == "ListAgents":
+        return "session listing"
+    for reason, pattern in ENUMERATING_CALLS:
+        if pattern.search(payload):
+            return reason
+    return None
+
 
 def load(path: Path, losses: list[str] | None = None) -> list[dict]:
     """Parse a session log, recording anything that could not be rendered.
@@ -240,9 +276,29 @@ def human_ts(raw: str | None) -> str:
         return raw
 
 
+DEFAULT_EXCISE_REASON = "it enumerated unrelated projects"
+
+
+def excision_marker(turn: int, tool_use_id: str | None, tool_name: str | None,
+                    removed_lines: int, reason: str) -> str:
+    """The replacement text for an excised tool result.
+
+    Generated here and nowhere else. A marker a human could type is a marker a
+    reader has to take on trust, and the whole point of documenting an excision
+    rather than withholding a trace is that the reader does not have to.
+    """
+    origin = f"`{tool_name}`" if tool_name else "a tool call"
+    ident = f" (`{tool_use_id}`)" if tool_use_id else ""
+    return (f"> **[EXPORTER] Tool result removed.** The result of {origin}{ident} at turn "
+            f"{turn} was removed by `tools/export_trace.py --excise`, because {reason}. "
+            f"**{removed_lines} line{'s' if removed_lines != 1 else ''} removed.** Everything "
+            f"else in this trace is verbatim, and the unedited session log retains this block.")
+
+
 def build(records: list[dict], title: str, session_id: str, source: Path,
           max_result: int | None, losses: list[str] | None = None,
-          permitted_slug: str | None = None) -> tuple[str, list[str]]:
+          permitted_slug: str | None = None, excise: set[str] | None = None,
+          excise_reason: str = DEFAULT_EXCISE_REASON) -> tuple[str, list[str]]:
     turns = [r for r in records if r.get("type") in ("user", "assistant")
              and isinstance(r.get("message"), dict)]
     if not turns:
@@ -285,6 +341,21 @@ def build(records: list[dict], title: str, session_id: str, source: Path,
     ]
 
     findings: list[str] = []
+    excise = excise or set()
+    excised: list[str] = []
+
+    # tool_use_id -> (tool name, input payload). A tool_result carries only the
+    # id of the call that produced it, so provenance has to be resolved before
+    # the render loop reaches the result.
+    origins: dict[str, tuple[str, str]] = {}
+    for record in turns:
+        blocks = record.get("message", {}).get("content")
+        for block in blocks if isinstance(blocks, list) else []:
+            if isinstance(block, dict) and block.get("type") == "tool_use":
+                origins[str(block.get("id"))] = (
+                    str(block.get("name", "")),
+                    json.dumps(block.get("input", {}), ensure_ascii=False))
+
     for index, record in enumerate(turns, start=1):
         message = record["message"]
         role = record["type"]
@@ -341,8 +412,29 @@ def build(records: list[dict], title: str, session_id: str, source: Path,
                         fence(payload, "json"), ""]
 
             elif kind == "tool_result":
+                use_id = str(block.get("tool_use_id") or "")
+                tool_name, payload = origins.get(use_id, ("", ""))
+
+                # Excision runs before the scanners on purpose: removed content
+                # must stop blocking the export, otherwise excising the leak
+                # still leaves the finding that made it necessary.
+                if str(index) in excise or (use_id and use_id in excise):
+                    removed = render_tool_result(block.get("content"))
+                    n_lines = len(removed.splitlines())
+                    out += [excision_marker(index, use_id or None, tool_name or None,
+                                            n_lines, excise_reason), ""]
+                    excised.append(f"turn {index}"
+                                   + (f" ({tool_name})" if tool_name else "")
+                                   + f", {n_lines} lines")
+                    continue
+
                 body = render_tool_result(block.get("content"), losses)
                 findings += [f"{n}  (first seen: turn {index}, tool result)" for n in scan_leaks(body, permitted_slug)]
+                reason = enumerating_reason(tool_name, payload) if use_id else None
+                if reason:
+                    findings.append(
+                        f"enumerating call ({reason}): result of "
+                        f"{tool_name or 'a tool call'}  (first seen: turn {index}, tool result)")
                 if max_result is not None and len(body) > max_result:
                     dropped = len(body) - max_result
                     if losses is not None:
@@ -360,6 +452,16 @@ def build(records: list[dict], title: str, session_id: str, source: Path,
     # The header promises a verbatim render. If anything was lost, that promise
     # is retracted at the top of the file, not footnoted where the loss happened
     # - a reader decides whether to trust the document before reading it.
+    if excised:
+        notice = [f"> **Verbatim except for {len(excised)} documented "
+                  f"excision{'s' if len(excised) != 1 else ''}.** A tool result was removed "
+                  f"at each point listed below, because {excise_reason}. Each removal is "
+                  f"marked in place by the exporter, with the number of lines removed:", ""]
+        notice += [f"> - {item}" for item in excised]
+        notice += ["", "> Nothing else was altered. The unedited session log is the "
+                   "authoritative record.", ""]
+        out[out.index("---"):out.index("---")] = notice
+
     if losses:
         notice = ["> **This export is not verbatim.** The following content "
                   "could not be rendered losslessly:", ""]
@@ -418,6 +520,14 @@ def main() -> int:
     parser.add_argument("--allow-lossy", action="store_true",
                         help="write the trace even though content was truncated, skipped "
                              "or replaced; the header declares the export non-verbatim")
+    parser.add_argument("--excise", action="append", default=[], metavar="TURN|TOOL_USE_ID",
+                        help="remove one tool result and leave a generated marker naming the "
+                             "reason and the number of lines removed. Addressed by turn number "
+                             "or tool-call id - never by matching content, so it cannot take "
+                             "more than intended. Repeatable, and permitted in --submission.")
+    parser.add_argument("--excise-reason", default=DEFAULT_EXCISE_REASON,
+                        help="why the excised results were removed; appears in the generated "
+                             "marker and in the header notice")
     parser.add_argument("--submission", action="store_true",
                         help="export for publication: every override is refused, so the "
                              "result is verbatim and clean or it does not exist")
@@ -436,6 +546,11 @@ def main() -> int:
             ("--allow-finding", bool(args.allow_finding)),
             ("--max-result", args.max_result is not None),
         ) if used]
+        # --excise is absent from that list deliberately. It is the one
+        # modification that documents itself: the marker is generated here, says
+        # what went and how much, and the header stops claiming a plain verbatim
+        # export. Withholding a whole trace to avoid one contaminated block is a
+        # worse outcome than publishing it with the block visibly removed.
         if forbidden:
             print(f"--submission forbids {', '.join(forbidden)}.", file=sys.stderr)
             print("A published trace is verbatim and clean, or it is not published.",
@@ -464,7 +579,8 @@ def main() -> int:
     permitted_slug = source.parent.name
 
     markdown, findings = build(load(source, losses), args.title, args.session, source,
-                               args.max_result, losses, permitted_slug)
+                               args.max_result, losses, permitted_slug,
+                               set(args.excise), args.excise_reason)
 
     # Fail closed on any lossy path. A trace whose header says "nothing was
     # dropped" while a tool result was truncated, a malformed line was skipped,
@@ -512,10 +628,12 @@ def main() -> int:
         f.startswith("foreign project slug:") for f in blocking)
     if blocking and not waved:
         slugs = [f for f in blocking if f.startswith("foreign project slug:")]
-        creds = [f for f in blocking if not f.startswith("foreign project slug:")]
-        kinds = " and ".join(k for k in (
+        enums = [f for f in blocking if f.startswith("enumerating call")]
+        creds = [f for f in blocking if f not in slugs and f not in enums]
+        kinds = ", ".join(k for k in (
             "credential-shaped strings" if creds else "",
-            "project names belonging to other work" if slugs else "") if k)
+            "project names belonging to other work" if slugs else "",
+            "results of calls that enumerate unrelated things" if enums else "") if k)
         print(f"REFUSING to export: {kinds} found.", file=sys.stderr)
         for finding in blocking:
             print(f"  - {finding}", file=sys.stderr)
@@ -530,6 +648,13 @@ def main() -> int:
                 print("--allow-secrets does not cover project slugs, deliberately: waving "
                       "through a test credential must not also wave through somebody else's "
                       "directory name.", file=sys.stderr)
+        if enums:
+            print("\nA call that enumerates unrelated projects, sessions, containers or hosts "
+                  "is flagged by what produced it, not by what it printed - a listing of bare "
+                  "names has no pattern to match until after it leaks. Read the turn: if the "
+                  "output names anything outside this project, remove it with "
+                  "--excise <turn|tool_use_id>, which leaves a generated marker saying what "
+                  "went and how many lines.", file=sys.stderr)
         print("If you have read the turn and it is a fixture or an example, acknowledge it:",
               file=sys.stderr)
         for finding in blocking:

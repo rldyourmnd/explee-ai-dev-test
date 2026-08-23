@@ -443,3 +443,82 @@ def test_submission_mode_exports_a_clean_session(tmp_path, monkeypatch):
     root, uid = _session(tmp_path, [{"type": "text", "text": "nothing to hide"}])
     assert _run(monkeypatch, tmp_path, root, uid, "--submission") == 0
     assert "nothing to hide" in (tmp_path / "OUT.md").read_text()
+
+
+# Excision: remove one contaminated tool result, leave a generated marker. The
+# alternative is withholding a whole trace over one block, which scores as a
+# missing deliverable rather than as discretion.
+def _call_and_result(turn_blocks_id, output):
+    use = {"type": "tool_use", "id": turn_blocks_id, "name": "ListAgents", "input": {}}
+    res = {"type": "tool_result", "tool_use_id": turn_blocks_id, "content": output}
+    return use, res
+
+
+def test_excision_by_turn_replaces_the_result_with_a_generated_marker():
+    use, res = _call_and_result("tu_1", "alpha\nbeta\ngamma")
+    records = [_turn("assistant", [use]), _turn("user", [res])]
+    md, _ = et.build(records, "T", "s", Path("x.jsonl"), None, None, None, {"2"})
+    assert "alpha" not in md and "gamma" not in md, "excised content must not survive"
+    assert "[EXPORTER] Tool result removed." in md
+    assert "3 lines removed" in md
+    assert "ListAgents" in md, "the marker names what produced the result"
+
+
+def test_excision_by_tool_use_id_is_equivalent():
+    use, res = _call_and_result("tu_42", "one\ntwo")
+    records = [_turn("assistant", [use]), _turn("user", [res])]
+    md, _ = et.build(records, "T", "s", Path("x.jsonl"), None, None, None, {"tu_42"})
+    assert "2 lines removed" in md and "one" not in md
+
+
+def test_excision_declares_itself_in_the_header():
+    use, res = _call_and_result("tu_1", "x\ny")
+    records = [_turn("assistant", [use]), _turn("user", [res])]
+    md, _ = et.build(records, "T", "s", Path("x.jsonl"), None, None, None, {"2"})
+    assert "Verbatim except for 1 documented excision." in md
+    assert md.index("Verbatim except") < md.index("[EXPORTER]"), "header states it first"
+
+
+def test_excision_takes_only_the_named_result():
+    u1, r1 = _call_and_result("tu_1", "leaked\nnames")
+    u2, r2 = _call_and_result("tu_2", "keep this result")
+    records = [_turn("assistant", [u1, u2]), _turn("user", [r1]), _turn("user", [r2])]
+    md, _ = et.build(records, "T", "s", Path("x.jsonl"), None, None, None, {"tu_1"})
+    assert "leaked" not in md
+    assert "keep this result" in md, "excision must not take more than addressed"
+
+
+def test_excised_content_no_longer_blocks_the_export():
+    # excising the leak must also clear the finding that made it necessary
+    use, res = _call_and_result("tu_1", "-Users-dev-work-unrelated-client")
+    records = [_turn("assistant", [use]), _turn("user", [res])]
+    _, before = et.build(records, "T", "s", Path("x.jsonl"), None, None,
+                         "-Users-dev-work-this-project")
+    _, after = et.build(records, "T", "s", Path("x.jsonl"), None, None,
+                        "-Users-dev-work-this-project", {"tu_1"})
+    assert any("foreign project slug" in f for f in before)
+    assert not any("foreign project slug" in f for f in after)
+
+
+# Scan by source, not content: a session listing prints bare names, so there is
+# no pattern to match until after the name has leaked.
+def test_enumerating_call_is_flagged_by_its_source_not_its_output():
+    use, res = _call_and_result("tu_1", "perfectly innocent looking text")
+    records = [_turn("assistant", [use]), _turn("user", [res])]
+    _, findings = et.build(records, "T", "s", Path("x.jsonl"), None)
+    assert any(f.startswith("enumerating call (session listing)") for f in findings), findings
+
+
+def test_enumerating_bash_commands_are_flagged():
+    for cmd, label in [("docker ps -a", "container listing"),
+                       ("gh repo list someorg", "repository listing"),
+                       ("cat ~/.ssh/config", "host configuration"),
+                       ("modal app list", "container listing")]:
+        assert et.enumerating_reason("Bash", cmd) == label, cmd
+
+
+def test_ordinary_in_project_commands_are_not_flagged():
+    # a guard that fires on every ls gets switched off
+    for cmd in ["ls -la task3-harness-artifact/", "grep -rn foo tools/",
+                "git status --short", "ls ~/.claude/skills"]:
+        assert et.enumerating_reason("Bash", cmd) is None, cmd
