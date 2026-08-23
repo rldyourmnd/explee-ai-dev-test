@@ -146,6 +146,24 @@ The general form: **a command that answers a question you did not ask is a leak
 waiting for an audience.** Redaction afterwards is not available, because a trace
 that is edited is no longer verbatim.
 
+## Modal GPUs
+
+The workspace plan allows **10 concurrent GPUs**, and exhausting them stops
+every other session, not just yours. On 2026-08-23 a Task 2 function with
+`max_containers=10` held all ten and the owner got a limit email.
+
+Cap fan-out and run engines sequentially:
+
+```python
+@app.cls(gpu=["L4", "A10"], max_containers=4, scaledown_window=60, ...)
+```
+
+The arithmetic is why this costs nothing: an hour of audio in 30 s pieces takes
+one L4 ten to twenty minutes, so four containers finish it in under five and ten
+are no faster. Pick the smallest GPU that fits; an H100 finishes a 30 s clip no
+sooner. The parameter names are `max_containers` and `scaledown_window`; the
+older `concurrency_limit` and `container_idle_timeout` are gone.
+
 ## Coordinating panes — delivery is a claim, not an action
 
 `cmux send` **types** text into a target pane's prompt. It does not submit it.
