@@ -61,6 +61,10 @@ proves it: span **21,677.879 s = 6.0216 h** across 11,568 records, 0 malformed,
 largest consecutive gap 29.67 s, verified by prefix digest against the host with
 the collector active before and after.
 
+The series continues past that mark: [`snapshots/04-final.md`](snapshots/04-final.md)
+records **7.4562 h across 14,320 records**, 0 malformed, largest consecutive gap
+29.68 s, taken at the point this work stopped.
+
 [`snapshots/01-six-hour-short.md`](snapshots/01-six-hour-short.md) is kept
 alongside it and spans **21,587.803 s**, which is 12.197 s short. It was taken
 *after* the six-hour instant and still fell short, because span is measured
@@ -134,7 +138,7 @@ No case of divergence has been demonstrated. That is not a guarantee either:
 state carried between evaluations, which a replay rebuilds from zero, has not
 been tested.
 
-**The current audit reports one unreconciled line, and it is not that class.**
+**The current audit reports two unreconciled lines, and neither is that class.**
 The monitor keeps running, so `alerts.jsonl` keeps growing; it is 13 lines at the
 last regeneration, and the thirteenth is a `critical` runway on `openrouter`. It
 fails to reconcile on exactly one of nine compared evidence fields:
@@ -153,10 +157,22 @@ disagreement about whether the alert should exist.
 It is left failing on purpose. Fixing it means either changing the projection
 arithmetic or giving the comparator a tolerance, and a comparator with a
 tolerance is a weaker instrument than one that reports a one millisecond
-disagreement. Both are changes to a file that is frozen at T1. The honest
-artifact is an audit that says exactly what differs, and a document that says
-why that is acceptable, rather than a green tick bought by loosening the check
-that produced it.
+disagreement. The honest artifact is an audit that says exactly what differs,
+and a document that says why that is acceptable, rather than a green tick bought
+by loosening the check that produced it.
+
+The second is a `scrapfly` `package_exhaustion` re-fire into the same
+materiality band, `lt168` to `lt168`, which the alerter is supposed to suppress.
+The two lines are 6.44 h apart and `incident_forget_s` is 6 h, so the first
+incident is forgotten and the condition re-fires while `previous_band` is still
+carried across. It is not a regression: replaying the same window with the
+previous build reproduces it identically. Nothing shorter than six hours of
+observation could have surfaced it, which is the clearest argument here for
+collecting well past the stated minimum.
+
+Both counts move as the monitor keeps running and `alerts.jsonl` keeps growing.
+The count is not the claim; the two classes above are, and the generator re-runs
+the audit rather than restating a remembered verdict.
 
 One clarification, because "regenerated on a clean window" sounds like more than
 it is: the monitor never writes raw data. The sampler does, and it has not
