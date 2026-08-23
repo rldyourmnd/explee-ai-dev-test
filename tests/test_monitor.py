@@ -240,6 +240,30 @@ def test_standalone_collection_records_pre_truncation_length(tmp_path, fake_api)
     assert record["body_chars"] > len(record["body"]), "truncation is now detectable"
 
 
+def test_a_clipped_body_fails_closed_rather_than_yielding_a_wrong_value():
+    """The safety property behind the 8000-character cap.
+
+    Nothing in the observed window came within 1,578 characters of the bound, so
+    this has not happened — but "it has not happened yet" is not a safety
+    argument. Clipping valid JSON almost always produces invalid JSON, which the
+    parser rejects, so a truncated body becomes `unparseable` rather than a
+    plausible-looking wrong number. That is the difference between a visible gap
+    and a fabricated balance.
+    """
+    full = json.dumps({"balance": 947.30, "currency": "usd", "note": "x" * 9000})
+    clipped = full[:m.Collector.BODY_CAP]
+    assert len(clipped) < len(full)
+
+    record = _rec("brightdata", 0, body=clipped)
+    record["body_chars"] = len(full)
+    reading = m.read_sample(record)
+    assert reading.state == m.STATE_UNPARSEABLE
+    assert reading.value is None, "a clipped body must never produce a value"
+
+    # And the record itself carries enough to diagnose it after the fact.
+    assert record["body_chars"] > len(record["body"])
+
+
 def test_standalone_collection_survives_an_unreachable_api(tmp_path):
     """A dead endpoint is data, not a crash: the loop must keep collecting."""
     collector = m.Collector(str(tmp_path / "raw.jsonl"),
