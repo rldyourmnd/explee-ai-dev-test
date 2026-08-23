@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _load():
     spec = importlib.util.spec_from_file_location("export_trace", ROOT / "tools" / "export_trace.py")
+    assert spec is not None and spec.loader is not None, "exporter must be loadable"
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

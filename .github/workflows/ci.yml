@@ -50,13 +50,19 @@ jobs:
         run: uv run --with ruff ruff check .
 
       # Non-blocking on purpose, and this is a declared state rather than a
-      # hidden one. Baseline at 8111af1 is 18 pyright errors: most are the test
-      # files' importlib dynamic module loading (ModuleSpec | None), plus one
-      # real defect in tools/export_trace.py flagged by the review and owned by
-      # surface:8. Making it blocking today would paint CI red without telling
-      # anyone anything new; leaving it out entirely would hide a known problem.
-      # Flip continue-on-error to false once the count reaches 0 — the count is
+      # hidden one. The 18-error baseline at 8111af1 was mostly environment,
+      # not code: pyright could not see httpx (declared in a PEP 723 header) or
+      # the task2 harness package (put on sys.path at runtime by the tests), so
+      # working imports read as missing. pyrightconfig.json declares the package
+      # path and this step installs the third-party dependency, which is why the
+      # remaining errors are real. The importlib ModuleSpec | None errors and
+      # the export_trace.py operator defect are fixed.
+      #
+      # Remaining at this commit: 16, all in tests/test_task2_bootstrap.py (10)
+      # and tests/test_task2_metrics.py (6) - Optional operands and an invariant
+      # dict/Sequence parameter. Owned by task 2, whose count moves while that
+      # work is in flight. Flip continue-on-error to false once it reaches 0;
       # tracked as row X.5 in docs/ACCEPTANCE.md.
       - name: pyright (reporting only, see docs/ACCEPTANCE.md X.5)
         continue-on-error: true
-        run: uv run --with pyright --with pytest pyright
+        run: uv run --with pyright --with pytest --with httpx pyright

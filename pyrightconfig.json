@@ -1,0 +1,7 @@
+{
+  "extraPaths": ["task2-stt-benchmark"],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "standard",
+  "include": ["tools", "tests", "task1-spend-observability", "task2-stt-benchmark"],
+  "exclude": ["**/node_modules", "**/__pycache__", "**/.venv", "browser", "docs"]
+}

@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def _load():
     spec = importlib.util.spec_from_file_location(
         "monitor", ROOT / "task1-spend-observability" / "monitor.py")
+    assert spec is not None and spec.loader is not None, "monitor must be loadable"
     module = importlib.util.module_from_spec(spec)
     # Register before exec: @dataclass resolves annotations through
     # sys.modules[cls.__module__], which is absent for a hand-built spec.
