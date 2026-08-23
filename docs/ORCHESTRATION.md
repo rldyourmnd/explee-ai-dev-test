@@ -145,6 +145,42 @@ history rewrite under live sessions destroys uncommitted work. Rewriting to fix 
 commit message would contradict that for cosmetics. Recorded here instead, and
 both sessions have moved to explicit `git add <paths>`.
 
+## Pre-review sync, 19:07Z — remote must equal reality
+
+A second external review round runs against GitHub. Anything unpushed is
+invisible to it and returns as a false finding, which spends a paid review cycle
+re-discovering what we already know. All three workers were told to commit
+everything they hold, work in progress included, with messages that say it is in
+progress rather than dressing it up. A red test inside a commit that admits it is
+worth more to a reviewer than an invisible fix.
+
+Two decisions were waiting on this session and are now made, because both panes
+were parked on them and idle workers cost wall-clock that does not come back:
+
+- **Task 2 corpus: Радио-Т, approved.** Chosen on difficulty and reproducibility
+  rather than convenience — multiple speakers with overlap, telephone-grade
+  remote acoustics, code-switching inside almost every sentence, and public MP3s
+  so a grader can fetch the same file and check our SHA-256. The `CC BY-NC-ND`
+  posture is adopted as written: analyse privately, never republish segments or
+  the full reference transcript, publish metrics, short quoted error spans and
+  the full recipe. The corpus is reproducible from the recipe rather than from
+  redistribution.
+- **Foreign-project-slug check in the exporter: approved, ahead of everything
+  else `surface:8` holds.** The exporter already fails closed on credentials; the
+  leak that killed two traces was a project name, not a credential. Task 1 and
+  Task 2 have not exported yet, so this is the last moment the fix is prevention
+  rather than autopsy. It must derive the permitted slug from the session being
+  exported and must not enumerate the projects directory — doing that would
+  reproduce the `--list` defect inside the fix for it.
+
+**Row 1.3 is `DONE`.** The human verified `https://spend.nddev.it.com/` from
+outside the deployment host: HTTP 200, 53461 bytes, valid Let's Encrypt
+certificate for that exact hostname, `/healthz` 15/15 providers fresh, replay
+complete, with no `Host` override and no `--resolve`. That is the first
+externally-fetched public artifact in the submission, and it closes the
+deliverable this session could not verify locally because of a stale negative
+DNS cache.
+
 ## Contradiction sweep, 18:59Z — standing order 1
 
 The three known contradictions are **closed**, each re-checked by running the
