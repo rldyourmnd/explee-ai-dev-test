@@ -18,6 +18,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -112,8 +113,13 @@ def main() -> int:
     bad = {int(n) for n in re.findall(r"^\[(\d+)\][^\[]*?UNRECONCILED",
                                       audit, re.M | re.S)}
     records = sum(1 for _ in Path(args.raw).open(encoding="utf-8"))
-    commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
-                            cwd=REPO, capture_output=True, text=True).stdout.strip()
+    # Stamp the DATA, not the repository. This document is a claim about
+    # alerts.jsonl against the raw records, and the repo HEAD is no part of that
+    # claim: in a tree several sessions are committing to, HEAD moves every few
+    # minutes, so a regeneration that changed nothing but the stamp dirtied the
+    # file and made "final gates on a clean tree" unachievable by construction.
+    # The raw digest changes exactly when the subject of the audit changes.
+    raw_digest = hashlib.sha256(Path(args.raw).read_bytes()).hexdigest()[:16]
 
     body = [PREAMBLE, "", "| provenance | |", "|---|---|",
             f"| alert lines audited | {audited} |",
@@ -121,7 +127,7 @@ def main() -> int:
             f"| caused solely by a top-up | **{topup_only}** |",
             f"| caused solely by a reverted blip | **{blip_only}** |",
             f"| raw records | {records:,} |",
-            f"| repository | `{commit}` |",
+            f"| raw log sha256 | `{raw_digest}` |",
             "| regenerate | `uv run tools/alert_audit_doc.py` |",
             "", "## Every line", "",
             "| # | when | rule | provider | headline | reconciled |",
@@ -166,6 +172,10 @@ def main() -> int:
                f"top-up-only {topup_only}, blip-only {blip_only}")
     if args.check:
         print(f"CHECK: {verdict}")
+    elif OUT.exists() and OUT.read_text(encoding="utf-8") == text:
+        # Writing identical bytes still updates mtime and, in some tooling,
+        # still reads as a change. If the audit says the same thing, say nothing.
+        print(f"unchanged {OUT.relative_to(REPO)}: {verdict}")
     else:
         OUT.write_text(text, encoding="utf-8")
         print(f"wrote {OUT.relative_to(REPO)}: {verdict}")

@@ -31,7 +31,7 @@ so the document cannot claim a verdict the audit did not produce.
 | caused solely by a top-up | **0** |
 | caused solely by a reverted blip | **0** |
 | raw records | 14,320 |
-| repository | `1f62ad4` |
+| raw log sha256 | `d2c0b09182c25c7f` |
 | regenerate | `uv run tools/alert_audit_doc.py` |
 
 ## Every line
