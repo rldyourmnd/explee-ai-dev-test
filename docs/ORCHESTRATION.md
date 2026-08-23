@@ -5,7 +5,39 @@ single place that says what is true right now, with the measurement behind each
 claim. Maintained by the orchestrator (`surface:3`); workers report, they do not
 edit this file.
 
-**Last heartbeat: 2026-08-23T19:29Z.**
+**Last heartbeat: 2026-08-23T21:29Z.**
+
+## CURRENT STATE — 21:29Z. Everything below this block is a dated log, not status.
+
+The sections after this one record what was true when they were written and are
+kept because the run's history is itself evidence. **They are not current.** Any
+disagreement between them and this block resolves in favour of this block, and
+`docs/ACCEPTANCE.md` is the row-by-row authority.
+
+| | |
+|---|---|
+| Collector | `active`, 10096 records, **0 malformed**, max consecutive gap **29.670 s**, span **5.25 h** |
+| Six-hour mark | `22:14Z`, **45 min out**. Snapshot 01 closes the minimum; **collection continues** — the submission ships the last snapshot, not this one |
+| Task 1 | dashboard live at `spend.nddev.it.com` (200, valid cert, no login); `alerts.jsonl` 13 lines verified **on the served endpoint** |
+| Task 2 | **published** at `stt.nddev.it.com` — 5 engines + 2 tuned tracks, 99 hashed segments (2952.821 s), publisher human transcript, recommends Whisper large-v3 + glossary prompt |
+| Task 3 | **complete** — artifact, its 2–3 lines, and a real tool-exported trace |
+| Gates | pytest 293 · ruff 0.15.17 clean · pyright **0** · consistency ok · CI green |
+
+**Open:** Task 1 and Task 2 traces (exported only when each session genuinely
+ends); the snapshot series; the T1 marker and clean-window regeneration; the
+single-file `--poll` deploy, which waits for a snapshot boundary; the pyright
+exclusion debt (**64 errors** behind four excluded Task 2 paths, row X.5 **not
+green**); and the history rewrite, which runs last.
+
+**All six human decisions are settled** — the `BLOCKED` markers further down are
+historical. Publication, submission timing, collector interruption and payment
+remain the human's; payment is settled as *nothing paid at all*.
+
+**Superseded below, listed so nobody re-reads them as fact:** the Task 3 artifact
+was `reviewer-protocol.md` before it became `flow-memory-sync.md`; the Task 2
+corpus was Радио-Т at 3600.0 s before the amendment to 2952.821 s; Task 2 was
+"not started" and "awaiting scope" before it was briefed.
+
 
 ## STATE CHANGE 18:54Z — all three workers active for the first time
 
