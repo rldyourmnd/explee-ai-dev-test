@@ -40,9 +40,11 @@ import json
 import math
 import os
 import re
+import shutil
 import sqlite3
 import statistics
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -1028,70 +1030,79 @@ class ProviderState:
         return 100.0 * self.ok_samples / self.total_samples
 
 
+def state_from_readings(provider: str, meta: dict[str, Any],
+                        readings: Sequence[Reading], now: datetime) -> ProviderState:
+    """Derive one provider's state from a supplied series.
+
+    Split out from `build_state` so the same derivation can be run against a
+    series that did not come from the store — which is what lets the audit
+    recompute an alert with a top-up removed and check the alert survives it.
+    """
+    state = ProviderState(
+        provider=provider,
+        name=meta.get("name") or provider,
+        pay_model=meta.get("pay_model") or "unknown",
+        unit=meta.get("unit") or "unknown",
+        note=meta.get("note") or "",
+    )
+    state.total_samples = len(readings)
+    oks = [r for r in readings if r.state == STATE_OK]
+    state.ok_samples = len(oks)
+
+    if readings:
+        state.last_reading = readings[-1]
+        state.window_span_s = (readings[-1].ts - readings[0].ts).total_seconds()
+    if oks:
+        state.last_ok = oks[-1]
+        state.value = oks[-1].value
+        state.package = oks[-1].extra.get("package")
+        state.refresh = oks[-1].extra.get("refresh")
+        state.spend_30d = oks[-1].extra.get("spend_30d")
+        state.stale_s = (now - oks[-1].ts).total_seconds()
+        state.spark = [r.value for r in oks if r.value is not None][-120:]
+        state.spark_ts = [r.ts for r in oks if r.value is not None][-120:]
+
+    # Availability: how long since the last reading that carried a value.
+    # `schema_miss` counts as a failure to observe, because it is exactly
+    # that - but it is counted separately from an HTTP error everywhere it
+    # is displayed.
+    trailing = 0
+    for reading in reversed(readings):
+        if reading.state == STATE_OK:
+            break
+        trailing += 1
+    state.consecutive_failures = trailing
+    if state.stale_s is None:
+        state.available = False
+        state.unavailable_since = readings[0].ts if readings else None
+    else:
+        state.available = state.stale_s <= POLICY.stale_display_s
+        if not state.available and oks:
+            state.unavailable_since = oks[-1].ts
+
+    # Computed once per evaluation and shared. detect_discontinuities is
+    # O(window) and was previously being run three times per provider per
+    # tick - twice inside estimate_burn and again for event detection -
+    # which is most of why a cold replay scaled as O(n^1.85).
+    state.readings = list(readings)
+    state.cuts = detect_discontinuities(readings, state.pay_model)
+    state.burn = estimate_burn(readings, state.pay_model, cuts=state.cuts)
+    state.recent_burn = estimate_burn(readings, state.pay_model,
+                                      window_s=BASELINE.recent_window_s,
+                                      cuts=state.cuts)
+
+    _project(state, now)
+    return state
+
+
 def build_state(store: Store, now: datetime, catalog: dict[str, dict[str, Any]],
                 window_s: float = BASELINE.baseline_window_s) -> list[ProviderState]:
     since = now - timedelta(seconds=window_s)
     states: list[ProviderState] = []
-
     for provider, meta in catalog.items():
         # Bounded at `now`: state as of an instant must not see past it.
         readings = store.readings_since(provider, since, until=now)
-        state = ProviderState(
-            provider=provider,
-            name=meta.get("name") or provider,
-            pay_model=meta.get("pay_model") or "unknown",
-            unit=meta.get("unit") or "unknown",
-            note=meta.get("note") or "",
-        )
-        state.total_samples = len(readings)
-        oks = [r for r in readings if r.state == STATE_OK]
-        state.ok_samples = len(oks)
-
-        if readings:
-            state.last_reading = readings[-1]
-            state.window_span_s = (readings[-1].ts - readings[0].ts).total_seconds()
-        if oks:
-            state.last_ok = oks[-1]
-            state.value = oks[-1].value
-            state.package = oks[-1].extra.get("package")
-            state.refresh = oks[-1].extra.get("refresh")
-            state.spend_30d = oks[-1].extra.get("spend_30d")
-            state.stale_s = (now - oks[-1].ts).total_seconds()
-            state.spark = [r.value for r in oks if r.value is not None][-120:]
-            state.spark_ts = [r.ts for r in oks if r.value is not None][-120:]
-
-        # Availability: how long since the last reading that carried a value.
-        # `schema_miss` counts as a failure to observe, because it is exactly
-        # that - but it is counted separately from an HTTP error everywhere it
-        # is displayed.
-        trailing = 0
-        for reading in reversed(readings):
-            if reading.state == STATE_OK:
-                break
-            trailing += 1
-        state.consecutive_failures = trailing
-        if state.stale_s is None:
-            state.available = False
-            state.unavailable_since = readings[0].ts if readings else None
-        else:
-            state.available = state.stale_s <= POLICY.stale_display_s
-            if not state.available and oks:
-                state.unavailable_since = oks[-1].ts
-
-        # Computed once per evaluation and shared. detect_discontinuities is
-        # O(window) and was previously being run three times per provider per
-        # tick - twice inside estimate_burn and again for event detection -
-        # which is most of why a cold replay scaled as O(n^1.85).
-        state.readings = readings
-        state.cuts = detect_discontinuities(readings, state.pay_model)
-        state.burn = estimate_burn(readings, state.pay_model, cuts=state.cuts)
-        state.recent_burn = estimate_burn(readings, state.pay_model,
-                                          window_s=BASELINE.recent_window_s,
-                                          cuts=state.cuts)
-
-        _project(state, now)
-        states.append(state)
-
+        states.append(state_from_readings(provider, meta, readings, now))
     return states
 
 
@@ -1217,6 +1228,29 @@ def signature_severity(signature: str | None) -> int:
         return -1
 
 
+def slower_by_one_dispersion(burn: Estimate) -> float | None:
+    """The burn rate one dispersion slower, as a conservative lower bound.
+
+    A projection is a claim about the future built on an estimated rate, and the
+    estimate carries a spread. If the claim flips when the rate is taken one MAD
+    slower, the data does not support it and we should not be waking anyone with
+    it. This is deliberately not a tuned constant: the bound comes from the
+    provider's own slope dispersion, so a steady provider is held to a tight
+    bound and a noisy one to a loose one.
+
+    MEASURED: two lines fail this test where the rest pass comfortably --
+    `findymail` at 17:00Z and `bounceban` at 18:44Z, both projecting to exhaust
+    with roughly a 15-hour margin against a burn whose MAD is a tenth of the
+    rate. The `bounceban` line was independently flagged by the audit's
+    counterfactual, which found it disappears when a +3 credit top-up is removed
+    from its window. Two different checks reaching the same line is the reason
+    to believe both.
+    """
+    if burn.rate_per_h is None:
+        return None
+    return max(0.0, burn.rate_per_h - (burn.dispersion or 0.0))
+
+
 def _fmt(value: float | None, unit: str, digits: int = 2) -> str:
     if value is None:
         return "n/a"
@@ -1240,6 +1274,16 @@ def rule_runway(state: ProviderState, now: datetime) -> Candidate | None:
     if runway > POLICY.runway_warning_h:
         return None
     if burn.span_s < BASELINE.min_projection_span_s:
+        return None
+    # Same discipline as the package projection: if a rate one dispersion
+    # slower puts the runway back outside the alerting threshold, the window
+    # does not support the claim.
+    conservative = slower_by_one_dispersion(burn)
+    if state.value is None or not conservative:
+        return None
+    floor_value = state.value - (0.0 if state.pay_model == "prepaid_balance"
+                                 else POLICY.postpaid_floor)
+    if floor_value / conservative > POLICY.runway_warning_h:
         return None
     level = "critical" if runway <= POLICY.runway_critical_h else "warning"
     runway_severity, runway_label = _band(runway, RUNWAY_BUCKETS_H, higher_is_worse=False)
@@ -1292,6 +1336,14 @@ def rule_package_exhaustion(state: ProviderState, now: datetime) -> Candidate | 
         return None
     shortfall = -projection
     if shortfall <= POLICY.package_shortfall_fraction * package:
+        return None
+    # The claim must survive the estimate's own uncertainty, not merely clear a
+    # fraction of the package. A shortfall that vanishes when the rate is taken
+    # one dispersion slower is not something the window supports.
+    conservative = slower_by_one_dispersion(burn)
+    if conservative is None or state.value is None:
+        return None
+    if state.value - conservative * hours_left >= 0:
         return None
     ratio = state.extrapolation_ratio
     pkg_severity, pkg_label = _band(runway, RUNWAY_BUCKETS_H, higher_is_worse=False)
@@ -1970,29 +2022,44 @@ def risk_key(state: ProviderState) -> tuple[Any, ...]:
 def condition_status(store: Store, candidate: Candidate, now: datetime) -> dict[str, Any]:
     """Where a holding condition sits in its lifecycle.
 
-    `pending`  the condition holds but no line has been written for it. Either
-               the sustain period has not elapsed, or it has and the next
-               evaluation will write one.
-    `firing`   a line has been written and the condition still holds.
+    `pending`  the condition holds but no line has been written *for this
+               episode*. Either the sustain period has not elapsed, or it has
+               and the next evaluation will write one.
+    `firing`   a line was written during this episode and it still holds.
 
     The distinction matters because `alerts.jsonl` is the record of what a human
     was actually told. A dashboard that renders both states the same way claims
     an incident was raised when it may not have been.
+
+    "This episode" is the load-bearing part. A condition that fired, recovered
+    and came back has a `last_fired` from the *previous* episode, and reading
+    that as firing put the dashboard at odds with the alerter, which already
+    computes `recurred = since > last_fired`. The UI was the one lying: it
+    showed an incident as raised while `alerts.jsonl` contained no line for the
+    new episode.
     """
     prior = store.alert_state(candidate.key)
     since = parse_ts(prior["active_since"]) if prior and prior["active_since"] else None
     last_fired = prior["last_fired"] if prior else None
     held = (now - since).total_seconds() if since else 0.0
+
+    # A line belongs to the current episode only if it was written at or after
+    # the episode began.
+    fired_this_episode = bool(
+        last_fired and since and parse_ts(last_fired) >= since)
+
     return {
-        "status": "firing" if last_fired else "pending",
+        "status": "firing" if fired_this_episode else "pending",
         "held_s": round(held, 1),
         "sustain_s": candidate.sustain_s,
         "sustain_remaining_s": round(max(0.0, candidate.sustain_s - held), 1),
         "last_fired": last_fired,
+        "last_fired_this_episode": fired_this_episode,
+        "episode_since": iso(since) if since else None,
         "band": candidate.signature,
         "fired_band": prior["signature"] if prior else None,
         "deteriorated": bool(
-            last_fired and prior
+            fired_this_episode and prior
             and signature_severity(candidate.signature) > signature_severity(prior["signature"])),
     }
 
@@ -2678,6 +2745,17 @@ def text_report(snap: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _file_digest(path: str) -> str:
+    """Short sha256 of a file, or a marker when it does not exist."""
+    if not os.path.exists(path):
+        return "absent"
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()[:16]
+
+
 def read_alert_lines(alerts_path: str) -> list[dict[str, Any]]:
     """Parse alerts.jsonl, one JSON object per physical line."""
     lines: list[dict[str, Any]] = []
@@ -2689,87 +2767,192 @@ def read_alert_lines(alerts_path: str) -> list[dict[str, Any]]:
     return lines
 
 
-def audit_alerts(store: Store, lines: Sequence[dict[str, Any]]) -> tuple[str, int]:
-    """Re-derive every line in alerts.jsonl from the raw window that produced it.
+PROVIDER_RULE_BY_NAME: dict[str, Callable[[ProviderState, datetime], Candidate | None]] = {
+    "runway": rule_runway,
+    "package_exhaustion": rule_package_exhaustion,
+    "unavailable": rule_unavailable,
+    "burn_anomaly": rule_burn_anomaly,
+}
 
-    An alert is a claim. This replays the state at the moment each line was
-    written and checks the claim against it: the value the line quotes, the rate
-    it quotes, the sustain it claims to have held for, and whether a top-up,
-    reset or reverted blip sits close enough to explain the line away. Anything
-    that does not reconcile is reported rather than counted as passing.
+# Evidence keys the alerter adds, rather than the rule. They are checked, but
+# against the alerter's own invariants instead of against a re-run of the rule.
+ALERTER_EVIDENCE_KEYS = frozenset({
+    "sustained_s", "sustain_required_s", "first_observed", "band", "previous_band",
+})
+
+# Keys whose value legitimately drifts between the moment a line was written and
+# a later re-derivation, because they describe the window rather than the claim.
+DRIFTING_EVIDENCE_KEYS = frozenset({"observed_span_s", "samples", "evaluated_at"})
+
+
+def _close_enough(claimed: Any, fresh: Any) -> bool:
+    """Numbers within 2% (or 0.01 absolute) count as reproduced; others must match."""
+    if isinstance(claimed, bool) or isinstance(fresh, bool):
+        return claimed == fresh
+    if isinstance(claimed, (int, float)) and isinstance(fresh, (int, float)):
+        return abs(fresh - claimed) <= max(0.01, abs(claimed) * 0.02)
+    return claimed == fresh
+
+
+def _readings_without(readings: Sequence[Reading], cut_ts: datetime,
+                      delta: float) -> list[Reading]:
+    """The same series with one discontinuity undone.
+
+    Subtracting the jump from every later reading answers a question a note
+    beside an alert cannot: would this alert exist if the top-up, reset or
+    reverted blip had never happened?
+    """
+    out: list[Reading] = []
+    for reading in readings:
+        if reading.state == STATE_OK and reading.value is not None and reading.ts >= cut_ts:
+            out.append(Reading(reading.provider, reading.ts, reading.state,
+                               reading.value - delta, reading.http, reading.latency_ms,
+                               reading.shape, reading.extra))
+        else:
+            out.append(reading)
+    return out
+
+
+def audit_alerts(store: Store, lines: Sequence[dict[str, Any]]) -> tuple[str, int]:
+    """Reconcile every field of every alert line against the raw window.
+
+    An alert is a claim, and this re-derives the whole claim rather than spot
+    checking it: the rule is re-run at the instant the line was written and
+    every evidence field it produced is compared. Fields the alerter contributes
+    -- sustain, bands -- are checked against the alerter's own invariants.
+
+    Where a top-up, package reset or reverted blip sits close by, the incident is
+    recomputed with that event undone. An alert that disappears when the event is
+    removed was caused by normal operations and is reported as unreconciled; a
+    note recording that an event happened nearby is not proof of anything.
 
     Returns the report and the number of lines that failed to reconcile.
     """
     catalog = store.catalog()
-    out = [f"Audit of {len(lines)} alert lines against the raw window", ""]
-    unexplained = 0
+    out = [f"Reconciling {len(lines)} alert lines against the raw window", ""]
+    failures = 0
 
     for index, alert in enumerate(lines, 1):
         provider = alert.get("provider")
         when = parse_ts(alert["ts"])
-        evidence = alert.get("evidence", {})
-        out.append(f"[{index}] {alert['ts']}  {alert['level']}  {alert['rule']}  {provider}")
-        out.append(f"     text: {alert['text'][:150]}")
-
+        claimed = alert.get("evidence", {})
+        rule_name = alert["rule"]
+        out.append(f"[{index}] {alert['ts']}  {alert['level']}  {rule_name}  {provider}")
+        out.append(f"     {alert['text'][:160]}")
         problems: list[str] = []
 
-        # 1. Re-derive the provider's state at the instant the line was written.
-        if provider and provider in catalog:
+        rule = PROVIDER_RULE_BY_NAME.get(rule_name)
+        meta = catalog.get(provider) if provider else None
+        state: ProviderState | None = None
+        if provider and meta is not None and rule is not None:
             states = {s.provider: s for s in build_state(store, when, catalog)}
             state = states.get(provider)
-            if state is None:
-                problems.append("provider absent from the catalog at that instant")
+
+        if state is None or rule is None or provider is None or meta is None:
+            out.append("     (pool-wide or uncatalogued rule; field re-derivation skipped)")
+        else:
+            fresh = rule(state, when)
+            if fresh is None:
+                problems.append(f"rule {rule_name} does not fire when re-run at this instant")
             else:
-                claimed_value = evidence.get("value", evidence.get("remaining"))
-                if claimed_value is not None and state.value is not None:
-                    if abs(state.value - claimed_value) > max(0.01, abs(claimed_value) * 0.02):
+                checked = 0
+                for key, claimed_value in sorted(claimed.items()):
+                    if key in ALERTER_EVIDENCE_KEYS or key in DRIFTING_EVIDENCE_KEYS:
+                        continue
+                    if key not in fresh.evidence:
+                        problems.append(f"evidence field '{key}' is absent on re-run")
+                        continue
+                    checked += 1
+                    if not _close_enough(claimed_value, fresh.evidence[key]):
                         problems.append(
-                            f"value {claimed_value} does not match re-derived {state.value}")
-                claimed_runway = evidence.get("runway_h")
-                if claimed_runway is not None and state.runway_h is not None:
-                    if abs(state.runway_h - claimed_runway) > max(0.5, claimed_runway * 0.10):
-                        problems.append(
-                            f"runway {claimed_runway}h vs re-derived {state.runway_h:.2f}h")
-                out.append(f"     re-derived at that instant: value={state.value} "
-                           f"burn={state.spend_rate_per_h} runway_h={state.runway_h}")
+                            f"field '{key}': line says {claimed_value!r}, "
+                            f"re-run gives {fresh.evidence[key]!r}")
+                out.append(f"     re-ran {rule_name}: {checked} evidence fields compared")
 
-                # 2. The raw readings immediately around it.
-                window = store.readings_since(provider, when - timedelta(minutes=3))
-                near = [r for r in window if r.ts <= when + timedelta(minutes=1)][-4:]
-                for reading in near:
-                    out.append(f"       raw {iso(reading.ts)} state={reading.state} "
-                               f"http={reading.http} value={reading.value}")
+                # The band is the alerter's, but it must be the one this
+                # candidate would produce.
+                if claimed.get("band") and claimed["band"] != fresh.signature:
+                    problems.append(f"band: line says {claimed['band']!r}, "
+                                    f"candidate produces {fresh.signature!r}")
 
-        # 3. Sustain actually held for what the line claims.
-        held = evidence.get("sustained_s")
-        need = evidence.get("sustain_required_s")
-        if held is not None and need is not None and held + 0.5 < need:
-            problems.append(f"sustained {held}s below the required {need}s")
+        # Alerter invariants.
+        held, need = claimed.get("sustained_s"), claimed.get("sustain_required_s")
+        if held is not None and need is not None:
+            if held + 0.5 < need:
+                problems.append(f"sustained {held}s below the required {need}s")
+            else:
+                out.append(f"     sustained {held:.0f}s of {need:.0f}s required")
+        previous = claimed.get("previous_band")
+        if previous and claimed.get("band"):
+            if signature_severity(claimed["band"]) <= signature_severity(previous):
+                problems.append(
+                    f"re-fire did not worsen: {previous!r} -> {claimed['band']!r}")
+            else:
+                out.append(f"     band worsened {previous.split('|')[-1]} "
+                           f"-> {claimed['band'].split('|')[-1]}")
 
-        # 4. Is there an event close enough that this line is really about it?
-        nearby = [
-            e for e in store.events(limit=200, provider=provider)
-            if abs((parse_ts(e["ts"]) - when).total_seconds()) <= 1800
-        ] if provider else []
-        for event in nearby:
-            out.append(f"     nearby event: {event['kind']} at {event['ts']} "
-                       f"delta={event['detail'].get('delta')}")
-        if nearby and alert["rule"] not in ("burn_anomaly",):
-            kinds = {e["kind"] for e in nearby}
-            if kinds <= {"top_up", "package_reset", "reverted_blip"}:
-                out.append("     note: a normal-operations event sits within 30 min; "
-                           "the line is a projection, not a reaction to it")
+        # Counterfactual: would this alert exist without the event?
+        #
+        # Every discontinuity in the estimation window is tested, not just ones
+        # near the timestamp. A ±30 min filter was the first attempt and it
+        # tested nothing at all: `bounceban`'s top-up sits 44 minutes before its
+        # alert, yet it is inside the window whose slope produced that alert.
+        # Proximity in time is the wrong question; being in the window the
+        # estimate was fitted over is the right one.
+        if state is not None and rule is not None and provider is not None and meta is not None:
+            if not state.cuts:
+                out.append("     no top-up, reset or blip in the estimation window, "
+                           "so nothing to attribute the alert to")
+            for cut_ts, kind, detail in state.cuts:
+                delta = detail.get("delta")
+                if not isinstance(delta, (int, float)):
+                    continue
+                counterfactual = state_from_readings(
+                    provider, meta,
+                    _readings_without(state.readings, cut_ts, float(delta)), when)
+                still = rule(counterfactual, when)
+                verdict = "survives" if still is not None else "DISAPPEARS"
+                out.append(f"     without the {kind} at {iso(cut_ts)} "
+                           f"({delta:+g}): the alert {verdict}")
+                if still is None:
+                    problems.append(
+                        f"caused solely by a {kind} at {iso(cut_ts)}: "
+                        f"removing it removes the alert")
 
         if problems:
-            unexplained += 1
+            failures += 1
             for problem in problems:
                 out.append(f"     UNRECONCILED: {problem}")
         else:
             out.append("     reconciled")
         out.append("")
 
-    out.append(f"unreconciled lines: {unexplained} of {len(lines)}")
-    return "\n".join(out), unexplained
+    # Repeat lines for one key, explained rather than left to look like spam.
+    grouped: dict[tuple[str, Any], list[dict[str, Any]]] = {}
+    for alert in lines:
+        grouped.setdefault((alert["rule"], alert.get("provider")), []).append(alert)
+    repeats = {k: v for k, v in grouped.items() if len(v) > 1}
+    if repeats:
+        out.append("Repeat lines, and what each one added")
+        out.append("")
+        for (rule_name, provider), group in sorted(repeats.items(), key=lambda kv: str(kv[0])):
+            out.append(f"  {provider} / {rule_name}: {len(group)} lines")
+            for prior, line in zip(group, group[1:]):
+                gap = (parse_ts(line["ts"]) - parse_ts(prior["ts"])).total_seconds()
+                before = prior["evidence"].get("runway_h")
+                after = line["evidence"].get("runway_h")
+                moved = (f"runway {before:,.1f} h -> {after:,.1f} h"
+                         if isinstance(before, (int, float)) and isinstance(after, (int, float))
+                         else "band crossing")
+                out.append(
+                    f"    +{gap / 60:5.1f} min  "
+                    f"{str(prior['evidence'].get('band', '')).split('|')[-1]} -> "
+                    f"{str(line['evidence'].get('band', '')).split('|')[-1]}  {moved}")
+        out.append("")
+
+    out.append(f"unreconciled lines: {failures} of {len(lines)}")
+    return "\n".join(out), failures
+
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -2800,14 +2983,25 @@ def main(argv: Sequence[str] | None = None) -> int:
                         help="per-request timeout for --poll")
     args = parser.parse_args(argv)
 
-    store = Store(args.db)
+    audit_lines: list[dict[str, Any]] = []
+    audit_scratch: str | None = None
+    audit_digest_before: str | None = None
+    db_path, alerts_path = args.db, args.alerts
 
-    # Capture the file to be audited *before* replay. Replaying re-derives the
-    # window and appends, so an audit that read the file afterwards would be
-    # grading a file its own run had just extended.
-    audit_lines = read_alert_lines(args.alerts) if args.audit else []
+    if args.audit:
+        # An audit must not be able to change what it is auditing. Replaying
+        # re-derives the window and appends, so the audit runs entirely on
+        # throwaway paths and the submitted file is only ever read. The digest
+        # is taken before and compared after, so "side-effect free" is checked
+        # rather than intended.
+        audit_lines = read_alert_lines(args.alerts)
+        audit_digest_before = _file_digest(args.alerts)
+        audit_scratch = tempfile.mkdtemp(prefix="explee-audit-")
+        db_path = os.path.join(audit_scratch, "audit.sqlite")
+        alerts_path = os.path.join(audit_scratch, "audit-alerts.jsonl")
 
-    alerter = Alerter(store, args.alerts)
+    store = Store(db_path)
+    alerter = Alerter(store, alerts_path)
     ingestor = Ingestor(store, alerter, args.raw)
 
     started = time.monotonic()
@@ -2821,6 +3015,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.audit:
         report, unreconciled = audit_alerts(store, audit_lines)
         print(report)
+        digest_after = _file_digest(args.alerts)
+        untouched = digest_after == audit_digest_before
+        print(f"\nauditee sha256[:16]: {audit_digest_before} -> {digest_after}  "
+              f"{'unchanged' if untouched else 'MODIFIED'}")
+        if audit_scratch:
+            shutil.rmtree(audit_scratch, ignore_errors=True)
+        if not untouched:
+            print("the audit modified the file it was auditing", file=sys.stderr)
+            return 1
         return 1 if unreconciled else 0
 
     if args.once:

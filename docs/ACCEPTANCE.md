@@ -66,11 +66,11 @@ TRACE.md."*
 |---|---|---|---|---|---|---|
 | 2.1 | Task directory | `task2-stt-benchmark/` | `surface:5` | PRESENT — harness, glossary, reference policy, frozen pre-registration | `test -d` | — |
 | 2.2 | **"the same audio (~1 hour)"** | frozen corpus | `surface:5` | **DONE** — 120 hashed segments, exactly 3600.0 s, span rule declared *before* cutting | manifest + SHA-256 of publisher original | — |
-| 2.3 | **"≥5 STT engines"** | — | `surface:5` | **ABSENT** — 6 planned so one failure cannot drop below 5 | count engines with raw output on disk | — |
+| 2.3 | **"≥5 STT engines"** | `task2-stt-benchmark/data/raw/` | `surface:5` | **3 of 5 — NON-COMPLIANT on a countable requirement.** Whisper large-v3, large-v3-turbo, Parakeet-TDT-0.6b-v3, full precision, all 120/120 segments, zero empty outputs. Canary-1b-v2 and GigaAM blocked with named causes. Slate extension to two more open models directed 20:32Z | `ls task2-stt-benchmark/data/raw/ \| wc -l` → must be ≥5 | — |
 | 2.4 | **"the eval behind it"** — design frozen before results | `PREREGISTRATION.md` | `surface:5` | **DONE** — `FROZEN` anchored to commit `9fd6ff8`, not a self-declared stamp | `git show 9fd6ff8` | `9fd6ff8` |
-| 2.5 | Gold reference transcript | — | `surface:5` | **ABSENT — critical path**, two annotators + adjudication. Nothing can be scored without it | policy pre-registered; adjudication recorded | — |
+| 2.5 | Reference transcript for ranking | — | `surface:5` | **NOT PRODUCED, deliberately.** No independent reference existed: no annotator, and no publisher transcript for this episode. A reference drafted from engines under test measures agreement, not accuracy — the code refuses it and a test asserts the refusal. **No ranking is published**, which is the honest result rather than a missing one | test asserting `reference.build` fails closed | — |
 | 2.6 | Raw engine outputs, hashed before normalisation | — | `surface:5` | ABSENT | hash each raw output | — |
-| 2.7 | **"a published comparison report … host it anywhere, send the link"** | `https://stt.nddev.it.com/` | `surface:3` built the host, `surface:5` writes the report | **HOST LIVE, REPORT PENDING** — HTTP 200, 725 B, Let's Encrypt cert `CN=stt.nddev.it.com`, no auth, verified externally 19:45Z. Only the report content is outstanding | `curl -sSI https://stt.nddev.it.com/` + `openssl s_client` for cert subject/issuer | — |
+| 2.7 | **"a published comparison report … send the link"** | `https://stt.nddev.it.com/` | `surface:5` | **DONE** — verified externally 20:31Z: HTTP/2 200, 16898 B, Let's Encrypt `CN=stt.nddev.it.com`, no login. Report states its own shortfall rather than hiding it | `curl` from outside the host + `openssl s_client` | at `ec624c6` |
 | 2.8 | **TRACE.md** | — | `surface:5` | ABSENT | tool header; lossy/leak scans | — |
 | 2.9 | Licence posture stated, `NC` named as the contestable leg | report | `surface:5` | **required** — not a footnote | report text | — |
 

@@ -674,6 +674,64 @@ def test_a_top_up_near_the_end_does_not_contaminate_the_burn_rate():
         f"a late top-up contaminated the rate: {estimate.rate_per_h}"
 
 
+def _package_state(provider, remaining, package, burn, dispersion, now):
+    state = _state(provider=provider, pay_model="credits_package", unit="credits",
+                   value=float(remaining))
+    state.package = float(package)
+    state.refresh = "2026-09-01"
+    state.burn = m.Estimate(burn, -burn, 400, 7200.0, dispersion)
+    m._project(state, now)
+    return state
+
+
+def test_a_projection_must_survive_its_own_estimates_uncertainty():
+    """The real discriminator, with the numbers that motivated it.
+
+    `resend` at 16:48Z projected exhaustion on a burn of 226.6 credits/h whose
+    MAD was 3.7 — the claim holds comfortably if the rate is a dispersion
+    slower. `bounceban` at 18:44Z projected on 37.6/h with a MAD of 4.7 and only
+    a 16.9 h margin, and the claim evaporates. Both cleared the flat
+    2%-of-package threshold, so that threshold was not the thing telling them
+    apart.
+    """
+    at = m.parse_ts("2026-08-23T18:44:34Z")
+
+    solid = _package_state("resend", 41_233, 50_000, burn=226.6, dispersion=3.7, now=at)
+    assert m.rule_package_exhaustion(solid, at) is not None, \
+        "a well-supported projection must still fire"
+
+    marginal = _package_state("bounceban", 6_749, 8_000, burn=37.6, dispersion=4.7, now=at)
+    assert marginal.runway_h is not None and marginal.hours_to_refresh is not None
+    assert marginal.runway_h < marginal.hours_to_refresh, \
+        "the fixture must still project exhaustion on the point estimate"
+    assert m.rule_package_exhaustion(marginal, at) is None, \
+        "a projection that flips one dispersion slower must not fire"
+
+
+def test_the_uncertainty_bound_is_the_providers_own_dispersion():
+    """Not a tuned constant: a steady provider is held to a tighter bound."""
+    burn = m.Estimate(100.0, -100.0, 400, 7200.0, 5.0)
+    assert m.slower_by_one_dispersion(burn) == pytest.approx(95.0)
+    noisy = m.Estimate(100.0, -100.0, 400, 7200.0, 60.0)
+    assert m.slower_by_one_dispersion(noisy) == pytest.approx(40.0)
+    # Never negative: a dispersion wider than the rate floors at zero.
+    wild = m.Estimate(10.0, -10.0, 400, 7200.0, 999.0)
+    assert m.slower_by_one_dispersion(wild) == 0.0
+
+
+def test_a_runway_alert_also_survives_its_uncertainty():
+    state = _state(provider="openrouter", value=243.99)
+    state.burn = m.Estimate(5.10, -5.10, 400, 7200.0, 0.05)
+    m._project(state, T0)
+    assert m.rule_runway(state, T0) is not None, "a tight estimate must still fire"
+
+    wobbly = _state(provider="openrouter", value=243.99)
+    wobbly.burn = m.Estimate(5.10, -5.10, 400, 7200.0, 2.5)   # half the rate
+    m._project(wobbly, T0)
+    assert m.rule_runway(wobbly, T0) is None, \
+        "a rate this uncertain cannot support a runway claim"
+
+
 def test_a_projection_will_not_fire_off_a_freshly_cut_segment():
     """Right after a top-up there is not yet enough evidence to project from."""
     state = _state(provider="findymail", pay_model="credits_package",

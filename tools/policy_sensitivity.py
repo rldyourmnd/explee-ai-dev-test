@@ -82,12 +82,14 @@ def run(label: str, policy: dict[str, Any] | None = None,
         baseline: dict[str, Any] | None = None) -> dict[str, Any]:
     """Replay the whole window under one configuration, into throwaway state."""
     workdir = Path(tempfile.mkdtemp())
+    # setattr rather than attribute assignment: `m` is a dynamically loaded
+    # module, so a static checker cannot know these names exist on it.
     saved_policy, saved_baseline = m.POLICY, m.BASELINE
     try:
         if policy:
-            m.POLICY = replace(m.POLICY, **policy)
+            setattr(m, "POLICY", replace(m.POLICY, **policy))
         if baseline:
-            m.BASELINE = replace(m.BASELINE, **baseline)
+            setattr(m, "BASELINE", replace(m.BASELINE, **baseline))
         store = m.Store(str(workdir / "s.sqlite"))
         alerts = workdir / "a.jsonl"
         ingestor = m.Ingestor(store, m.Alerter(store, str(alerts)), str(RAW))
@@ -96,7 +98,8 @@ def run(label: str, policy: dict[str, Any] | None = None,
             ingestor.maybe_evaluate(ingestor.last_ingest_wall, force=True)
         lines = m.read_alert_lines(str(alerts))
     finally:
-        m.POLICY, m.BASELINE = saved_policy, saved_baseline
+        setattr(m, "POLICY", saved_policy)
+        setattr(m, "BASELINE", saved_baseline)
         shutil.rmtree(workdir, ignore_errors=True)
 
     bands = Counter((x["rule"], x["provider"], x["evidence"].get("band")) for x in lines)
