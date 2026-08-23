@@ -1,8 +1,16 @@
 # Pre-registration — STT benchmark evaluation design
 
-**Status: FROZEN 2026-08-23T19:30Z.** Declared before any corpus was selected,
-before any engine was called, and before any engine output existed in this
-repository. Nothing below may be changed after the first engine result is read.
+**Status: FROZEN — commit `9fd6ff8`, committed 2026-08-23T19:00:14Z.** Declared
+before any corpus was selected, before any engine was called, and before any
+engine output existed in this repository.
+Nothing below may be changed after the first engine result is read.
+
+The freeze timestamp is the commit's, read from git, not typed by the author.
+An earlier draft of this header carried a hand-written time that was both wrong
+and in the future relative to the work it described; it was corrected in the
+commit recorded under "Amendments" below. A pre-registration is worth exactly as
+much as its dating, so the dating is delegated to an object nobody here writes
+by hand: verify with `git log -1 --format=%cI 9fd6ff8`.
 If something here turns out to be wrong, the amendment is recorded as an
 amendment — dated, justified, and reported alongside the original — never as a
 silent edit.
@@ -114,14 +122,20 @@ human** — the slate is:
 
 | Engine | Access route under this envelope | Terminology track |
 |---|---|---|
-| Whisper large-v3 (self-hosted) | local inference, no account, fully reproducible | initial-prompt biasing |
-| Parakeet / NeMo (self-hosted) | local inference, no account | none |
+| Whisper large-v3 (self-hosted, whisper.cpp GGML q5_0) | local inference, no account, fully reproducible | initial-prompt biasing |
+| Parakeet-TDT-0.6b-v3 int8 (self-hosted, ONNX Runtime) | local inference, no account | none |
 | Deepgram Nova-3 multilingual | free credit on signup | keyterm prompting |
 | OpenAI GPT Transcribe | existing credit | prompt / keyword hints |
 | ElevenLabs Scribe v2 | free tier | keyterm prompting |
 | Speechmatics | free trial tier | custom dictionary |
 | Google Chirp 3 | free tier, if reachable without new payment details | phrase sets |
 | Azure Speech | free tier, if reachable without new payment details | phrase lists |
+
+The two self-hosted configurations are taken from `Zackriya-Solutions/meetily`,
+a shipped local meeting-transcription product; its *preprocessing* is
+deliberately not adopted, because giving the local engines cleaned audio the
+cloud engines never receive would void §7. The reasoning is in
+`docs/self-hosted-engines.md`.
 
 The two self-hosted engines are the floor: they need no account, no payment
 details and no vendor permission, so the benchmark cannot fall below two engines
@@ -161,10 +175,24 @@ Stated in advance, so the limitations section is not written to fit the result:
 
 ## 11. Frozen artefacts
 
-| Artefact | Frozen at | Verified by |
+All four design artefacts entered the repository in the **same commit**,
+`9fd6ff8` at 2026-08-23T19:00:14Z, which is also the first commit in this
+repository to contain any Task 2 file. There is therefore no window in which one
+of them could have been adjusted to fit another, and no engine output existed
+anywhere in the tree at that time.
+
+| Artefact | Frozen by | Verified by |
 |---|---|---|
-| `glossary.json` | 2026-08-23T19:05Z | SHA-256 recorded in every run report |
-| `docs/reference-policy.md` | 2026-08-23T19:20Z | committed before corpus selection |
-| this file | 2026-08-23T19:30Z | committed before the first engine call |
-| metric implementation + tests | 2026-08-23T19:15Z | `tests/test_task2_*.py`, 44 tests |
+| `glossary.json` | `9fd6ff8` | SHA-256 recorded in every run report |
+| `docs/reference-policy.md` | `9fd6ff8` | committed before corpus selection |
+| this file | `9fd6ff8` | committed before the first engine call |
+| metric implementation + tests | `9fd6ff8` | `tests/test_task2_*.py`, 44 tests |
 | corpus manifest | pending selection | `harness/manifest.py`, hashed per segment |
+
+## 12. Amendments
+
+Amendments are recorded, never applied silently.
+
+| When | Change | Reason |
+|---|---|---|
+| the first Task 2 commit after `9fd6ff8` (`git log --oneline 9fd6ff8..HEAD -- task2-stt-benchmark`) | Replaced hand-written freeze timestamps in this file, `docs/reference-policy.md`, `glossary.json` and `docs/corpus-candidates.md` with the commit that contains them. | The typed times (19:05–19:50Z) were assumed rather than read from a clock, and were later than the work they dated — the freeze commit is 19:00:14Z. No design content changed; only the dating, and only in the direction of being checkable. |

@@ -1,7 +1,8 @@
 # Corpus candidates and their rights
 
-Written 2026-08-23T19:50Z, **after** the evaluation design was frozen and before
-any candidate was downloaded, so the corpus cannot be chosen to suit an engine.
+Written after the evaluation design was frozen (commit `9fd6ff8`,
+2026-08-23T19:00:14Z) and before any candidate was downloaded, so the corpus
+cannot be chosen to suit an engine.
 Corpus selection is the orchestrator's decision (`docs/briefs/orchestrator-mandate.md`);
 this document supplies the evidence for it.
 
@@ -84,7 +85,7 @@ to any vendor.
 
 ## Environment blockers found while preparing (all local, all fixable)
 
-Checked on this machine at 19:45Z:
+Checked on this machine shortly before the freeze commit:
 
 | Requirement | State | Consequence |
 |---|---|---|

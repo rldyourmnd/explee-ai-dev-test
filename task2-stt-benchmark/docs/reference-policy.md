@@ -1,7 +1,9 @@
 # Reference-transcript policy
 
-**Status: FROZEN 2026-08-23T19:20Z — written and committed before any audio was
-selected and before any engine output existed.**
+**Status: FROZEN — commit `9fd6ff8`, 2026-08-23T19:00:14Z. Written and committed
+before any audio was selected and before any engine output existed.** The date
+is the commit's, read from git rather than typed here; see
+`PREREGISTRATION.md` §12 for why that distinction is not pedantry.
 
 A word-error rate is a comparison against a reference, so the reference *is* the
 metric. Written after hearing the audio, this document would be a description of

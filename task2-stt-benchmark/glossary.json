@@ -1,7 +1,8 @@
 {
   "schema": "explee-stt-glossary/1",
   "status": "FROZEN",
-  "frozen_at": "2026-08-23T19:05Z",
+  "frozen_at": "2026-08-23T19:00:14Z",
+  "frozen_by_commit": "9fd6ff8",
   "frozen_before": "any engine output existed; see PREREGISTRATION.md",
   "policy": [
     "This list is fixed before scoring and is NOT extended after hearing engine output.",
