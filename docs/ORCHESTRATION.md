@@ -5,7 +5,7 @@ single place that says what is true right now, with the measurement behind each
 claim. Maintained by the orchestrator (`surface:3`); workers report, they do not
 edit this file.
 
-**Last heartbeat: 2026-08-23T18:28Z.**
+**Last heartbeat: 2026-08-23T18:40Z.**
 
 ## STATE CHANGE 18:28Z — all three workers are idle
 
@@ -24,6 +24,26 @@ window.
 Verified: `task1-spend-observability/data/` holds `monitor.sqlite` and
 `raw_samples.jsonl` but **no `alerts.jsonl`**, and `alerts.jsonl` is a named
 deliverable in the README status table. It is missing from the repository.
+
+**The deliverable exists; only the copy into the repo is missing.** Confirmed
+read-only on the host at 18:40Z, `/opt/explee-spend-monitor/state/`:
+
+| | |
+|---|---|
+| `alerts.jsonl` | 7688 B, **10 alerts**, last written 18:03Z |
+| Rules fired | `package_exhaustion` ×7, `runway` ×2, `burn_anomaly` ×1 |
+| Example | `openrouter (Groq, prepaid_balance) reaches zero in 47.9 h at the observed burn` |
+| Archived | `alerts.pre-bands.…jsonl`, `alerts.pre-blip-fix.…jsonl` — prior rule versions kept rather than overwritten |
+
+No alert since 18:03Z while the monitor keeps writing (`monitor.sqlite-wal`
+touched 18:40Z), which is the expected behaviour after `6ce1e80` made alert lines
+fire on material change instead of cooldown expiry. So the quiet log is evidence
+the fix works, not evidence the monitor stalled.
+
+This session did **not** copy the file in. It belongs to
+`task1-spend-observability/`, and the standing rule is that no session edits
+another's directory — a file appearing under a working agent costs more confusion
+than the copy saves.
 
 **Not nudging it, deliberately.** Its input carries the feedback overlay, and the
 first character of any message could register as a `1`/`2`/`3`/`0` selection.
@@ -75,15 +95,15 @@ endpoint, so an interruption is unrecoverable and cannot be faked.
 |---|---|
 | State | `active` |
 | T0 | `2026-08-23T16:13:26.775Z` (first record, matches the logged T0) |
-| Last record | `2026-08-23T18:27:33.903Z`, 24 s before the check |
-| Lines | 4304 (+384 since 18:15Z) |
+| Last record | `2026-08-23T18:39:34.477Z`, 25 s before the check |
+| Lines | 4688 (+384 since 18:27Z) |
 | Growth | 32.0 lines/min over 12.0 min — matches the expected ~32 |
 | Gaps > 45 s | **0**, verified across every consecutive record pair |
 | Malformed lines | 0 |
-| Elapsed | 2 h 14 m of the 6 h minimum |
-| 6 h mark | `2026-08-23T22:14Z` — **3 h 46 m remaining** |
+| Elapsed | 2 h 26 m of the 6 h minimum |
+| 6 h mark | `2026-08-23T22:14Z` — **3 h 34 m remaining** |
 
-Ten consecutive checks, 16:48Z → 18:28Z, every one `active` with zero gaps and
+Eleven consecutive checks, 16:48Z → 18:40Z, every one `active` with zero gaps and
 growth within 31.5–32.2 lines/min. The collector has been the least troublesome
 part of this run.
 
@@ -381,3 +401,4 @@ entries promptly, at the same time as the `--list` warning.
 | 18:04Z | `active`, 3536 lines, +31.9/min, 0 gaps | T1 committed `6ce1e80` (alert lines on material change, not cooldown expiry) and is mid-edit on top-up segment cuts; gates 114 passed, pushed; T3 idle 25 min, correctly parked; T2 unchanged. No new blockers |
 | 18:16Z | `active`, 3920 lines, +32.2/min, 0 gaps | T1 shipped 4 commits (concurrency check, replay determinism, testable `/healthz`, per-provider discontinuities computed once) and armed a second 5-min watch on rule 1; **new decision surfaced — third-party tunnel as a DNS alternative, flagged not taken**; gates 117 passed, pushed; T3 and T2 unchanged |
 | 18:28Z | `active`, 4304 lines, +32.0/min, 0 gaps | **All three workers idle**; no commits, nothing to push. `alerts.jsonl` confirmed missing from the repo while Task 1 sits behind a feedback overlay. Every open item is now an owner decision |
+| 18:40Z | `active`, 4688 lines, +32.0/min, 0 gaps | Stall unchanged, ~24 min for `surface:2`. Confirmed on the host that `alerts.jsonl` exists with 10 alerts across 3 rules — the deliverable is real, only the copy into the repo is missing. Escalation not repeated; already open since 18:28Z |
