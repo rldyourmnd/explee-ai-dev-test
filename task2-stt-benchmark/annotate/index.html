@@ -1,0 +1,160 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Gold reference annotation</title>
+<style>
+  :root { --bg:#0f1115; --fg:#e6e6e6; --dim:#8b93a7; --line:#262a35; --ok:#4ea172; --warn:#c9a227; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 ui-sans-serif,system-ui,sans-serif; }
+  header { display:flex; gap:1rem; align-items:baseline; padding:.6rem 1rem; border-bottom:1px solid var(--line); }
+  header b { font-size:1rem; } header span { color:var(--dim); font-size:.85rem; }
+  main { display:grid; grid-template-columns: 1fr 20rem; gap:1rem; padding:1rem; align-items:start; }
+  textarea { width:100%; min-height:9rem; background:#161923; color:var(--fg); border:1px solid var(--line);
+             border-radius:6px; padding:.7rem; font:15px/1.6 ui-monospace,monospace; resize:vertical; }
+  .row { display:flex; gap:.5rem; align-items:center; margin:.5rem 0; flex-wrap:wrap; }
+  button { background:#1d2130; color:var(--fg); border:1px solid var(--line); border-radius:6px;
+           padding:.4rem .7rem; cursor:pointer; font-size:.9rem; }
+  button:hover { border-color:#3a4056; } button.primary { background:#223047; }
+  .card { border:1px solid var(--line); border-radius:8px; padding:.7rem; }
+  .card h3 { margin:.2rem 0 .5rem; font-size:.85rem; color:var(--dim); text-transform:uppercase; letter-spacing:.06em; }
+  .rule { font-size:.82rem; margin:.35rem 0; color:#c9cede; } .rule i { color:var(--dim); font-style:normal; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(3.4rem,1fr)); gap:3px; max-height:9rem; overflow:auto; }
+  .grid a { display:block; text-align:center; font-size:.72rem; padding:.2rem 0; border-radius:4px;
+            background:#161923; color:var(--dim); text-decoration:none; border:1px solid transparent; }
+  .grid a.done { background:#16281f; color:var(--ok); } .grid a.here { border-color:#5b6a8a; color:var(--fg); }
+  .flag { color:var(--warn); font-size:.82rem; } .ok { color:var(--ok); }
+  kbd { background:#1d2130; border:1px solid var(--line); border-radius:4px; padding:0 .3rem; font-size:.8rem; }
+</style>
+<header>
+  <b>Gold reference</b>
+  <span id="who"></span>
+  <span id="pos"></span>
+  <span id="count"></span>
+  <span style="margin-left:auto" id="status"></span>
+</header>
+<main>
+  <div>
+    <audio id="audio" controls style="width:100%"></audio>
+    <div class="row">
+      <button onclick="replay()">Replay <kbd>r</kbd></button>
+      <button onclick="slower()">0.75×</button>
+      <button onclick="normal()">1×</button>
+      <button onclick="jump(-1)">Prev <kbd>←</kbd></button>
+      <button onclick="jump(1)">Next <kbd>→</kbd></button>
+      <button class="primary" onclick="save(true)">Save + next <kbd>ctrl+enter</kbd></button>
+      <button onclick="insertUnintelligible()">[unintelligible] <kbd>ctrl+u</kbd></button>
+    </div>
+    <p style="color:var(--dim);font-size:.82rem;margin:.2rem 0">
+      One line per speaker turn, prefixed with the label:
+      <code>S1: мы перенесли витрину в ClickHouse</code>
+    </p>
+    <textarea id="text" spellcheck="false" placeholder="S1: ..."></textarea>
+    <div class="row"><span id="flags"></span></div>
+    <div class="card" style="margin-top:.6rem">
+      <h3>Segment</h3>
+      <div style="font-size:.82rem;color:var(--dim)" id="meta"></div>
+    </div>
+  </div>
+  <aside>
+    <div class="card">
+      <h3>Progress</h3>
+      <div class="grid" id="grid"></div>
+    </div>
+    <div class="card" style="margin-top:.7rem">
+      <h3>Policy</h3>
+      <div id="policy"></div>
+    </div>
+  </aside>
+</main>
+<script>
+let S = null, i = 0;
+
+const el = id => document.getElementById(id);
+
+async function boot() {
+  S = await (await fetch('/state')).json();
+  el('who').textContent = 'annotator: ' + S.annotator;
+  el('policy').innerHTML = S.policy
+    .map(([id, t]) => `<div class="rule"><i>${id}</i> ${t}</div>`).join('');
+  const saved = Object.keys(S.saved);
+  i = saved.length ? Math.min(S.segments.findIndex(s => !S.saved[s.id]), S.segments.length - 1) : 0;
+  if (i < 0) i = 0;
+  render();
+  document.addEventListener('keydown', keys);
+  el('text').addEventListener('input', flag);
+}
+
+function render() {
+  const s = S.segments[i];
+  el('pos').textContent = `${s.id} (${i + 1}/${S.segments.length})`;
+  el('count').textContent = `${Object.keys(S.saved).length} saved`;
+  el('meta').textContent =
+    `source ${fmt(s.start_s)}–${fmt(s.end_s)} · sha256 ${s.sha256.slice(0, 16)}…`;
+  el('audio').src = '/audio/' + s.id;
+  el('audio').playbackRate = 1;
+  el('text').value = (S.saved[s.id]?.lines || []).join('\n');
+  el('grid').innerHTML = S.segments.map((x, n) =>
+    `<a href="#" onclick="go(${n});return false" class="${S.saved[x.id] ? 'done' : ''} ${n === i ? 'here' : ''}">${n}</a>`
+  ).join('');
+  document.querySelector('.grid .here')?.scrollIntoView({block: 'nearest'});
+  flag();
+  el('text').focus();
+}
+
+const fmt = t => `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+
+function flag() {
+  const lines = el('text').value.split('\n').filter(l => l.trim());
+  const problems = [];
+  for (const line of lines) {
+    if (!/^S[1-9][0-9]*:/.test(line.trim())) problems.push('R10: line without an S<n>: label');
+  }
+  const body = lines.join(' ');
+  if (/\b[а-яa-z]\s+[а-яa-z]\s+[а-яa-z]\b/i.test(body)) problems.push('R6: looks like a spelled-out abbreviation');
+  if (/(триста|двести|сорок|пятьдесят|тысяч[аи]?)/i.test(body)) problems.push('R5: numeral written as a word');
+  if (/(кликхаус|кафк[аи]|воркер|постгрес{1,2}\b)/i.test(body)) problems.push('R1: Cyrillic form of a Latin-script term?');
+  el('flags').innerHTML = problems.length
+    ? problems.map(p => `<span class="flag">⚠ ${p}</span>`).join('<br>')
+    : '<span class="ok">✓ no mechanical policy flags</span>';
+}
+
+async function save(advance) {
+  const s = S.segments[i];
+  const lines = el('text').value.split('\n').map(l => l.trim()).filter(Boolean);
+  const words = [];
+  for (const line of lines) {
+    const m = line.match(/^(S[1-9][0-9]*)\s*:\s*(.*)$/);
+    if (!m) continue;
+    for (const w of m[2].split(/\s+/).filter(Boolean)) {
+      words.push({text: w, start: null, end: null, speaker: m[1]});
+    }
+  }
+  const entry = {segment_id: s.id, lines, words, notes: ''};
+  await fetch('/save', {method: 'POST', body: JSON.stringify(entry)});
+  S.saved[s.id] = entry;
+  el('status').textContent = 'saved ' + s.id;
+  setTimeout(() => el('status').textContent = '', 1500);
+  if (advance && i < S.segments.length - 1) { i++; render(); } else { render(); }
+}
+
+function go(n) { i = n; render(); }
+function jump(d) { i = Math.max(0, Math.min(S.segments.length - 1, i + d)); render(); }
+function replay() { const a = el('audio'); a.currentTime = 0; a.play(); }
+function slower() { el('audio').playbackRate = 0.75; }
+function normal() { el('audio').playbackRate = 1; }
+function insertUnintelligible() {
+  const t = el('text');
+  const at = t.selectionStart;
+  t.value = t.value.slice(0, at) + '[unintelligible]' + t.value.slice(t.selectionEnd);
+  t.focus(); flag();
+}
+
+function keys(e) {
+  if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); save(true); }
+  else if (e.ctrlKey && e.key === 'u') { e.preventDefault(); insertUnintelligible(); }
+  else if (e.target.tagName === 'TEXTAREA') return;
+  else if (e.key === 'r') { e.preventDefault(); replay(); }
+  else if (e.key === 'ArrowLeft') jump(-1);
+  else if (e.key === 'ArrowRight') jump(1);
+}
+
+boot();
+</script>
