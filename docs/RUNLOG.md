@@ -652,3 +652,39 @@ a redaction filter written during this session silently did nothing — macOS `s
 does not support `\b`, so the pattern matched nothing and printed exactly what it
 was meant to hide. The filter was fixed; the earlier output stays in the trace,
 because that is what verbatim means.
+
+### 21:00Z — polling-loop tests, and the index race caught a third time
+
+**The tests.** With the timeline extended, the single-file path is worth testing
+properly rather than smoke-testing. Everything before exercised a single
+`Collector.cycle()`; nothing exercised the loop that actually runs for hours.
+Three tests added, all hermetic against a local fake API so they need no network
+and put no second client in front of the real one:
+
+- the loop repeats at its interval, appends as it goes, and stops when asked
+  rather than on the next timer tick;
+- a cycle that raises does not end collection, and the failure reaches stderr —
+  a window that cannot be recreated must not be lost to one bad cycle;
+- polled records are picked up by a concurrently tailing ingestor, which is the
+  actual `--poll` shape. Testing the halves separately would not catch them
+  disagreeing about the file.
+
+290 tests, ruff and pyright clean. Not deployed: nothing about the running
+system changes before the six-hour snapshot.
+
+**The race, third occurrence.** These tests landed in `1282ad1`, a Task 2
+commit, exactly as an earlier batch landed in `7a90b2f`. The mitigation adopted
+after the second occurrence — stage narrowly, commit immediately — did not work,
+because it does not address the mechanism: `git add` writes to an index shared
+by every session in this worktree, and any window at all between staging and
+committing is enough for another session's `git commit` to sweep the staged
+files in.
+
+**The actual fix is to never leave files staged.** `git commit -- <paths>`
+commits the working-tree content of those paths in one operation, without
+staging anything first, so there is no window and no shared state to lose. That
+is what this entry is being committed with, and what Task 1 uses from here.
+
+Nothing has been lost in any of the three occurrences and the content is correct
+each time. What is lost is discoverability: the reasoning for a Task 1 change
+sits under a Task 2 subject line, where nobody looking for it will find it.
