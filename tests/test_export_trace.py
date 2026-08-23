@@ -151,3 +151,65 @@ def test_tool_result_list_content_is_flattened():
     blocks = [{"type": "text", "text": "line one"}, {"type": "image", "source": {}}]
     out = et.render_tool_result(blocks)
     assert "line one" in out and "image omitted" in out
+
+
+def _fake_projects(tmp_path, layout):
+    """Build a fake ~/.claude/projects tree: {slug: [session_stem, ...]}."""
+    for slug, sessions in layout.items():
+        project = tmp_path / slug
+        project.mkdir(parents=True)
+        for stem in sessions:
+            (project / f"{stem}.jsonl").write_text("{}\n", encoding="utf-8")
+    return tmp_path
+
+
+# The regression this file exists for: an unscoped --list globbed every project
+# on the machine, so one call wrote 20 rows of unrelated client project names
+# into a trace that publishes verbatim, and the trace had to be quarantined.
+def test_list_sessions_never_names_another_project(tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(et, "PROJECTS", _fake_projects(tmp_path, {
+        "-Users-dev-work-this-project": ["aaaaaaaa-0000-0000-0000-000000000000"],
+        "-Users-dev-work-unrelated-client": ["bbbbbbbb-1111-1111-1111-111111111111"],
+    }))
+
+    assert et.list_sessions("-Users-dev-work-this-project") == 0
+
+    captured = capsys.readouterr()
+    assert "aaaaaaaa-0000-0000-0000-000000000000" in captured.out
+    assert "unrelated-client" not in captured.out + captured.err
+    assert "bbbbbbbb" not in captured.out + captured.err
+
+
+def test_list_sessions_defaults_to_the_current_project(tmp_path, capsys, monkeypatch):
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.setattr(et, "PROJECTS", _fake_projects(tmp_path / "projects", {
+        et.project_slug(cwd): ["cccccccc-2222-2222-2222-222222222222"],
+        "-Users-dev-work-unrelated-client": ["bbbbbbbb-1111-1111-1111-111111111111"],
+    }))
+    monkeypatch.chdir(cwd)
+
+    assert et.list_sessions(None) == 0
+
+    captured = capsys.readouterr()
+    assert "cccccccc-2222-2222-2222-222222222222" in captured.out
+    assert "unrelated-client" not in captured.out + captured.err
+
+
+def test_list_sessions_unknown_project_does_not_enumerate_the_others(tmp_path, capsys, monkeypatch):
+    # The helpful version of this error - "did you mean one of these?" - would
+    # reintroduce the leak on the failure path.
+    monkeypatch.setattr(et, "PROJECTS", _fake_projects(tmp_path, {
+        "-Users-dev-work-unrelated-client": ["bbbbbbbb-1111-1111-1111-111111111111"],
+    }))
+
+    assert et.list_sessions("-Users-dev-work-absent") == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "unrelated-client" not in captured.err
+    assert "bbbbbbbb" not in captured.err
+
+
+def test_project_slug_matches_claude_code_layout():
+    assert et.project_slug(Path("/Users/dev/work/proj")) == "-Users-dev-work-proj"

@@ -25,7 +25,24 @@
 
    ```bash
    grep -oE '\b[0-9]{1,3}(\.[0-9]{1,3}){3}\b' TRACE.md | sort -u
-   grep -c HostName TRACE.md          # must be 0
+   grep -cE '^[[:space:]]*HostName[[:space:]]+' TRACE.md   # must be 0
+   ```
+
+   The `HostName` pattern is anchored to the start of a line because that is
+   what an SSH config block looks like. The older bare-word `grep -c HostName`
+   could never reach 0 in a trace that quotes this rule, or that shows the scan
+   being run — it flagged its own instructions. `HostName\s+\S+` has the same
+   flaw: in `grep -c HostName TRACE.md` the filename is the non-space token.
+
+   These two scans test for IPs and SSH config. They do not test for project or
+   client names, and a trace that passes them is not thereby clean: on
+   2026-08-23 an unscoped `--list` put 20 rows of an unrelated project's name
+   into a task trace that passed both scans, and the trace was quarantined. A
+   scan licenses a conclusion only about the pattern it matches. Before
+   publishing, also confirm no foreign project slug appears:
+
+   ```bash
+   grep -oE '\-Users-[A-Za-z0-9-]+' TRACE.md | sort -u   # expect only this project
    ```
 
 4. **Traces are exported, never written.** A TRACE.md is produced only by

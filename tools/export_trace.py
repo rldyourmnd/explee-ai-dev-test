@@ -15,7 +15,8 @@ so the leak gets fixed at the source instead of being papered over.
 
 Usage:
     uv run tools/export_trace.py --session <uuid> --out task1/TRACE.md --title "Task 1"
-    uv run tools/export_trace.py --list
+    uv run tools/export_trace.py --list            # this project only
+    uv run tools/export_trace.py --list --project <slug>
 """
 from __future__ import annotations
 
@@ -28,6 +29,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 PROJECTS = Path.home() / ".claude" / "projects"
+
+def project_slug(path: Path | str) -> str:
+    """Claude Code's on-disk directory name for a working directory.
+
+    Session logs live at `~/.claude/projects/<slug>/<uuid>.jsonl`, where the
+    slug is the absolute working directory with every separator replaced by a
+    dash. A slug is therefore a filesystem path, which is why discovery in this
+    tool is scoped rather than global: see `list_sessions`.
+    """
+    return str(Path(path).resolve()).replace("/", "-")
+
 
 # Patterns that must never reach a published trace. Ordered most specific first
 # so the reported reason is the useful one.
@@ -239,17 +251,31 @@ def build(records: list[dict], title: str, session_id: str, source: Path,
     return "\n".join(out), findings
 
 
-def list_sessions() -> None:
+def list_sessions(project: str | None) -> int:
+    """List sessions for exactly one project.
+
+    Scoped deliberately. This listing goes into a trace that publishes verbatim,
+    and an earlier unscoped version globbed every project on the machine, so a
+    single --list put 20 rows of unrelated client project names into a Task 3
+    trace and forced it to be quarantined. Nothing here may widen past the one
+    project the caller asked for - including the error path, which must not
+    name the projects it found instead.
+    """
+    slug = project or project_slug(Path.cwd())
+    target = PROJECTS / slug
+    if not target.is_dir():
+        print(f"no sessions for project {slug!r} under {PROJECTS}.\n"
+              f"pass --project <slug> if the trace lives elsewhere.", file=sys.stderr)
+        return 2
+
     rows = []
-    for project in sorted(PROJECTS.iterdir()):
-        if not project.is_dir():
-            continue
-        for jsonl in project.glob("*.jsonl"):
-            stat = jsonl.stat()
-            rows.append((stat.st_mtime, project.name, jsonl.stem, stat.st_size))
-    for mtime, project, session, size in sorted(rows, reverse=True)[:40]:
+    for jsonl in target.glob("*.jsonl"):
+        stat = jsonl.stat()
+        rows.append((stat.st_mtime, jsonl.stem, stat.st_size))
+    for mtime, session, size in sorted(rows, reverse=True)[:40]:
         when = datetime.fromtimestamp(mtime, timezone.utc).strftime("%Y-%m-%d %H:%M")
-        print(f"{when}  {size/1024:>9.0f}K  {session}  {project}")
+        print(f"{when}  {size/1024:>9.0f}K  {session}  {slug}")
+    return 0
 
 
 def main() -> int:
@@ -270,12 +296,12 @@ def main() -> int:
     parser.add_argument("--allow-secrets", action="store_true",
                         help="blanket override; prefer --allow-finding, which cannot mask a "
                              "credential that appears somewhere you did not review")
-    parser.add_argument("--list", action="store_true", help="list known sessions")
+    parser.add_argument("--list", action="store_true",
+                        help="list sessions for this project only (see --project)")
     args = parser.parse_args()
 
     if args.list:
-        list_sessions()
-        return 0
+        return list_sessions(args.project)
     if not args.session or not args.out:
         parser.error("--session and --out are required unless --list")
 
