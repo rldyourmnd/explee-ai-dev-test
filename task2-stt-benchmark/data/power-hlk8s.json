@@ -1,0 +1,26 @@
+{
+  "0.03": {
+    "power": 0.08333333333333333,
+    "detections": 10,
+    "trials": 120,
+    "sign_errors": 0
+  },
+  "0.05": {
+    "power": 0.19166666666666668,
+    "detections": 23,
+    "trials": 120,
+    "sign_errors": 2
+  },
+  "0.10": {
+    "power": 0.4583333333333333,
+    "detections": 55,
+    "trials": 120,
+    "sign_errors": 0
+  },
+  "0.15": {
+    "power": 0.7416666666666667,
+    "detections": 89,
+    "trials": 120,
+    "sign_errors": 0
+  }
+}

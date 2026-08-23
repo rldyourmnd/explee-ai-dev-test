@@ -52,10 +52,14 @@ before any engine ran.</p>
 <strong>Production recommendation: run Whisper large-v3-turbo.</strong>
 We recommend Whisper large-v3-turbo for transcribing your meetings. It is the engine to put
 into production today, on these grounds: it leads or ties on every quality metric we declared
-in advance, it is statistically inseparable from the only engine that scores higher, and it
-costs 1.7× less GPU time per hour of audio than that engine — 326.8 s against 565.7 s.
-Cost broke a tie that quality could not, and we say that plainly rather than dressing a
-cost decision up as a quality verdict.
+in advance, no engine is shown to beat it, and it costs 1.7× less GPU time per hour of audio
+than the one engine whose point estimate is higher — 326.8 s against 565.7 s. Cost decided
+what quality could not, and we say that plainly rather than dressing a cost decision up as a
+quality verdict.
+<br><br>
+Be precise about why quality could not decide: this corpus detects a 3-point difference in
+term F1 only about one time in ten (power table below), and the gap between the top engines
+is 3.6 points. They are <em>unresolved</em>, not proven equal.
 <br><br>
 The recommendation comes with one caveat we will not soften: <strong>no engine is good at
 this speech yet.</strong> The best term recall in the field is 0.40, so roughly six of every
@@ -64,18 +68,9 @@ the same as saying the problem is solved — expect to keep a human in the loop 
 terminology-dense meetings, and revisit when the terminology-assisted track has been run.
 </div>
 
-<div class="callout">
-<strong>The answer.</strong> <strong>Whisper large-v3-turbo.</strong> On the pre-declared
-primary metric it is statistically indistinguishable from Whisper large-v3, and the frozen
-tie-break resolves that pair on measured cost: turbo needs <strong>326.8 s of GPU time
-against large-v3's 565.7 s</strong> for the same hour — 1.7× cheaper for quality the data
-cannot separate. Parakeet-TDT v3 is eliminated one step earlier, on code-switched-span
-error.
-<br><br>
-<strong>The caveat, stated up front.</strong> Every engine fails the frozen WER guardrail,
-and no engine is good at this speech. The best term recall in the field is
-<strong>0.40</strong> — six of every ten technical terms are still lost or mangled.
-</div>
+<p class="meta">Also true and stated up front: every engine fails the frozen WER guardrail of
+0.30, and much of that gap is an artefact of the reference being an edited transcript — both
+measured and explained below.</p>
 
 <h2>Why WER alone would have given the wrong answer</h2>
 
@@ -111,8 +106,9 @@ the worst term recall of the three leaders.</p>
 
 <ol>
 <li><strong>Primary metric (term F1)</strong> cannot separate the top three. Whisper large-v3
-vs turbo differs by −0.036 with interval [−0.143, +0.066]; vs Parakeet by −0.038 with
-[−0.140, +0.064]. Both intervals contain zero.</li>
+vs turbo differs by −0.036 with interval [−0.128, +0.047]; vs Parakeet by −0.038 with
+[−0.143, +0.065]. Both intervals contain zero — and, per the power analysis, an hour of this
+audio would usually miss a real difference of that size anyway.</li>
 <li><strong>Tie-break step 1, code-switched-span WER:</strong> separates
 <em>Parakeet</em> out (0.748 against 0.650 / 0.675).</li>
 <li><strong>Step 2, Latin→Cyrillic rate:</strong> the two Whispers remain indistinguishable.</li>
@@ -124,6 +120,14 @@ vs turbo differs by −0.036 with interval [−0.143, +0.066]; vs Parakeet by �
 indistinguishable on every declared metric"</em> — cost is what breaks it, and the report says
 plainly that <strong>this is not a quality judgement</strong>. If you already own idle GPU
 capacity, large-v3's point estimate is the higher one and either choice is defensible.</p>
+
+<p class="meta">Every comparison above was run with a <strong>paired moving-block
+bootstrap</strong> — contiguous 120-second blocks, both systems drawing the same blocks,
+10 000 resamples, seed 20260824 — because segments of one talk are not independent
+observations and resampling them individually reports intervals that are too narrow. An
+earlier version of this benchmark made exactly that error. Every verdict here is stable
+across a 60/120/180/300-second sensitivity ladder, and the family of comparisons against the
+leader is Holm-corrected.</p>
 
 <h3>The Russian-only model is the control that proves the metric</h3>
 
@@ -137,6 +141,42 @@ this speech.</p>
 <p>Seamless-M4T-v2 shows a second failure mode: it <em>condenses</em>. It is the only engine
 that drops more words than it adds (omission 0.235 against insertion 0.112) — it behaves like
 a summariser, which is disqualifying for a meeting record.</p>
+
+<h2>How much can one hour actually prove?</h2>
+
+<p>"Statistically indistinguishable" is only informative if the test could have found a
+difference. So before trusting any null result, we simulated two systems differing by a known
+amount and ran the same paired moving-block bootstrap the real comparison uses:</p>
+
+<div class="scroll">
+<table>
+<tr><th>True difference in term F1</th><th>Detected</th><th>Trials</th><th>Power</th></tr>
+<tr><td>3 points</td><td class="num">10</td><td class="num">120</td><td class="num">8 %</td></tr>
+<tr><td>5 points</td><td class="num">23</td><td class="num">120</td><td class="num">19 %</td></tr>
+<tr><td>10 points</td><td class="num">55</td><td class="num">120</td><td class="num">46 %</td></tr>
+<tr><td>15 points</td><td class="num">89</td><td class="num">120</td><td class="num">74 %</td></tr>
+</table>
+</div>
+
+<div class="callout">
+<strong>This changes how the top of the table should be read.</strong> Whisper large-v3 and
+large-v3-turbo differ by 3.6 points of term F1, and at that size this corpus detects a real
+difference roughly one time in ten. Their statistical inseparability is therefore
+<strong>mostly a limit of the evidence, not a demonstration that they are equal.</strong>
+An hour of one talk contains only 138 glossary-term occurrences, and that — not the bootstrap
+— is the binding constraint.
+</div>
+
+<p>What follows honestly from this: differences below about 15 points of term F1 are not
+resolvable here, so the gap between large-v3, turbo and Parakeet should be treated as
+unresolved rather than as a tie. Seamless-M4T's deficit (24 points) is far above that floor,
+survives Holm correction at p = 0.0012, and is stable across every block size — that one is a
+real finding. Separating the top three would need several hours of terminology-dense audio,
+and the rule for growing the corpus must be written before the extra data is scored.</p>
+
+<p>This is also why the recommendation rests on measured cost. When quality cannot be
+resolved, choosing on a quantity that <em>is</em> precisely measured is more defensible than
+promoting a point estimate the data cannot support.</p>
 
 <h2>The corpus</h2>
 

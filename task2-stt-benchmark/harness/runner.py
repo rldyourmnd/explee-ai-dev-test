@@ -225,9 +225,14 @@ def score_run(
     }
 
 
-#: An engine that failed more than this share of the corpus is not ranked. Its
-#: numbers would describe only the segments it found easy.
-MAX_FAILURE_RATE = 0.10
+#: OPERATIONAL POLICY, not a measured finding. An engine must return usable
+#: output for at least this share of the corpus to be eligible for ranking.
+#: Without a floor, an engine that fails on hard audio can still place well on
+#: the easy remainder — survivorship from the second direction, after the
+#: pairwise-scoring fix closed the first. 0.98 allows two failed segments in
+#: a hundred; the number is a policy choice and is labelled as one.
+MIN_COVERAGE = 0.98
+MAX_FAILURE_RATE = 1.0 - MIN_COVERAGE
 
 
 def pair_for_bootstrap(
@@ -263,6 +268,8 @@ def eligibility(
             "segments_missing": missing,
             "failure_rate": rate,
             "rankable": rate <= max_failure_rate,
+            "coverage": 1.0 - rate,
+            "policy": f"operational policy: coverage >= {1 - max_failure_rate:.0%}",
         }
     return report
 

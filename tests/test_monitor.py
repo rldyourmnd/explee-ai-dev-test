@@ -12,6 +12,7 @@ import json
 import statistics
 import sys
 import threading
+import time
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -273,6 +274,112 @@ def test_standalone_collection_survives_an_unreachable_api(tmp_path):
     assert "error" in record
     assert m.read_sample(dict(record, kind="balance", provider="x")).state == \
         m.STATE_TRANSPORT_ERROR
+
+
+def test_the_collection_loop_keeps_going_and_stops_cleanly(tmp_path, fake_api):
+    """`--poll` is a long-running loop, so the loop itself needs testing.
+
+    Everything above exercises one cycle. This exercises the thing that actually
+    runs for hours: repeated cycles at an interval, appending as it goes, and
+    stopping when asked rather than on the next timer tick.
+    """
+    _FakeAPI.routes = {
+        "/providers": (200, json.dumps([
+            {"provider": "brightdata", "pay_model": "prepaid_balance", "unit": "usd"}]),
+            "application/json"),
+        "/brightdata/balance": (200, '{"balance":900.00,"currency":"usd"}',
+                                "application/json"),
+    }
+    raw = tmp_path / "raw.jsonl"
+    collector = m.Collector(str(raw), fake_api, interval=0.2, timeout=5)
+    thread = threading.Thread(target=collector.run, daemon=True)
+    thread.start()
+    deadline = time.monotonic() + 10
+    while collector.cycles < 3 and time.monotonic() < deadline:
+        time.sleep(0.05)
+    collector.stop.set()
+    thread.join(timeout=10)
+
+    assert not thread.is_alive(), "the loop must stop when asked"
+    assert collector.cycles >= 3, f"expected repeated cycles, got {collector.cycles}"
+    records = [json.loads(line) for line in raw.read_text().splitlines() if line.strip()]
+    assert len([r for r in records if r["kind"] == "balance"]) >= 3
+    assert all(m.read_sample(r) is not None or r["kind"] == "catalog" for r in records)
+
+
+def test_the_collection_loop_survives_a_failing_cycle(tmp_path, fake_api, capfd):
+    """One bad cycle must not end collection: the window cannot be recreated."""
+    _FakeAPI.routes = {
+        "/providers": (200, json.dumps([
+            {"provider": "brightdata", "pay_model": "prepaid_balance", "unit": "usd"}]),
+            "application/json"),
+        "/brightdata/balance": (200, '{"balance":900.00,"currency":"usd"}',
+                                "application/json"),
+    }
+    collector = m.Collector(str(tmp_path / "raw.jsonl"), fake_api, interval=0.2, timeout=5)
+    calls = {"n": 0}
+    real_cycle = collector.cycle
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("synthetic cycle failure")
+        return real_cycle()
+
+    collector.cycle = flaky  # type: ignore[method-assign]
+    thread = threading.Thread(target=collector.run, daemon=True)
+    thread.start()
+    deadline = time.monotonic() + 10
+    while calls["n"] < 3 and time.monotonic() < deadline:
+        time.sleep(0.05)
+    collector.stop.set()
+    thread.join(timeout=10)
+
+    assert calls["n"] >= 3, "the loop stopped after the failing cycle"
+    assert "synthetic cycle failure" in capfd.readouterr().err, \
+        "a failed cycle must be visible to an operator"
+
+
+def test_polled_records_are_picked_up_by_the_tailing_ingestor(tmp_path, fake_api):
+    """The actual `--poll` shape: one process collecting and deriving at once.
+
+    Collection appends; ingestion tails the same file. This is the integration
+    the single-file deliverable depends on, and testing the two halves
+    separately would not catch them disagreeing about the file.
+    """
+    _FakeAPI.routes = {
+        "/providers": (200, json.dumps([
+            {"provider": "brightdata", "name": "Oxylabs", "pay_model": "prepaid_balance",
+             "unit": "usd", "endpoint": "/api/brightdata/balance", "note": ""}]),
+            "application/json"),
+        "/brightdata/balance": (200, '{"balance":900.00,"currency":"usd"}',
+                                "application/json"),
+    }
+    raw = tmp_path / "raw.jsonl"
+    store = m.Store(str(tmp_path / "monitor.sqlite"))
+    ingestor = m.Ingestor(store, m.Alerter(store, str(tmp_path / "alerts.jsonl")), str(raw))
+    collector = m.Collector(str(raw), fake_api, interval=0.2, timeout=5)
+
+    collector.append(collector.cycle())
+    ingest_thread = threading.Thread(target=ingestor.tail, args=(0.1,), daemon=True)
+    collect_thread = threading.Thread(target=collector.run, daemon=True)
+    ingest_thread.start()
+    collect_thread.start()
+    try:
+        deadline = time.monotonic() + 15
+        while store.coverage()["samples"] < 3 and time.monotonic() < deadline:
+            time.sleep(0.1)
+    finally:
+        collector.stop.set()
+        ingestor.stop.set()
+        collect_thread.join(timeout=10)
+        ingest_thread.join(timeout=10)
+
+    coverage = store.coverage()
+    assert coverage["samples"] >= 3, \
+        f"the ingestor did not pick up polled records: {coverage}"
+    assert coverage["ok_samples"] == coverage["samples"], "all should have parsed"
+    assert set(store.catalog()) == {"brightdata"}, "the polled catalog must reach the store"
 
 
 def test_standalone_collection_keeps_polling_after_a_bad_catalog(tmp_path, fake_api):
