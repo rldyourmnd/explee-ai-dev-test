@@ -221,7 +221,10 @@ def test_require_key_raises_rather_than_returning_empty():
 
 # --- scoring and the results table --------------------------------------------
 
-def test_only_segments_every_engine_transcribed_are_scored(glossary):
+def test_one_engines_failure_does_not_delete_segments_from_the_others(glossary):
+    """A failing engine must not make the corpus easier for everyone else."""
+    from harness.runner import eligibility, pair_for_bootstrap
+
     references = {
         "s0": Transcript("мы подняли ClickHouse"),
         "s1": Transcript("и настроили Kafka"),
@@ -230,11 +233,30 @@ def test_only_segments_every_engine_transcribed_are_scored(glossary):
         ("a:default", "s0"): Transcript("мы подняли ClickHouse"),
         ("a:default", "s1"): Transcript("и настроили Kafka"),
         ("b:default", "s0"): Transcript("мы подняли Lead House"),
-        # b failed on s1: it must drop out of the paired comparison for *both*.
+        # b failed s1 — the hard one. a must still be scored on both.
     }
     scores = score_run(references, hypotheses, glossary)
-    assert [s.segment_id for s in scores["a:default"]] == ["s0"]
+    assert [s.segment_id for s in scores["a:default"]] == ["s0", "s1"]
     assert [s.segment_id for s in scores["b:default"]] == ["s0"]
+
+    # The paired comparison intersects, but only pairwise and only there.
+    paired_a, paired_b = pair_for_bootstrap(scores["a:default"], scores["b:default"])
+    assert [s.segment_id for s in paired_a] == ["s0"]
+    assert [s.segment_id for s in paired_b] == ["s0"]
+
+    # Reliability is its own column, not hidden inside the accuracy numbers.
+    status = eligibility(scores, corpus_size=2)
+    assert status["a:default"]["failure_rate"] == 0.0
+    assert status["b:default"]["failure_rate"] == 0.5
+    assert status["b:default"]["rankable"] is False
+    assert status["a:default"]["rankable"] is True
+
+
+def test_a_segment_no_engine_covered_is_simply_absent(glossary):
+    references = {"s0": Transcript("мы подняли ClickHouse"), "s1": Transcript("тишина")}
+    hypotheses = {("a:default", "s0"): Transcript("мы подняли ClickHouse")}
+    scores = score_run(references, hypotheses, glossary)
+    assert [s.segment_id for s in scores["a:default"]] == ["s0"]
 
 
 def test_results_csv_leaves_unmeasured_cells_empty(tmp_path, glossary):

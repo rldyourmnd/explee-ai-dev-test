@@ -391,3 +391,55 @@ def test_known_block_types_are_not_reported_as_unsupported():
     losses = []
     et.build(records, "T", "s", Path("x.jsonl"), None, losses)
     assert losses == [], losses
+
+
+def _session(tmp_path, blocks, slug="-Users-dev-work-this-project"):
+    """Write a one-turn session under a fake PROJECTS root; return (root, uuid)."""
+    import json as _json
+    uid = "aaaaaaaa-1111-2222-3333-444444444444"
+    proj = tmp_path / slug
+    proj.mkdir(parents=True, exist_ok=True)
+    rec = {"type": "assistant", "timestamp": "2026-08-23T16:00:00.000Z", "cwd": "/tmp",
+           "version": "1", "message": {"role": "assistant", "model": "m", "content": blocks}}
+    (proj / f"{uid}.jsonl").write_text(_json.dumps(rec) + "\n", encoding="utf-8")
+    return tmp_path, uid
+
+
+def _run(monkeypatch, tmp_path, root, uid, *argv):
+    monkeypatch.setattr(et, "PROJECTS", root)
+    monkeypatch.setattr("sys.argv", ["export_trace.py", "--session", uid,
+                                     "--out", str(tmp_path / "OUT.md"), *argv])
+    return et.main()
+
+
+FIXTURE_KEY = "ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"  # pragma: allowlist secret
+FOREIGN = "-Users-dev-work-unrelated-client"
+
+
+def test_allow_secrets_does_not_wave_through_a_foreign_slug(tmp_path, monkeypatch, capsys):
+    # the whole point of separating them: a synthetic credential is routine to
+    # acknowledge, another client's directory name is not
+    root, uid = _session(tmp_path, [{"type": "text", "text": f"{FIXTURE_KEY} and {FOREIGN}"}])
+    assert _run(monkeypatch, tmp_path, root, uid, "--allow-secrets") == 3
+    assert not (tmp_path / "OUT.md").exists()
+    assert "does not cover project slugs" in capsys.readouterr().err
+
+
+def test_allow_secrets_still_waves_through_a_credential_alone(tmp_path, monkeypatch):
+    root, uid = _session(tmp_path, [{"type": "text", "text": FIXTURE_KEY}])
+    assert _run(monkeypatch, tmp_path, root, uid, "--allow-secrets") == 0
+    assert (tmp_path / "OUT.md").exists()
+
+
+def test_submission_mode_refuses_every_override(tmp_path, monkeypatch, capsys):
+    root, uid = _session(tmp_path, [{"type": "text", "text": "clean"}])
+    for flag in (["--allow-lossy"], ["--allow-secrets"], ["--max-result", "10"],
+                 ["--allow-finding", "whatever"]):
+        assert _run(monkeypatch, tmp_path, root, uid, "--submission", *flag) == 5
+        assert "A published trace is verbatim and clean" in capsys.readouterr().err
+
+
+def test_submission_mode_exports_a_clean_session(tmp_path, monkeypatch):
+    root, uid = _session(tmp_path, [{"type": "text", "text": "nothing to hide"}])
+    assert _run(monkeypatch, tmp_path, root, uid, "--submission") == 0
+    assert "nothing to hide" in (tmp_path / "OUT.md").read_text()
