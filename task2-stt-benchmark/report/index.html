@@ -26,8 +26,38 @@
     margin: 0; background: var(--paper); color: var(--ink);
     font-family: var(--serif); font-size: 17px; line-height: 1.6;
   }
+  /* Measure applies to PROSE, not to data. 68ch is right for reading sentences
+     and wrong for an eight-column table: squeezing one into 68ch is what wrapped
+     its headers onto three lines. So the container widens on a large screen and
+     paragraphs keep their measure, while tables, code and evidence span it. */
   .wrap { max-width: 74ch; margin: 0 auto; padding: var(--s7) var(--s4) 96px; }
-  p, li { max-width: 68ch; }
+  p, li, .lede, blockquote { max-width: 68ch; }
+  h1, h2, h3 { max-width: 68ch; }
+  .scroll, pre, .ev, .cmp, .hero { max-width: 100%; }
+
+  @media (min-width: 1400px) {
+    .wrap { max-width: 1560px; padding-left: var(--s6); padding-right: var(--s6); }
+    /* Answer and evidence visible together, without scrolling. */
+    .hero { display: grid; grid-template-columns: minmax(0, 68ch) minmax(0, 1fr);
+            gap: var(--s6); align-items: start; }
+    .hero .callout { margin-top: 0; }
+  }
+
+  /* Reference against engine output, side by side. This comparison is the
+     strongest content on the page and it is unreadable stacked in a column. */
+  .cmp { display: grid; grid-template-columns: 1fr; gap: var(--s1) var(--s4);
+         margin: var(--s4) 0; }
+  @media (min-width: 1000px) { .cmp { grid-template-columns: 1fr 1fr; } }
+  .cmp .cell { background: var(--surface); border-radius: 4px;
+               padding: var(--s3) var(--s4); font-family: var(--mono);
+               font-size: 12.5px; line-height: 1.6; overflow-x: auto; }
+  .cmp .cell b { color: var(--alarm); font-weight: 600; }
+  .cmp .lbl { font-family: var(--sans); font-size: 0.7rem; text-transform: uppercase;
+              letter-spacing: 0.05em; color: var(--muted); display: block;
+              margin-bottom: var(--s1); }
+  .cmp .when { grid-column: 1 / -1; font-family: var(--sans); font-size: 0.78rem;
+               color: var(--muted); margin: 0 0 var(--s3); max-width: none; }
+  .summary { font-size: 0.85rem; }
   h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 var(--s2); letter-spacing: -0.01em; }
   h2 { font-size: 1.3rem; margin: var(--s7) 0 var(--s3); padding-top: var(--s5);
        border-top: 1px solid var(--rule); }
@@ -78,6 +108,7 @@
 talk, scored against a human transcript published by the conference itself, with the
 evaluation frozen before any engine ran.</p>
 
+<div class="hero">
 <div class="callout">
 <p><strong>Recommendation, and it depends on one thing: whether a human reviews the
 transcript.</strong></p>
@@ -100,6 +131,25 @@ too, so neither answer is free.</p>
 this speech.</strong> The best one still misses four technical terms in ten, and the one
 that does better invents words.</p>
 </div>
+<div class="summary">
+<div class="scroll">
+<table>
+<colgroup><col style="width: 22ch"><col style="width: 9ch"><col style="width: 9ch"><col></colgroup>
+<thead><tr><th>Engine, stock</th><th class="num">Term F1</th><th class="num">Guard</th><th>Verdict</th></tr></thead>
+<tbody>
+<tr><td>Whisper large-v3</td><td class="num">0.519</td><td class="num ok">0.238</td><td>eligible, unresolved against turbo</td></tr>
+<tr class="pick"><td>Whisper large-v3-turbo<span class="tag">recommended, prompted</span></td><td class="num">0.483</td><td class="num ok">0.229</td><td>eligible; prompted it wins outright</td></tr>
+<tr><td>Parakeet-TDT v3</td><td class="num">0.481</td><td class="num ok">0.194</td><td>eligible; worst code switch penalty</td></tr>
+<tr><td>SeamlessM4T v2</td><td class="num">0.279</td><td class="num alarm">0.543</td><td>fails the guardrail</td></tr>
+<tr><td>wav2vec2 XLSR Russian</td><td class="num">0.000</td><td class="num alarm">0.366</td><td>fails; no Latin script in 49 minutes</td></tr>
+</tbody>
+</table>
+</div>
+<p class="meta">Guard is substitutions plus deletions over reference words, ceiling 0.30.
+Full tables, intervals and the prompt ablation are below.</p>
+</div>
+</div>
+
 
 <h2>Result 1: the engine ranking</h2>
 
@@ -186,10 +236,16 @@ and 0.630 recall, comfortably ahead of the configuration we now recommend.</p>
 <p>Prompted large-v3 does not always transcribe. On <strong>19 of 99 segments</strong> it
 stops and emits a short summary of the topic instead:</p>
 
-<div class="ev"><span class="who">00:00  stock large-v3    </span>Итак, меня зовут Владислав Клеменко. Я бы хотел сегодня рассказать пару слов о нашем опыте разработки и эксплуатации оператора...
-<span class="who">00:00  large-v3 + gloss. </span><b>Кликхаус оператор</b>
-<span class="who">10:30  stock large-v3    </span>от практических задач. Первая задача, с чего мы все хотим начать, это, конечно же, просто запустить первый пример...
-<span class="who">10:30  large-v3 + gloss. </span><b>Практические задачи</b></div>
+<div class="cmp">
+  <p class="when">00:00 in the recording</p>
+  <div class="cell"><span class="lbl">stock large-v3</span>Итак, меня зовут Владислав Клеменко. Я бы хотел сегодня рассказать пару слов о нашем опыте разработки и эксплуатации оператора...</div>
+  <div class="cell"><span class="lbl">large-v3 + glossary</span><b>Кликхаус оператор</b></div>
+</div>
+<div class="cmp">
+  <p class="when">10:30 in the recording</p>
+  <div class="cell"><span class="lbl">stock large-v3</span>от практических задач. Первая задача, с чего мы все хотим начать, это, конечно же, просто запустить первый пример...</div>
+  <div class="cell"><span class="lbl">large-v3 + glossary</span><b>Практические задачи</b></div>
+</div>
 
 <p>The speaker talks for 30 seconds; the transcript says two words. And those two words are
 almost always glossary terms, because the prompt is a list of glossary terms. So term recall
@@ -219,11 +275,17 @@ quoted from stored output.</p>
 
 <h3>The prompt makes turbo invent terms</h3>
 
-<div class="ev"><span class="who">25:30  stock large-v3    </span>базовые объекты <b>Kubernetes</b>. Pod, StatefulSet, сервис, все дальше по списку.
-<span class="who">25:30  turbo + glossary  </span>базовые объекты <b>Kubernetics</b>. Pod, StatefulSet, сервис, там все дальше по списку.</div>
+<div class="cmp">
+  <p class="when">25:30 in the recording</p>
+  <div class="cell"><span class="lbl">stock large-v3</span>базовые объекты <b>Kubernetes</b>. Pod, StatefulSet, сервис, все дальше по списку.</div>
+  <div class="cell"><span class="lbl">turbo + glossary</span>базовые объекты <b>Kubernetics</b>. Pod, StatefulSet, сервис, там все дальше по списку.</div>
+</div>
 
-<div class="ev"><span class="who">04:00  Parakeet          </span>становится, как бы, достаточно сложно, потому что <b>Kubernetes</b>...
-<span class="who">04:00  turbo + glossary  </span>становится как бы достаточно сложно, потому что <b>Qdrantis</b> привносит свои каждодневные вопросы...</div>
+<div class="cmp">
+  <p class="when">04:00 in the recording</p>
+  <div class="cell"><span class="lbl">Parakeet, stock</span>становится, как бы, достаточно сложно, потому что <b>Kubernetes</b>...</div>
+  <div class="cell"><span class="lbl">turbo + glossary</span>становится как бы достаточно сложно, потому что <b>Qdrantis</b> привносит свои каждодневные вопросы...</div>
+</div>
 
 <p><code>Kubernetics</code> and <code>Qdrantis</code> are two of the ten planted names. Both
 were verified absent from the reference and from every stock engine output before the
@@ -232,10 +294,16 @@ is the most frequent term in the recording.</p>
 
 <h3>The prompt makes large-v3 stop transcribing</h3>
 
-<div class="ev"><span class="who">00:00  stock large-v3    </span>Итак, меня зовут Владислав Клеменко. Я бы хотел сегодня рассказать пару слов о нашем опыте разработки и эксплуатации оператора...
-<span class="who">00:00  large-v3 + gloss. </span><b>Кликхаус оператор</b>
-<span class="who">10:30  stock large-v3    </span>от практических задач. Первая задача, с чего мы все хотим начать, это, конечно же, просто запустить первый пример...
-<span class="who">10:30  large-v3 + gloss. </span><b>Практические задачи</b></div>
+<div class="cmp">
+  <p class="when">00:00 in the recording</p>
+  <div class="cell"><span class="lbl">stock large-v3</span>Итак, меня зовут Владислав Клеменко. Я бы хотел сегодня рассказать пару слов о нашем опыте разработки и эксплуатации оператора...</div>
+  <div class="cell"><span class="lbl">large-v3 + glossary</span><b>Кликхаус оператор</b></div>
+</div>
+<div class="cmp">
+  <p class="when">10:30 in the recording</p>
+  <div class="cell"><span class="lbl">stock large-v3</span>от практических задач. Первая задача, с чего мы все хотим начать, это, конечно же, просто запустить первый пример...</div>
+  <div class="cell"><span class="lbl">large-v3 + glossary</span><b>Практические задачи</b></div>
+</div>
 
 <p>This is why its term score is the highest in the table and its guardrail number is the
 worst. When a segment collapses to nothing but glossary words, term recall rises while the
@@ -244,10 +312,11 @@ configuration, which is exactly what the guardrail exists to prevent.</p>
 
 <h3>The reported failure, reproduced</h3>
 
-<div class="ev"><span class="who">reference          </span>сложность управления самим <b>Kubernetes</b>, но при этом накладывается специфика <b>ClickHouse</b>...
-<span class="who">04:00  large-v3    </span>потому что <b>Кубернетис</b> привносит свои каждодневные вопросы...
-<span class="who">04:00  wav2vec2    </span>потому что <b>гобернеть ис</b>...
-<span class="who">04:00  SeamlessM4T </span>(empty output for this segment)</div>
+<div class="cmp">
+  <p class="when">04:00 in the recording, and the reference for the same passage</p>
+  <div class="cell"><span class="lbl">reference, human transcript</span>сложность управления самим <b>Kubernetes</b>, но при этом накладывается специфика <b>ClickHouse</b>...</div>
+  <div class="cell"><span class="lbl">what three engines wrote</span>large-v3: потому что <b>Кубернетис</b> привносит...<br>wav2vec2: потому что <b>гобернеть ис</b>...<br>SeamlessM4T: <span class="lbl" style="display:inline">empty output</span></div>
+</div>
 
 <p>This is the employer's complaint, measured. Whisper writes a Latin term in Cyrillic
 letters, wav2vec2 dissolves it into syllables, SeamlessM4T drops the segment. Only Parakeet
