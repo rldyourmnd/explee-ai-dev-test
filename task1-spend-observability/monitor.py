@@ -150,6 +150,14 @@ class Baseline:
     # A credits package reset returns `remaining` to ~`package`.
     reset_fraction_of_package: float = 0.90
 
+    # A rise that is handed back is not a top-up. MEASURED: `twocaptcha`
+    # reported +10.00 USD for exactly eight polls at 17:26Z and then returned to
+    # its previous value. The observed blip lasted 4 minutes; 15 minutes leaves
+    # room for a longer one without being wide enough to pair a real top-up with
+    # unrelated later spend.
+    blip_window_s: float = 900.0
+    blip_match_fraction: float = 0.10
+
 
 POLICY = Policy()
 BASELINE = Baseline()
@@ -524,10 +532,21 @@ class Store:
 
     # -- events ----------------------------------------------------------
     def add_event(self, ts: datetime, provider: str, kind: str, detail: dict[str, Any]) -> bool:
-        ident = hashlib.sha256(f"{provider}|{kind}|{iso(ts)}".encode()).hexdigest()[:16]
+        """Record one discontinuity, keyed on when it happened, not what we called it.
+
+        The classification of a moment can legitimately change as more of the
+        series arrives: at 17:26Z `twocaptcha` +10.00 was indistinguishable
+        from a top-up, and only the reversion four minutes later revealed it as
+        a blip. Keying on (provider, kind, ts) stored both readings and showed a
+        human two contradictory events for one moment. Keying on (provider, ts)
+        lets the better-informed classification replace the earlier one.
+        """
+        ident = hashlib.sha256(f"{provider}|{iso(ts)}".encode()).hexdigest()[:16]
         with self._write_lock, self.conn() as conn:
             cur = conn.execute(
-                "INSERT OR IGNORE INTO events (id,ts,provider,kind,detail) VALUES (?,?,?,?,?)",
+                "INSERT INTO events (id,ts,provider,kind,detail) VALUES (?,?,?,?,?) "
+                "ON CONFLICT(id) DO UPDATE SET kind=excluded.kind, detail=excluded.detail "
+                "WHERE kind IS NOT excluded.kind",
                 (ident, iso(ts), provider, kind, json.dumps(detail, ensure_ascii=False)),
             )
         return cur.rowcount > 0
@@ -656,13 +675,24 @@ class Segment:
         return (self.points[-1][0] - self.points[0][0]).total_seconds()
 
 
+CUT_KINDS = ("top_up", "package_reset")
+
+
 def detect_discontinuities(readings: Sequence[Reading], pay_model: str
                            ) -> list[tuple[datetime, str, dict[str, Any]]]:
-    """Find top-ups and package resets in a value series.
+    """Find top-ups, package resets and reverted blips in a value series.
 
     Only depleting pay models can be topped up. For a `spend_report` the value
     is cumulative trailing cost, so a rise *is* the spend and calling it a
     top-up would invert the meaning entirely.
+
+    A rise that is handed back is not a top-up. MEASURED: `twocaptcha` returned
+    +10.00 USD for exactly eight polls at 17:26Z and then went back to 72.63.
+    Cutting the series at that rise left the reversion sitting inside the
+    estimation window, which turned it into 133 USD/h of phantom spend and a
+    0.5 h runway against a true 0.28 USD/h and ~250 h. Reverted blips are
+    therefore classified apart and never used to cut the series - see
+    `CUT_KINDS`.
     """
     if pay_model not in DEPLETING:
         return []
@@ -674,30 +704,63 @@ def detect_discontinuities(readings: Sequence[Reading], pay_model: str
     declines = [abs(d) for d in deltas if d < 0]
     typical = statistics.median(declines) if declines else 0.0
 
-    found: list[tuple[datetime, str, dict[str, Any]]] = []
+    # Every move clearing the provider's own noise floor, in both directions.
+    # Falls matter here even though a fall is never an event on its own,
+    # because a fall is what identifies a rise as having been given back.
+    moves: list[tuple[datetime, datetime, float, float, float, dict[str, Any]]] = []
     for (t_prev, v_prev, _), (t_now, v_now, extra) in zip(values, values[1:]):
-        jump = v_now - v_prev
-        if jump <= 0:
+        delta = v_now - v_prev
+        if delta == 0:
             continue
-        # Noise floor: a positive move only counts once it clears a multiple of
-        # the provider's own typical per-poll decline.
-        if typical > 0 and jump < BASELINE.topup_min_ratio * typical:
+        if typical > 0 and abs(delta) < BASELINE.topup_min_ratio * typical:
             continue
-        if typical == 0 and jump <= 0:
+        moves.append((t_prev, t_now, v_prev, v_now, delta, extra))
+
+    # Pair each rise with a later fall of matching size inside the blip window.
+    reverted: dict[int, tuple[datetime, float]] = {}
+    claimed: set[int] = set()
+    for i, rise in enumerate(moves):
+        if rise[4] <= 0:
             continue
-        package = extra.get("package")
-        kind = "top_up"
-        if package and v_now >= BASELINE.reset_fraction_of_package * package:
-            kind = "package_reset"
-        found.append((t_now, kind, {
+        for j in range(i + 1, len(moves)):
+            fall = moves[j]
+            if j in claimed or fall[4] >= 0:
+                continue
+            if (fall[1] - rise[1]).total_seconds() > BASELINE.blip_window_s:
+                break
+            if abs(abs(fall[4]) - rise[4]) <= BASELINE.blip_match_fraction * rise[4]:
+                reverted[i] = (fall[1], abs(fall[4]))
+                claimed.add(j)
+                break
+
+    found: list[tuple[datetime, str, dict[str, Any]]] = []
+    for index, (t_prev, t_now, v_prev, v_now, delta, extra) in enumerate(moves):
+        detail = {
             "from": round(v_prev, 6),
             "to": round(v_now, 6),
-            "delta": round(jump, 6),
+            "delta": round(delta, 6),
             "gap_s": round((t_now - t_prev).total_seconds(), 1),
             "typical_decline_per_poll": round(typical, 6),
-            "ratio_to_typical": round(jump / typical, 1) if typical else None,
+            "ratio_to_typical": round(abs(delta) / typical, 1) if typical else None,
             "refresh": extra.get("refresh"),
-        }))
+        }
+        if index in reverted:
+            reverted_at, given_back = reverted[index]
+            found.append((t_now, "reverted_blip", dict(
+                detail,
+                reverted_at=iso(reverted_at),
+                given_back=round(given_back, 6),
+                held_s=round((reverted_at - t_now).total_seconds(), 1),
+            )))
+            continue
+        if delta < 0:
+            # An ordinary large charge is spend. It belongs in the rate, not in
+            # the event log, and must not cut the series.
+            continue
+        package = extra.get("package")
+        kind = "package_reset" if (
+            package and v_now >= BASELINE.reset_fraction_of_package * package) else "top_up"
+        found.append((t_now, kind, detail))
     return found
 
 
@@ -711,7 +774,8 @@ def latest_segment(readings: Sequence[Reading], pay_model: str) -> Segment:
     ok = [(r.ts, r.value) for r in readings if r.state == STATE_OK and r.value is not None]
     if not ok:
         return Segment([])
-    cuts = [found[0] for found in detect_discontinuities(readings, pay_model)]
+    cuts = [ts for ts, kind, _detail in detect_discontinuities(readings, pay_model)
+            if kind in CUT_KINDS]
     if cuts:
         last_cut = max(cuts)
         after = [(ts, v) for ts, v in ok if ts >= last_cut]

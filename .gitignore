@@ -12,3 +12,6 @@ task2-stt-benchmark/.secrets/
 .pytest_cache/
 task1-spend-observability/data/
 *.raw.jsonl
+
+# macOS Finder metadata
+.DS_Store

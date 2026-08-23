@@ -158,3 +158,55 @@ Once an `A` record for `spend.nddev.it.com` points at the same address as the
 other hosts already served by this proxy, `acme-companion` issues the
 certificate unattended and the public HTTPS URL comes up with no further
 deploy step. Nothing else is waiting on it.
+
+### 17:38Z — phantom-spend defect found by looking at the dashboard, fixed and redeployed
+
+Rendering the deployed page and reading it caught a defect no test had asked
+about. `twocaptcha` was showing **133.07 USD/h burn and 0.5 h to impact** for a
+provider that actually burns 0.28 USD/h with roughly 250 h of runway.
+
+The raw log shows what happened, verbatim:
+
+```
+17:25:30 {"balance":72.63}      17:29:30 {"balance":82.61}
+17:26:00 {"balance":82.63}  <-- +10.00      17:30:00 {"balance":72.64}  <-- given back
+```
+
+The API returned +10.00 USD for exactly eight polls and then took it back. The
+monitor classified the rise as a top-up and cut the burn series there, which
+left the reversion sitting inside the estimation window — so a 10 USD give-back
+over 5.5 minutes was read as continuous spend.
+
+**A rise that is handed back is not a top-up.** Reverted blips are now detected
+by pairing a rise with a matching fall inside a 15-minute window, classified as
+`reverted_blip`, and never used to cut the series. `twocaptcha` reads 0.297 USD/h
+and 244.5 h again. A second blip surfaced immediately: `bounceban` +3.0 credits
+held for 690 s, same shape.
+
+Two things this exposed that are worth keeping:
+
+1. **The projection guard earned its place.** The false runway never reached
+   `alerts.jsonl`, because a projection needs 30 minutes of evidence and the
+   post-cut segment had 330 s. A guard added on general principle turned out to
+   be the only thing standing between a bad estimator and a false critical alert
+   on the calmest provider in the estate.
+2. **Event classification can improve with hindsight, and the store must allow
+   it.** At 17:26Z the rise was indistinguishable from a top-up; only the
+   reversion revealed it. Events were keyed on `(provider, kind, ts)`, so both
+   readings persisted and a human saw two contradictory events for one moment.
+   They are now keyed on `(provider, ts)` and the better-informed classification
+   replaces the earlier one.
+
+Redeployed and verified. Derived state was dropped and replayed rather than
+migrated, which is the property the design exists for: the raw log is the source
+of truth, so a fixed estimator can be applied to the whole window. The previous
+alert file was archived as `alerts.pre-blip-fix.<ts>.jsonl`, not deleted.
+
+```
+collector before / after : active / active   (never restarted)
+replay                   : 2704 records, 9.8 s
+GET /healthz             : 200, 15 providers, 15 fresh, replay_complete true
+alerts.jsonl             : 6 lines, regenerated against the whole window
+```
+
+Still pending, unchanged: the public DNS record. Nothing else waits on it.

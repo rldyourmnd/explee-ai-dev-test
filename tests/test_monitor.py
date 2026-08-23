@@ -337,6 +337,77 @@ def test_a_rising_spend_report_is_never_a_top_up():
     assert m.detect_discontinuities(rising, "spend_report") == []
 
 
+def _twocaptcha_blip():
+    """The real 17:26Z series: +10.00 USD held for eight polls, then handed back."""
+    values = [72.66, 72.66, 72.66, 72.65, 72.65, 72.65, 72.65, 72.64, 72.64, 72.64,
+              72.64, 72.63, 72.63, 72.63,
+              82.63, 82.62, 82.62, 82.62, 82.62, 82.61, 82.61, 82.61,
+              72.64, 72.63, 72.63, 72.63]
+    return [
+        m.Reading("twocaptcha", T0 + timedelta(seconds=30 * i), m.STATE_OK, value,
+                  200, 110.0, "flat_balance", {"currency": "USD"})
+        for i, value in enumerate(values)
+    ]
+
+
+def test_a_rise_that_is_handed_back_is_not_a_top_up():
+    found = m.detect_discontinuities(_twocaptcha_blip(), "prepaid_balance")
+    kinds = [kind for _t, kind, _d in found]
+    assert kinds == ["reverted_blip"], f"expected one reverted blip, got {kinds}"
+    detail = found[0][2]
+    assert detail["delta"] == pytest.approx(10.0, abs=0.01)
+    assert detail["held_s"] == pytest.approx(240.0, abs=1.0)
+    # Slightly less comes back than went up (9.97 of 10.00) because real
+    # consumption carried on underneath the blip. The matcher has to tolerate
+    # that, which is why it compares within a fraction rather than exactly.
+    assert 0 < detail["given_back"] < detail["delta"]
+    assert detail["delta"] - detail["given_back"] < \
+        m.BASELINE.blip_match_fraction * detail["delta"]
+
+
+def test_a_reverted_blip_does_not_become_phantom_spend():
+    """The regression this guard exists for.
+
+    Cutting the series at the rise leaves the reversion inside the estimation
+    window, which reported 133 USD/h and a 0.5 h runway for a provider actually
+    burning 0.28 USD/h with roughly 250 h of runway. A false critical alert on
+    the calmest provider in the estate is exactly the kind of line that teaches
+    an operator to ignore the channel.
+    """
+    readings = _twocaptcha_blip()
+    estimate = m.estimate_burn(readings, "prepaid_balance")
+    assert estimate.ok, estimate.reason
+    assert estimate.rate_per_h < 1.0, \
+        f"phantom spend is back: {estimate.rate_per_h:.2f} USD/h"
+    assert estimate.rate_per_h == pytest.approx(0.28, abs=0.35)
+
+
+def test_a_reclassified_event_replaces_itself_rather_than_doubling_up(tmp_path):
+    """One moment, one event, even when our reading of it improves."""
+    store = m.Store(str(tmp_path / "monitor.sqlite"))
+    when = T0 + timedelta(minutes=13)
+    assert store.add_event(when, "twocaptcha", "top_up", {"delta": 10.0})
+    assert store.add_event(when, "twocaptcha", "reverted_blip", {"delta": 10.0, "held_s": 240})
+    events = store.events(limit=10)
+    assert len(events) == 1, f"one moment produced {len(events)} events"
+    assert events[0]["kind"] == "reverted_blip", "the later classification must win"
+    assert events[0]["detail"]["held_s"] == 240
+
+
+def test_a_genuine_top_up_still_cuts_the_series():
+    """The blip rule must not blunt the case it was carved out of."""
+    values = [8342 - i for i in range(20)] + [10306 - i for i in range(20)]
+    found = m.detect_discontinuities(_series(values), "credits_package")
+    assert [kind for _t, kind, _d in found] == ["top_up"]
+
+
+def test_a_large_one_off_charge_stays_in_the_burn_rate():
+    """A fall with no matching rise is spend, not an event, and must not cut."""
+    values = [1000.0 - i for i in range(15)] + [900.0 - i for i in range(15)]
+    found = m.detect_discontinuities(_series(values), "credits_package")
+    assert found == [], "an unmatched decline is ordinary spend"
+
+
 def test_sampling_noise_below_the_ratio_is_not_a_top_up():
     values = [1000.0 - i * 1.0 for i in range(20)]
     values[10] = values[9] + 0.001   # a rise far below the typical 1.0 decline
