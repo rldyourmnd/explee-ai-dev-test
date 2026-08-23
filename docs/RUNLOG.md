@@ -309,3 +309,54 @@ every evaluation, so it tracked the last thing *evaluated* rather than the last
 line *written*. A condition drifting across a band while suppressed would have
 had its change absorbed silently and never announced. It now records the band as
 of the last written line.
+
+### 18:20Z — replay determinism verified against the live instance
+
+The README claims that deleting derived state and replaying re-applies a
+changed threshold to the whole window, and that sustain periods evaluated on
+the data clock make a replay reproduce what a live run produced. Both were
+checked against real data rather than only against fixtures.
+
+```
+replay A vs replay B, same log      : byte-identical alerts.jsonl
+replay vs the live tailing instance : 10 lines each, same (rule, provider, band)
+                                      sequence
+```
+
+The live instance built its log incrementally by tailing over ninety minutes;
+the replay rebuilt it in one pass from an empty database. They agree. Fired
+timestamps are not compared, because the tail loop also evaluates on the wall
+clock so staleness still fires when the sampler dies — the *decisions* match,
+which is the property that matters.
+
+### 18:18Z — two more defects, both found by exercising the deliverable
+
+**`/healthz` was only reachable through a socket.** The health decision lived
+inside the request handler, so the 503 path could not be unit-tested. It is now
+`healthz(store, replay_complete, now)` with the handler reduced to plumbing.
+Verified end to end against a log whose newest sample was two hours old:
+
+```
+GET /healthz -> 503 unhealthy, "every provider's data is stale", 0/15 fresh
+GET /        -> 200
+```
+
+The dashboard deliberately keeps serving while unhealthy: an operator
+investigating the probe needs to be able to look at it.
+
+**The evidence panel printed malformed JSON.** It rendered
+`json.dumps(evidence)[:400]`, which clips mid-token — the page carried
+fragments like `"threshold_h": 72.0, "`. A panel whose entire purpose is
+carrying the evidence for a claim should not display broken JSON. Fields are
+now rendered complete as `key=value` pairs.
+
+### 18:10Z — cold replay was doing three times the work it needed
+
+Replay scaled as O(n^1.85), which at the six-hour mark is minutes on the
+droplet. Most of it was redundancy: `detect_discontinuities` ran three times per
+provider per tick, and event detection re-queried readings that `build_state`
+had already fetched and converted. Readings and cuts are now computed once per
+evaluation and shared — replay drops ~20% and the test suite with it.
+
+Confirmed a pure refactor by replaying the same window before and after and
+diffing: byte-identical `alerts.jsonl`.
