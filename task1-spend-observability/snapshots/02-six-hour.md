@@ -1,4 +1,12 @@
-# Window snapshot 02 — six-hour
+# Window snapshot 02: six-hour
+
+> **This is the snapshot that closes the six-hour minimum.** Span 21,677.879 s
+> against a required 21,600 s, across 11,568 records with 0 malformed and a
+> largest consecutive gap of 29.67 s.
+>
+> Snapshot `01-six-hour-short`, taken 82 s earlier, spans 21,587.803 s and falls
+> 12.197 s short. It is kept as the record of why, and is not a claim of six
+> hours.
 
 Immutable record of the observation window.
 
@@ -8,8 +16,8 @@ for the digest of the same leading byte count. A match proves the
 measurements below describe the exact bytes the collector wrote. The log
 is append-only, which is what makes a prefix the right thing to check.
 
-Read-only. Nothing was restarted and nothing was written on the host —
-this window cannot be recreated, and no snapshot is worth risking it.
+Read-only. Nothing was restarted and nothing was written on the host.
+This window cannot be recreated, and no snapshot is worth risking it.
 
 | | |
 |---|---|

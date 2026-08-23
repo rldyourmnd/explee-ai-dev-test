@@ -45,6 +45,7 @@ REMOTE_RAW = "/opt/explee-spend-monitor/data/raw_samples.jsonl"
 REMOTE_ALERTS = "/opt/explee-spend-monitor/state/alerts.jsonl"
 LOCAL_RAW = REPO / "task1-spend-observability" / "data" / "raw_samples.jsonl"
 SNAPSHOT_DIR = REPO / "task1-spend-observability" / "snapshots"
+SIX_HOURS_S = 21600
 UNIT = "explee-raw-sampler"
 
 # Any IPv4 literal is masked out of captured command output. The deployment
@@ -189,6 +190,13 @@ def main() -> int:
                              "for describing a sub-window such as the one after T1")
     parser.add_argument("--dry-run", action="store_true",
                         help="measure and print, write nothing")
+    parser.add_argument("--require-span-s", type=float, default=None,
+                        help="fail unless the first-to-last RECORD span reaches this "
+                             "many seconds. Use 21600 for the six-hour minimum. "
+                             "Taking a snapshot at T0+6h does not produce a six-hour "
+                             "span: the newest record precedes the snapshot by up to "
+                             "one sample interval, so firing at the mark is short "
+                             "essentially always.")
     args = parser.parse_args()
 
     print(f"collector before : {collector_state()}", file=sys.stderr)
@@ -305,6 +313,25 @@ def main() -> int:
     ]
     report = "\n".join(body)
 
+    # State the condition the measurement actually met, next to the result.
+    # Snapshot 01 of this run was taken 14 s after the six-hour instant and still
+    # spanned only 21587.8 s, because wall-clock arrival and record span are
+    # different quantities. Printing the span every time makes that visible
+    # without anyone having to open the artifact.
+    span = stats.get("span_seconds")
+    required = args.require_span_s
+    meets = None if required is None else (span is not None and span >= required)
+    if span is not None:
+        verdict = ""
+        if required is not None:
+            if meets:
+                verdict = f"  required {required:.0f}s -> MEETS"
+            else:
+                verdict = (f"  required {required:.0f}s -> SHORT by "
+                           f"{required - span:.3f}s")
+        print(f"span             : {span:.3f}s = {span / 3600:.4f}h{verdict}",
+              file=sys.stderr)
+
     if args.dry_run:
         print(report)
         print("DRY RUN — nothing written", file=sys.stderr)
@@ -320,11 +347,20 @@ def main() -> int:
                     "collector_before": before, "collector_after": after,
                     "sha256_snapshot": sha, "sha256_host_prefix": remote_sha,
                     "faithful_prefix": faithful, "bytes": size, "lines": lines,
-                    "host_grew_by_bytes": grew_by, **stats},
+                    "host_grew_by_bytes": grew_by,
+                    "required_span_seconds": required,
+                    "closes_six_hour_minimum": (span is not None
+                                                and span >= SIX_HOURS_S),
+                    **stats},
                    indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"wrote {out.relative_to(REPO)}", file=sys.stderr)
     if not faithful:
         print("DIGEST MISMATCH — local copy is not the bytes on the host", file=sys.stderr)
+        return 1
+    if meets is False:
+        print(f"SPAN TOO SHORT: {span:.3f}s < {required:.0f}s required. The window "
+              f"is intact and nothing was disturbed; wait for further samples and "
+              f"take another snapshot.", file=sys.stderr)
         return 1
     if after != "active":
         print(f"collector is '{after}' after the snapshot", file=sys.stderr)

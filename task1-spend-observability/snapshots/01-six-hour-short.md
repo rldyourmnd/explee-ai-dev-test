@@ -1,4 +1,17 @@
-# Window snapshot 01 — six-hour
+# Window snapshot 01: six-hour-short
+
+> **This snapshot does not close the six-hour minimum.** Its span is
+> 21,587.803 s, which is 12.197 s short of the required 21,600 s.
+> Snapshot `02-six-hour` closes it, at 21,677.879 s.
+>
+> It is kept, not deleted, because it is the evidence that the span was
+> measured rather than the clock trusted. It was taken at 22:13:41Z, which is
+> *after* the six-hour instant of 22:13:26.775Z, and still fell short. Span is
+> measured between the first and last **record**, and the last record precedes
+> the snapshot by up to one 30 s sample interval. Wall-clock arrival and record
+> span are different quantities, and only the second one is the requirement.
+> Firing at the mark is therefore short essentially always: it is not a race
+> that was lost, it is a race that could not be won.
 
 Immutable record of the observation window.
 
@@ -8,14 +21,14 @@ for the digest of the same leading byte count. A match proves the
 measurements below describe the exact bytes the collector wrote. The log
 is append-only, which is what makes a prefix the right thing to check.
 
-Read-only. Nothing was restarted and nothing was written on the host —
-this window cannot be recreated, and no snapshot is worth risking it.
+Read-only. Nothing was restarted and nothing was written on the host.
+This window cannot be recreated, and no snapshot is worth risking it.
 
 | | |
 |---|---|
 | snapshot | **01** in the six-hourly sequence |
 | taken at | `2026-08-23T22:13:41Z` |
-| label | `six-hour` |
+| label | `six-hour-short` |
 | repository | `f9b1728` |
 | collector before | `active` |
 | collector after | `active` |
