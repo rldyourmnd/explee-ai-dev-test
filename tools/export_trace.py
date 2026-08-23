@@ -1,0 +1,282 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
+"""Export a Claude Code session to a verbatim TRACE.md.
+
+The employer asked for the REAL conversation, so this renders every user and
+assistant turn in order, including reasoning blocks, tool calls with their full
+inputs, and tool results. Nothing is paraphrased and nothing is dropped.
+
+Secrets are handled by refusing, not by redacting: silently rewriting the
+transcript would break the verbatim guarantee that makes the trace worth
+reading. If a credential pattern is found the export aborts and names the turn,
+so the leak gets fixed at the source instead of being papered over.
+
+Usage:
+    uv run tools/export_trace.py --session <uuid> --out task1/TRACE.md --title "Task 1"
+    uv run tools/export_trace.py --list
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+PROJECTS = Path.home() / ".claude" / "projects"
+
+# Patterns that must never reach a published trace. Ordered most specific first
+# so the reported reason is the useful one.
+SECRET_PATTERNS: list[tuple[str, re.Pattern[str]]] = [
+    ("private key block", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
+    ("anthropic key", re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}")),
+    ("openai key", re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9]{32,}")),
+    ("github token", re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}")),
+    ("aws access key", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("google api key", re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b")),
+    ("slack token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}")),
+    ("bearer token", re.compile(r"[Bb]earer\s+[A-Za-z0-9._\-]{24,}")),
+    # Deliberately context-bound: a bare 40-hex string is far more often a git
+    # SHA than a credential, and false positives here would train the operator
+    # to reach for --allow-secrets, which defeats the whole guard.
+    ("assigned api key", re.compile(
+        # No \b prefix: the interesting names are suffixes of longer identifiers
+        # such as DEEPGRAM_API_KEY, where \b would never fire.
+        r"(?i)(?:api[_-]?key|apikey|access[_-]?token|auth[_-]?token|secret[_-]?key|password)"
+        r"\s*[:=]\s*[\"']?[A-Za-z0-9_\-]{16,}")),
+]
+
+ROLE_LABEL = {"user": "User", "assistant": "Assistant"}
+
+
+def load(path: Path) -> list[dict]:
+    records = []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            records.append(json.loads(line))
+        except json.JSONDecodeError:
+            continue
+    return records
+
+
+def fence(text: str, lang: str = "") -> str:
+    """Wrap in a fence long enough to survive fences inside the payload."""
+    longest = max((len(m) for m in re.findall(r"`+", text)), default=0)
+    bar = "`" * max(3, longest + 1)
+    return f"{bar}{lang}\n{text}\n{bar}"
+
+
+def render_tool_result(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict):
+                if block.get("type") == "text":
+                    parts.append(block.get("text", ""))
+                elif block.get("type") == "image":
+                    parts.append("[image omitted from markdown; present in raw JSONL]")
+                else:
+                    parts.append(json.dumps(block, ensure_ascii=False, indent=2))
+            else:
+                parts.append(str(block))
+        return "\n".join(parts)
+    return json.dumps(content, ensure_ascii=False, indent=2)
+
+
+def scan_secrets(text: str) -> list[str]:
+    return [name for name, pat in SECRET_PATTERNS if pat.search(text)]
+
+
+def ts_of(record: dict) -> str | None:
+    return record.get("timestamp")
+
+
+def human_ts(raw: str | None) -> str:
+    if not raw:
+        return "?"
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(
+            timezone.utc
+        ).strftime("%Y-%m-%d %H:%M:%SZ")
+    except ValueError:
+        return raw
+
+
+def build(records: list[dict], title: str, session_id: str, source: Path,
+          max_result: int | None) -> tuple[str, list[str]]:
+    turns = [r for r in records if r.get("type") in ("user", "assistant")
+             and isinstance(r.get("message"), dict)]
+    if not turns:
+        raise SystemExit("no conversation turns found in session")
+
+    models = {r["message"].get("model") for r in turns
+              if r.get("type") == "assistant" and r["message"].get("model")}
+    efforts = {r.get("effort") for r in turns if r.get("effort")}
+    n_user = sum(1 for r in turns if r["type"] == "user")
+    n_asst = len(turns) - n_user
+    n_side = sum(1 for r in turns if r.get("isSidechain"))
+    started, finished = human_ts(ts_of(turns[0])), human_ts(ts_of(turns[-1]))
+    cwd = next((r.get("cwd") for r in turns if r.get("cwd")), "?")
+    version = next((r.get("version") for r in turns if r.get("version")), "?")
+
+    out: list[str] = [
+        f"# {title}",
+        "",
+        "| | |",
+        "|---|---|",
+        "| Agent | Claude Code |",
+        f"| Version | `{version}` |",
+        f"| Model | {', '.join(sorted(models)) or 'unknown'} |",
+        f"| Reasoning effort | {', '.join(sorted(e for e in efforts if e)) or 'default'} |",
+        f"| Session id | `{session_id}` |",
+        f"| Working directory | `{cwd}` |",
+        f"| Started (UTC) | {started} |",
+        f"| Finished (UTC) | {finished} |",
+        f"| Turns | {n_user} user, {n_asst} assistant |",
+        f"| Subagent turns | {n_side} |",
+        f"| Export method | verbatim render of `{source.name}` by `tools/export_trace.py` |",
+        "",
+        "> This is the real session transcript, rendered turn by turn from the "
+        "Claude Code session log. Reasoning blocks, tool calls, tool output, "
+        "failed attempts and corrections are all included, in order. Nothing "
+        "was rewritten after the fact.",
+        "",
+        "---",
+        "",
+    ]
+
+    findings: list[str] = []
+    for index, record in enumerate(turns, start=1):
+        message = record["message"]
+        role = record["type"]
+        label = ROLE_LABEL.get(role, role)
+        if record.get("isSidechain"):
+            label += " (subagent)"
+        out.append(f"## [{index}] {label} · {human_ts(ts_of(record))}")
+        out.append("")
+
+        content = message.get("content")
+        if isinstance(content, str):
+            content = [{"type": "text", "text": content}]
+        if not isinstance(content, list):
+            content = []
+
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            kind = block.get("type")
+
+            if kind == "text":
+                body = block.get("text", "")
+                findings += [f"turn {index} (text): {n}" for n in scan_secrets(body)]
+                out += [body, ""]
+
+            elif kind == "thinking":
+                body = block.get("thinking", "")
+                findings += [f"turn {index} (thinking): {n}" for n in scan_secrets(body)]
+                out += ["<details><summary>Reasoning</summary>", "", fence(body), "",
+                        "</details>", ""]
+
+            elif kind == "tool_use":
+                payload = json.dumps(block.get("input", {}), ensure_ascii=False, indent=2)
+                findings += [f"turn {index} (tool input): {n}" for n in scan_secrets(payload)]
+                out += [f"**Tool call — `{block.get('name')}`**", "",
+                        fence(payload, "json"), ""]
+
+            elif kind == "tool_result":
+                body = render_tool_result(block.get("content"))
+                findings += [f"turn {index} (tool result): {n}" for n in scan_secrets(body)]
+                if max_result is not None and len(body) > max_result:
+                    dropped = len(body) - max_result
+                    body = (body[:max_result]
+                            + f"\n\n[... {dropped} characters truncated by "
+                              f"--max-result; full output is in the raw session JSONL ...]")
+                status = " (error)" if block.get("is_error") else ""
+                out += [f"**Tool result{status}**", "", fence(body), ""]
+
+        out.append("---")
+        out.append("")
+
+    return "\n".join(out), findings
+
+
+def list_sessions() -> None:
+    rows = []
+    for project in sorted(PROJECTS.iterdir()):
+        if not project.is_dir():
+            continue
+        for jsonl in project.glob("*.jsonl"):
+            stat = jsonl.stat()
+            rows.append((stat.st_mtime, project.name, jsonl.stem, stat.st_size))
+    for mtime, project, session, size in sorted(rows, reverse=True)[:40]:
+        when = datetime.fromtimestamp(mtime, timezone.utc).strftime("%Y-%m-%d %H:%M")
+        print(f"{when}  {size/1024:>9.0f}K  {session}  {project}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--session", help="session uuid (see --list)")
+    parser.add_argument("--project", help="project slug; inferred when unambiguous")
+    parser.add_argument("--out", type=Path, help="destination TRACE.md")
+    parser.add_argument("--title", default="Agent Trace", help="H1 title")
+    parser.add_argument("--max-result", type=int, default=None,
+                        help="truncate tool results to N chars, marked inline")
+    parser.add_argument("--copy-raw", action="store_true",
+                        help="also copy the source JSONL next to --out")
+    parser.add_argument("--allow-secrets", action="store_true",
+                        help="write anyway after a secret match (never do this for a submission)")
+    parser.add_argument("--list", action="store_true", help="list known sessions")
+    args = parser.parse_args()
+
+    if args.list:
+        list_sessions()
+        return 0
+    if not args.session or not args.out:
+        parser.error("--session and --out are required unless --list")
+
+    candidates = list(PROJECTS.glob(f"{args.project}/{args.session}.jsonl")) if args.project \
+        else list(PROJECTS.glob(f"*/{args.session}.jsonl"))
+    if not candidates:
+        print(f"session {args.session} not found under {PROJECTS}", file=sys.stderr)
+        return 2
+    if len(candidates) > 1:
+        print(f"ambiguous session; pass --project. matches: {candidates}", file=sys.stderr)
+        return 2
+    source = candidates[0]
+
+    markdown, findings = build(load(source), args.title, args.session, source,
+                               args.max_result)
+
+    if findings and not args.allow_secrets:
+        print("REFUSING to export: credential-shaped strings found.", file=sys.stderr)
+        for finding in dict.fromkeys(findings):
+            print(f"  - {finding}", file=sys.stderr)
+        print("\nFix the source (rotate and stop echoing the secret), then re-export.",
+              file=sys.stderr)
+        return 3
+
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(markdown, encoding="utf-8")
+    print(f"wrote {args.out} ({len(markdown)/1024:.0f}K)")
+
+    if args.copy_raw:
+        raw = args.out.with_suffix(".raw.jsonl")
+        raw.write_bytes(source.read_bytes())
+        print(f"wrote {raw} ({raw.stat().st_size/1024:.0f}K)")
+    if findings:
+        print(f"WARNING: exported with {len(set(findings))} secret match(es) because "
+              f"--allow-secrets was set", file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

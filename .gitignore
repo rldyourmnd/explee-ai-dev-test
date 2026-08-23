@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.bootstrap-capture/
+task2-stt-benchmark/audio/
+task2-stt-benchmark/.secrets/
+.ruff_cache/
+.pytest_cache/
+task1-spend-observability/data/
+*.raw.jsonl

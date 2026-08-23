@@ -1,0 +1,77 @@
+schema_version: 1
+
+repository:
+  id: "repo_01M0QPEFY0YJFX2XGGCBG4FMZF"
+  display_name: "explee-ai-dev-test"
+  roles:
+    - "project"
+  lifecycle: "active"
+
+provider:
+  type: "github"
+  installation: "installation:github-personal"
+  repository_id: 1343959619
+  owner: "rldyourmnd"
+  name: "explee-ai-dev-test"
+
+classification:
+  portfolios:
+    - "portfolio:active-personal"
+  visibility_contract: "private"
+  data_classification: "internal"
+
+product:
+  purpose: >-
+    Deliverables for the Explee AI-native developer test task: live spend
+    observability across 15 external providers, a speech-to-text engine
+    comparison for Russian/English code-switched meetings, and a harness
+    artifact, each with a verbatim agent trace.
+  capabilities:
+    - "Polls 15 third-party billing endpoints with per-provider schema adapters"
+    - "Derives burn rate, runway and quota projections from observed history"
+    - "Emits deduplicated, evidence-bearing alerts to alerts.jsonl"
+    - "Serves a public read-only spend dashboard"
+    - "Scores speech-to-text engines on code-switched Russian/English audio"
+  entrypoints:
+    - change: "Spend monitor collector, alerting and dashboard"
+      path: "task1-spend-observability/monitor.py"
+    - change: "Speech-to-text evaluation harness"
+      path: "task2-stt-benchmark"
+    - change: "Verbatim agent trace exporter"
+      path: "tools/export_trace.py"
+
+policy:
+  profiles:
+    - "repository-default"
+    - "personal-default"
+  rollout_ring: "standard"
+
+git:
+  default_branch: "main"
+  integration: "pull-request"
+  branch_model: "task-branches"
+  handoff_pr: "preferred"
+  cleanup: "merged-only"
+
+verification:
+  commands:
+    lint:
+      - "ruff check ."
+    test:
+      - "pytest -q"
+    fast:
+      - "ruff check ."
+      - "pytest -q"
+  required:
+    - "lint"
+    - "test"
+
+agent:
+  context_profile: "project-default"
+  generated_agents: false
+  serena:
+    enabled: true
+    provenance_required: true
+
+release:
+  mode: "none"
