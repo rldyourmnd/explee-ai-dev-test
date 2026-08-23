@@ -63,7 +63,7 @@ credentials and SSH config lines.
 | T1 clean-window regeneration | 1.8, 1.9 | T1 not declared; four preconditions unmet. Today's `alerts.jsonl` is an accumulation across code versions |
 | `monitor.py` not yet single-file | 1.1 | built and tested, **deliberately not deployed** — nothing changes while the window is open |
 | History rewrite not run | X.8 | runs last, after all workers stop; publication is the human's |
-| Pyright exclusion debt | X.5 | 54 errors hidden behind four Task 2 excludes; recorded as NOT GREEN rather than inheriting a zero |
+| Pyright exclusion debt | X.5 | Type check clean | `pyright` | `surface:5` | **NOT GREEN — conditionally zero, and the debt is GROWING.** The checker reports 0 only because `pyrightconfig.json` excludes **four paths, not three**: `task2-stt-benchmark/modal_app` *and* the three `test_task2_*` files. Re-measured 21:35Z with the exclusion removed: **64 errors**, up from 54 at 20:47Z — `qwen_gigaam.py` added 10 while hidden. That is the real cost of the exclusion: it is not freezing a known debt, it is letting new debt accumulate invisibly. Raised by `surface:8`, correctly | remove the four excludes, then `uv run --with pyright --with pytest --with httpx pyright` → `0 errors` | — |
 
 ## Snapshot series — every six hours while collection continues
 
