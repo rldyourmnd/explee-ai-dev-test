@@ -42,3 +42,6 @@ task2-stt-benchmark/data/reference-*.json
 
 # Serena tooling cache: churns constantly and is not a deliverable.
 .serena/
+
+# Leak-scan patterns: the identifiers must never enter a tracked file.
+.leak-patterns

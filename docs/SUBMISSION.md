@@ -87,7 +87,9 @@ PY
 # leak scan across every uploaded file
 grep -rnoE '\b[0-9]{1,3}(\.[0-9]{1,3}){3}\b' submission/ | sort -u
 grep -rnE 'HostName[[:space:]]+[^[:space:]]' submission/
-grep -rniE 'unrelated-client-a|unrelated-client-b' submission/
+# third-party project names: keep the pattern in a gitignored file so the
+# identifiers never enter a tracked document — this file was itself a leak once
+grep -rniEf .leak-patterns submission/
 ```
 
 Expect: no naive timestamps, no third-party project names, no real `HostName`
