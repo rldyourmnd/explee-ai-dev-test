@@ -97,6 +97,38 @@
    `git rm`. A deleted file and a purged file are different things, and only the
    second is safe to publish.
 
+## Scan by SOURCE, not by content — you cannot regex a name you have never seen
+
+The foreign-slug guard matches project slugs shaped `-Users-<user>-Developer-…`.
+A session listing prints **bare names**, so the guard had nothing to match, and a
+real client identifier reached a submission artifact through a check that passed
+honestly.
+
+**Content matching is structurally incapable of closing this class.** It can only
+find identifiers someone already thought to write down. The next leak will be a
+name nobody has seen.
+
+The fix is to match on **provenance**: flag any tool result produced by an
+*enumerating call* — `ListAgents`, `export_trace --list`, `modal app list`,
+`docker ps`, `gh repo list`, reading an SSH config — and require that result to be
+reviewed, or absent, before an export can pass. **The exporter knows what command
+produced each block, which is knowledge no regex over the output can recover.**
+
+### And knowing the rule is not applying it
+
+The same session that leaked this had, minutes earlier, written *"I cannot
+identify surface:3 without enumerating"* and chosen a safer route — **after
+already having enumerated twice.** Later it deliberately avoided `modal app list`
+for exactly this reason and wrote that rule into this file. It authored the rule
+it had already broken, in the same session, and did not notice.
+
+It also wrote *"a scan licenses a conclusion only about the pattern it matches"*
+into the very commit that shipped the contaminated trace.
+
+**So a rule in this file is not a safeguard.** Only a check that runs is. Where a
+rule matters, give it a gate; where it cannot have one, expect it to be broken by
+someone who can quote it.
+
 ## Enumeration hazards — never list what you did not come to see
 
 Three separate leaks in this run had one shape: **a tool's listing command
