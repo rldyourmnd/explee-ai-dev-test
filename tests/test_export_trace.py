@@ -5,7 +5,6 @@ the operator to pass --allow-secrets (which defeats the guard), and a false
 negative publishes a credential. Both directions are asserted.
 """
 import importlib.util
-import json
 from pathlib import Path
 
 import pytest
@@ -61,7 +60,9 @@ def test_fingerprint_is_stable_across_turn_renumbering():
     later = [_turn("user", [{"type": "text", "text": "filler"}]) for _ in range(5)] + early
     _, first = et.build(early, "T", "s", Path("x.jsonl"), None)
     _, second = et.build(later, "T", "s", Path("x.jsonl"), None)
-    key = lambda fs: [f.split("  (first seen:")[0] for f in fs]
+    def key(findings):
+        return [f.split("  (first seen:")[0] for f in findings]
+
     assert key(first) == key(second), "fingerprint must survive renumbering"
     assert "turn 1" in first[0] and "turn 6" in second[0], "turn is still reported for humans"
 

@@ -7,7 +7,11 @@
 No parsing, no interpretation. This log is a superset of anything a later
 monitor needs, so it can be replayed into a real store once one exists.
 """
-import asyncio, json, os, sys, time
+import asyncio
+import json
+import os
+import sys
+import time
 from datetime import datetime, timezone
 import httpx
 

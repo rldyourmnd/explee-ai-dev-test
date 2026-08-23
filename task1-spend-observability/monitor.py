@@ -1,0 +1,2088 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
+"""Spend monitor: derives all state from the raw sampler's append-only log.
+
+The raw sampler is the only client of the third-party API. This process replays
+`raw_samples.jsonl` from T0, then tails it, so three things follow for free: the
+dashboard shows history from T0, any threshold change can be recomputed against
+the whole window by deleting the SQLite file and replaying, and the API still
+sees exactly one client.
+
+Every number below is either MEASURED (derived from the captured window and
+recomputable from it) or an ASSUMPTION (operational policy the employer never
+specified). The two are labelled separately in `POLICY` and surfaced separately
+on the dashboard, because pretending a guessed SLA is a measurement would be the
+same class of error as summing USD and credits.
+
+Stdlib only, on purpose: the deploy target needs a Python runtime and nothing
+else.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import math
+import os
+import re
+import sqlite3
+import statistics
+import sys
+import threading
+import time
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from html import escape
+from typing import Any, Callable, Sequence
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+RAW_PATH = os.environ.get("MONITOR_RAW", os.path.join(HERE, "data", "raw_samples.jsonl"))
+DB_PATH = os.environ.get("MONITOR_DB", os.path.join(HERE, "data", "monitor.sqlite"))
+ALERTS_PATH = os.environ.get("MONITOR_ALERTS", os.path.join(HERE, "alerts.jsonl"))
+BIND = os.environ.get("MONITOR_BIND", "127.0.0.1")
+PORT = int(os.environ.get("MONITOR_PORT", "8770"))
+
+CYCLE_S = 30.0  # MEASURED: sampler cadence, median inter-sample delta is 30.0 s
+
+
+# --------------------------------------------------------------------------
+# Configuration
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Policy:
+    """Operational policy — ASSUMPTIONS, not derivable from the captured data.
+
+    No SLA, no balance floor and no runway lead time were ever supplied. These
+    are therefore choices, stated here so a reader can disagree with a number
+    without having to read the rule that consumes it. Where a measurement can
+    *bound* a choice, the bound is quoted in the comment.
+    """
+
+    # Freshness shown on the dashboard and used by /healthz. Tight on purpose:
+    # the operator should see a provider going quiet long before anyone is
+    # woken about it. MEASURED: 10 consecutive missed polls.
+    stale_display_s: float = 300.0
+
+    # When a dark provider becomes an alert. MEASURED bounds, in cycles of 30 s:
+    #   transient 504/429      1-2 cycles   (30-60 s)
+    #   self-healing 5xx runs  6-16 cycles  (180-480 s), 4 episodes in 32 min
+    # A 5-8 minute gap that heals itself is not actionable - nobody can do
+    # anything about it and it is over before they read the line. 900 s sits
+    # 15x above the longest transient and ~1.9x above the longest self-healing
+    # episode observed, so an alert means "longer than any outage we actually
+    # measured", not "the API is flaky again". This is the single number most
+    # worth disagreeing with, which is why the bounds are quoted next to it.
+    unavailable_alert_s: float = 900.0
+
+    # How long a threshold crossing must hold before it is worth a line. Applies
+    # to the estimate-driven rules, where one noisy evaluation should not fire.
+    estimate_sustain_s: float = 300.0
+
+    # Runway lead time. Pure policy: how much warning a human wants.
+    runway_critical_h: float = 24.0
+    runway_warning_h: float = 72.0
+
+    # Postpaid credit may legitimately go negative between top-ups, so zero is
+    # not the interesting boundary and crossing it is not an alert. No credit
+    # limit was ever supplied; this stands in for one.
+    postpaid_floor: float = -500.0
+
+    # Collection-wide health. MEASURED bound: the worst single cycle in the
+    # observed window had 4 of 15 providers failing (26.7%). 50% sustained for
+    # 180 s is well clear of normal pool noise and indicates the collector or
+    # the upstream API, not one vendor.
+    pool_error_fraction: float = 0.50
+    pool_error_sustain_s: float = 180.0
+
+    # Alert hygiene: one line per rule+provider per hour at most.
+    cooldown_s: float = 3600.0
+
+    # A credits package resets on its refresh date. Projecting a package to
+    # exhaust before then is only worth saying if the shortfall is material.
+    package_shortfall_fraction: float = 0.02
+
+
+@dataclass(frozen=True)
+class Baseline:
+    """Data-derived estimator parameters.
+
+    These govern how the observed window is turned into a rate; they are not
+    thresholds about what is acceptable.
+    """
+
+    # Theil-Sen needs a real span to mean anything. MEASURED: at 30 s cadence a
+    # 10-minute window holds ~20 points even for the providers that spent a
+    # third of the window returning 500.
+    min_samples: int = 8
+    min_span_s: float = 300.0
+
+    # Evidence required before a *projection* is allowed to wake anyone. A
+    # runway or a projected-at-refresh figure extrapolates the observed slope
+    # far past the window it was measured in - projecting to a 2026-09-01
+    # package refresh from 5 minutes of data is a 2000x extrapolation, and an
+    # alert built on it would not survive a skeptical read. Every projection
+    # alert also carries its extrapolation_ratio so the reader can judge it.
+    min_projection_span_s: float = 1800.0
+
+    # Full-window baseline vs a short recent window, compared for anomalies.
+    recent_window_s: float = 1800.0
+    baseline_window_s: float = 21600.0
+
+    # Theil-Sen is O(n^2) in pairs; subsample evenly above this many points.
+    max_slope_points: int = 120
+
+    # Anomaly sensitivity in MADs. sigma ~ 1.4826*MAD, so 6 MAD ~ 4 sigma.
+    anomaly_k: float = 6.0
+    # MAD is exactly 0 for the steadiest providers, which would make every
+    # deviation infinite. Floor the scale at a fraction of the baseline rate.
+    anomaly_scale_floor_fraction: float = 0.10
+
+    # Distinguishing a top-up from sampling noise. MEASURED: the two positive
+    # jumps in the observed window were 1994x and 7.5x the median per-poll
+    # decline; nothing else was positive at all. 3x leaves a wide margin on
+    # both sides of that gap.
+    topup_min_ratio: float = 3.0
+    # A credits package reset returns `remaining` to ~`package`.
+    reset_fraction_of_package: float = 0.90
+
+
+POLICY = Policy()
+BASELINE = Baseline()
+
+# Pay models whose value falls as money is spent, versus those whose value
+# rises because they report cumulative spend rather than a balance.
+DEPLETING = {"prepaid_balance", "credits_package", "postpaid"}
+ACCUMULATING = {"spend_report"}
+
+
+# --------------------------------------------------------------------------
+# Time
+# --------------------------------------------------------------------------
+
+
+def parse_ts(raw: str) -> datetime:
+    """Parse an ISO-8601 timestamp, always returning an aware UTC datetime."""
+    text = raw.strip()
+    if text.endswith(("z", "Z")):
+        text = text[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(text)
+    if parsed.tzinfo is None:
+        raise ValueError(f"naive timestamp in source data: {raw!r}")
+    return parsed.astimezone(timezone.utc)
+
+
+def iso(moment: datetime) -> str:
+    """Render an aware datetime as ISO-8601 with an explicit Z."""
+    if moment.tzinfo is None:
+        raise ValueError("refusing to emit a naive timestamp")
+    return (
+        moment.astimezone(timezone.utc)
+        .isoformat(timespec="milliseconds")
+        .replace("+00:00", "Z")
+    )
+
+
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+# --------------------------------------------------------------------------
+# Schema adapters
+# --------------------------------------------------------------------------
+#
+# Dispatch is on the *shape that actually came back*, never on the provider ID.
+# The catalog proves IDs are opaque (`brightdata` reports as "Oxylabs",
+# `meta_ads` as "Google Ads"), so keying an adapter off an ID would encode a
+# vendor guess that the data explicitly contradicts.
+
+CURRENCY_KEY = re.compile(r"^[a-z]{3}$")
+
+# States a single poll can be in. `schema_miss` is deliberately distinct from
+# both a value and an HTTP error: MEASURED, `{}` arrived 20 times on HTTP 200,
+# spread over 11 of 15 providers, never twice in a row. Reading it as 0 would
+# fabricate a balance collapse.
+STATE_OK = "ok"
+STATE_SCHEMA_MISS = "schema_miss"
+STATE_HTTP_ERROR = "http_error"
+STATE_UNPARSEABLE = "unparseable"
+STATE_TRANSPORT_ERROR = "transport_error"
+
+
+@dataclass(frozen=True)
+class Adapted:
+    shape: str
+    value: float
+    extra: dict[str, Any]
+
+
+def _num(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) and math.isfinite(value):
+        return float(value)
+    return None
+
+
+def adapt_payload(payload: Any) -> Adapted | None:
+    """Normalise a decoded provider body into a single comparable reading.
+
+    Returns None when the payload carries no value, which covers `{}`, an
+    `{"error": ...}` envelope, and any shape this monitor has never seen.
+    """
+    if not isinstance(payload, dict) or not payload:
+        return None
+    if "error" in payload:
+        return None
+
+    # {"balance": 947.3, "currency": "usd"}
+    balance = _num(payload.get("balance"))
+    if balance is not None:
+        return Adapted("flat_balance", balance, {"currency": payload.get("currency")})
+
+    # {"credit": 49.66, "unit": "usd"} - postpaid, may be negative
+    credit = _num(payload.get("credit"))
+    if credit is not None:
+        return Adapted("postpaid_credit", credit, {"currency": payload.get("unit")})
+
+    # {"package": 12000, "refresh": "2026-09-01", "remaining": 10306}
+    remaining = _num(payload.get("remaining"))
+    if remaining is not None:
+        return Adapted(
+            "credits_package",
+            remaining,
+            {"package": _num(payload.get("package")), "refresh": payload.get("refresh")},
+        )
+
+    # {"object": "cost_report", "amount_cents": 3940, "window": "trailing_24h"}
+    cents = _num(payload.get("amount_cents"))
+    if cents is not None:
+        return Adapted(
+            "cost_report",
+            cents / 100.0,
+            {"window": payload.get("window"), "object": payload.get("object")},
+        )
+
+    # {"spend_usd_24h": 347.72, "spend_usd_30d": 10431.67}
+    spend_24h = _num(payload.get("spend_usd_24h"))
+    if spend_24h is not None:
+        return Adapted(
+            "spend_report_24h",
+            spend_24h,
+            {"spend_30d": _num(payload.get("spend_usd_30d")), "window": "trailing_24h"},
+        )
+
+    # {"ok": true, "data": {"wallet": {"amount": 304.38, "ccy": "usd"}}}
+    data = payload.get("data")
+    if isinstance(data, dict):
+        wallet = data.get("wallet")
+        if isinstance(wallet, dict):
+            amount = _num(wallet.get("amount"))
+            if amount is not None:
+                return Adapted("nested_wallet", amount, {"currency": wallet.get("ccy")})
+
+    # {"gbp": 1992.17} - a bare currency key, no envelope at all
+    if len(payload) == 1:
+        (key, value), = payload.items()
+        amount = _num(value)
+        if amount is not None and CURRENCY_KEY.match(str(key)):
+            return Adapted("bare_currency_key", amount, {"currency": str(key)})
+
+    return None
+
+
+@dataclass(frozen=True)
+class Reading:
+    provider: str
+    ts: datetime
+    state: str
+    value: float | None
+    http: int | None
+    latency_ms: float | None
+    shape: str | None
+    extra: dict[str, Any]
+
+
+def read_sample(record: dict[str, Any]) -> Reading | None:
+    """Turn one raw sampler record into a Reading, or None if it is not a poll.
+
+    Returns None rather than raising for anything unusable. A malformed line in
+    an append-only log is data about the log, not a reason to take the monitor
+    down - and a record with no parseable timestamp cannot be placed on the
+    series at all, so there is nothing useful to do with it.
+    """
+    provider = record.get("provider")
+    if record.get("kind") != "balance" or not provider:
+        return None
+    raw_ts = record.get("ts")
+    if not isinstance(raw_ts, str):
+        return None
+    try:
+        ts = parse_ts(raw_ts)
+    except ValueError:
+        return None
+    http = record.get("http")
+    latency = record.get("latency_ms")
+
+    if http is None:
+        # The sampler never reached the server at all.
+        return Reading(provider, ts, STATE_TRANSPORT_ERROR, None, None, latency, None,
+                       {"error": record.get("error")})
+
+    body = record.get("body")
+    if not isinstance(body, str):
+        return Reading(provider, ts, STATE_UNPARSEABLE, None, http, latency, None, {})
+
+    try:
+        payload = json.loads(body)
+    except (ValueError, TypeError):
+        # MEASURED: every 504 in the window returned an HTML gateway page, not
+        # JSON. Unparseable is a transport-class failure, not a schema problem.
+        return Reading(provider, ts, STATE_UNPARSEABLE, None, http, latency, None,
+                       {"body_prefix": body[:80]})
+
+    if http != 200:
+        detail = payload.get("error") if isinstance(payload, dict) else None
+        return Reading(provider, ts, STATE_HTTP_ERROR, None, http, latency, None,
+                       {"error": detail})
+
+    adapted = adapt_payload(payload)
+    if adapted is None:
+        return Reading(provider, ts, STATE_SCHEMA_MISS, None, http, latency, None,
+                       {"keys": sorted(payload)[:8] if isinstance(payload, dict) else None})
+
+    return Reading(provider, ts, STATE_OK, adapted.value, http, latency,
+                   adapted.shape, adapted.extra)
+
+
+# --------------------------------------------------------------------------
+# Store
+# --------------------------------------------------------------------------
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS catalog (
+    provider   TEXT PRIMARY KEY,
+    name       TEXT,
+    pay_model  TEXT,
+    unit       TEXT,
+    endpoint   TEXT,
+    note       TEXT,
+    seen_ts    TEXT
+);
+CREATE TABLE IF NOT EXISTS readings (
+    provider   TEXT NOT NULL,
+    ts         TEXT NOT NULL,
+    state      TEXT NOT NULL,
+    value      REAL,
+    http       INTEGER,
+    latency_ms REAL,
+    shape      TEXT,
+    extra      TEXT,
+    PRIMARY KEY (provider, ts)
+);
+CREATE INDEX IF NOT EXISTS readings_ts ON readings (ts);
+CREATE TABLE IF NOT EXISTS events (
+    id       TEXT PRIMARY KEY,
+    ts       TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    kind     TEXT NOT NULL,
+    detail   TEXT
+);
+CREATE TABLE IF NOT EXISTS alert_state (
+    key           TEXT PRIMARY KEY,
+    active_since  TEXT,
+    last_fired    TEXT,
+    signature     TEXT
+);
+CREATE TABLE IF NOT EXISTS fired_alerts (
+    id      TEXT PRIMARY KEY,
+    ts      TEXT NOT NULL,
+    payload TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ingest_state (
+    k TEXT PRIMARY KEY,
+    v TEXT
+);
+"""
+
+
+class Store:
+    """SQLite (WAL) persistence for derived state.
+
+    Every write is idempotent under replay: readings are keyed on
+    (provider, ts), events and fired alerts on a content hash. That makes
+    "delete the DB and replay the log" a supported operation rather than a
+    duplicate-generating one, which is what lets a threshold be re-evaluated
+    against the whole window.
+    """
+
+    def __init__(self, path: str) -> None:
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        self.path = path
+        self._local = threading.local()
+        self._write_lock = threading.Lock()
+        with self.conn() as conn:
+            conn.executescript(SCHEMA)
+
+    def conn(self) -> sqlite3.Connection:
+        existing = getattr(self._local, "conn", None)
+        if existing is None:
+            existing = sqlite3.connect(self.path, timeout=30.0)
+            existing.row_factory = sqlite3.Row
+            existing.execute("PRAGMA journal_mode=WAL")
+            existing.execute("PRAGMA synchronous=NORMAL")
+            existing.execute("PRAGMA busy_timeout=30000")
+            self._local.conn = existing
+        return existing
+
+    # -- catalog ---------------------------------------------------------
+    def upsert_catalog(self, entries: Sequence[dict[str, Any]], ts: datetime) -> None:
+        with self._write_lock, self.conn() as conn:
+            conn.executemany(
+                "INSERT INTO catalog (provider,name,pay_model,unit,endpoint,note,seen_ts) "
+                "VALUES (?,?,?,?,?,?,?) ON CONFLICT(provider) DO UPDATE SET "
+                "name=excluded.name, pay_model=excluded.pay_model, unit=excluded.unit, "
+                "endpoint=excluded.endpoint, note=excluded.note, seen_ts=excluded.seen_ts",
+                [
+                    (e.get("provider"), e.get("name"), e.get("pay_model"), e.get("unit"),
+                     e.get("endpoint"), e.get("note"), iso(ts))
+                    for e in entries
+                    if isinstance(e, dict) and e.get("provider")
+                ],
+            )
+
+    def catalog(self) -> dict[str, dict[str, Any]]:
+        rows = self.conn().execute("SELECT * FROM catalog ORDER BY provider").fetchall()
+        return {r["provider"]: dict(r) for r in rows}
+
+    # -- readings --------------------------------------------------------
+    def add_readings(self, readings: Sequence[Reading]) -> None:
+        if not readings:
+            return
+        with self._write_lock, self.conn() as conn:
+            conn.executemany(
+                "INSERT OR IGNORE INTO readings "
+                "(provider,ts,state,value,http,latency_ms,shape,extra) VALUES (?,?,?,?,?,?,?,?)",
+                [
+                    (r.provider, iso(r.ts), r.state, r.value, r.http, r.latency_ms,
+                     r.shape, json.dumps(r.extra, ensure_ascii=False))
+                    for r in readings
+                ],
+            )
+
+    def readings_since(self, provider: str, since: datetime) -> list[Reading]:
+        rows = self.conn().execute(
+            "SELECT * FROM readings WHERE provider=? AND ts>=? ORDER BY ts",
+            (provider, iso(since)),
+        ).fetchall()
+        return [self._row_to_reading(r) for r in rows]
+
+    def recent_readings(self, provider: str, limit: int) -> list[Reading]:
+        rows = self.conn().execute(
+            "SELECT * FROM readings WHERE provider=? ORDER BY ts DESC LIMIT ?",
+            (provider, limit),
+        ).fetchall()
+        return [self._row_to_reading(r) for r in reversed(rows)]
+
+    @staticmethod
+    def _row_to_reading(row: sqlite3.Row) -> Reading:
+        return Reading(
+            provider=row["provider"],
+            ts=parse_ts(row["ts"]),
+            state=row["state"],
+            value=row["value"],
+            http=row["http"],
+            latency_ms=row["latency_ms"],
+            shape=row["shape"],
+            extra=json.loads(row["extra"] or "{}"),
+        )
+
+    def coverage(self) -> dict[str, Any]:
+        row = self.conn().execute(
+            "SELECT COUNT(*) n, MIN(ts) first_ts, MAX(ts) last_ts FROM readings"
+        ).fetchone()
+        ok = self.conn().execute(
+            "SELECT COUNT(*) n FROM readings WHERE state=?", (STATE_OK,)
+        ).fetchone()["n"]
+        by_state = {
+            r["state"]: r["n"]
+            for r in self.conn().execute(
+                "SELECT state, COUNT(*) n FROM readings GROUP BY state"
+            ).fetchall()
+        }
+        return {
+            "samples": row["n"],
+            "ok_samples": ok,
+            "first_ts": row["first_ts"],
+            "last_ts": row["last_ts"],
+            "by_state": by_state,
+        }
+
+    # -- events ----------------------------------------------------------
+    def add_event(self, ts: datetime, provider: str, kind: str, detail: dict[str, Any]) -> bool:
+        ident = hashlib.sha256(f"{provider}|{kind}|{iso(ts)}".encode()).hexdigest()[:16]
+        with self._write_lock, self.conn() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO events (id,ts,provider,kind,detail) VALUES (?,?,?,?,?)",
+                (ident, iso(ts), provider, kind, json.dumps(detail, ensure_ascii=False)),
+            )
+        return cur.rowcount > 0
+
+    def events(self, limit: int = 40, provider: str | None = None) -> list[dict[str, Any]]:
+        if provider:
+            rows = self.conn().execute(
+                "SELECT * FROM events WHERE provider=? ORDER BY ts DESC LIMIT ?",
+                (provider, limit),
+            ).fetchall()
+        else:
+            rows = self.conn().execute(
+                "SELECT * FROM events ORDER BY ts DESC LIMIT ?", (limit,)
+            ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["detail"] = json.loads(d["detail"] or "{}")
+            out.append(d)
+        return out
+
+    # -- alert state -----------------------------------------------------
+    def alert_state(self, key: str) -> dict[str, Any] | None:
+        row = self.conn().execute("SELECT * FROM alert_state WHERE key=?", (key,)).fetchone()
+        return dict(row) if row else None
+
+    def set_alert_state(self, key: str, active_since: datetime | None,
+                        last_fired: str | None, signature: str | None) -> None:
+        with self._write_lock, self.conn() as conn:
+            conn.execute(
+                "INSERT INTO alert_state (key,active_since,last_fired,signature) VALUES (?,?,?,?) "
+                "ON CONFLICT(key) DO UPDATE SET active_since=excluded.active_since, "
+                "last_fired=excluded.last_fired, signature=excluded.signature",
+                (key, iso(active_since) if active_since else None, last_fired, signature),
+            )
+
+    def record_fired(self, ident: str, ts: datetime, payload: dict[str, Any]) -> bool:
+        with self._write_lock, self.conn() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO fired_alerts (id,ts,payload) VALUES (?,?,?)",
+                (ident, iso(ts), json.dumps(payload, ensure_ascii=False)),
+            )
+        return cur.rowcount > 0
+
+    def fired_alerts(self, limit: int = 50) -> list[dict[str, Any]]:
+        rows = self.conn().execute(
+            "SELECT payload FROM fired_alerts ORDER BY ts DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [json.loads(r["payload"]) for r in rows]
+
+    # -- ingest bookkeeping ----------------------------------------------
+    def get_state(self, key: str) -> str | None:
+        row = self.conn().execute("SELECT v FROM ingest_state WHERE k=?", (key,)).fetchone()
+        return row["v"] if row else None
+
+    def put_state(self, key: str, value: str) -> None:
+        with self._write_lock, self.conn() as conn:
+            conn.execute(
+                "INSERT INTO ingest_state (k,v) VALUES (?,?) "
+                "ON CONFLICT(k) DO UPDATE SET v=excluded.v",
+                (key, value),
+            )
+
+
+# --------------------------------------------------------------------------
+# Estimation
+# --------------------------------------------------------------------------
+
+
+def _subsample(points: Sequence[tuple[float, float]], cap: int) -> Sequence[tuple[float, float]]:
+    if len(points) <= cap:
+        return points
+    step = len(points) / cap
+    picked = [points[min(len(points) - 1, int(i * step))] for i in range(cap)]
+    if picked[-1] != points[-1]:
+        picked[-1] = points[-1]
+    return picked
+
+
+def theil_sen(points: Sequence[tuple[float, float]],
+              min_dt_s: float = 60.0) -> float | None:
+    """Median of pairwise slopes, in value-units per hour.
+
+    Chosen over a first/last difference because the captured window contains
+    both top-ups and multi-minute holes torn by 500/504 responses. MEASURED:
+    for `findymail` the first/last estimate reads +3623 credits/h - a +1994
+    top-up divided by the window - while Theil-Sen reads -55 credits/h, which
+    is the rate the provider was actually consuming at.
+
+    Also chosen over a median of *adjacent* differences, which collapses on the
+    step-shaped series: `anthropic` is flat between batch charges, so half its
+    adjacent deltas are zero and the median is meaningless.
+    """
+    sample = _subsample(points, BASELINE.max_slope_points)
+    slopes: list[float] = []
+    for i in range(len(sample)):
+        t_i, v_i = sample[i]
+        for j in range(i + 1, len(sample)):
+            t_j, v_j = sample[j]
+            dt = t_j - t_i
+            if dt >= min_dt_s:
+                slopes.append((v_j - v_i) / (dt / 3600.0))
+    if not slopes:
+        return None
+    return statistics.median(slopes)
+
+
+def mad(values: Sequence[float]) -> float:
+    """Median absolute deviation."""
+    if len(values) < 2:
+        return 0.0
+    centre = statistics.median(values)
+    return statistics.median([abs(v - centre) for v in values])
+
+
+@dataclass
+class Segment:
+    """A run of readings uninterrupted by a top-up or package reset."""
+
+    points: list[tuple[datetime, float]] = field(default_factory=list)
+
+    @property
+    def span_s(self) -> float:
+        if len(self.points) < 2:
+            return 0.0
+        return (self.points[-1][0] - self.points[0][0]).total_seconds()
+
+
+def detect_discontinuities(readings: Sequence[Reading], pay_model: str
+                           ) -> list[tuple[datetime, str, dict[str, Any]]]:
+    """Find top-ups and package resets in a value series.
+
+    Only depleting pay models can be topped up. For a `spend_report` the value
+    is cumulative trailing cost, so a rise *is* the spend and calling it a
+    top-up would invert the meaning entirely.
+    """
+    if pay_model not in DEPLETING:
+        return []
+    values = [(r.ts, r.value, r.extra) for r in readings if r.state == STATE_OK and r.value is not None]
+    if len(values) < 3:
+        return []
+
+    deltas = [b[1] - a[1] for a, b in zip(values, values[1:])]
+    declines = [abs(d) for d in deltas if d < 0]
+    typical = statistics.median(declines) if declines else 0.0
+
+    found: list[tuple[datetime, str, dict[str, Any]]] = []
+    for (t_prev, v_prev, _), (t_now, v_now, extra) in zip(values, values[1:]):
+        jump = v_now - v_prev
+        if jump <= 0:
+            continue
+        # Noise floor: a positive move only counts once it clears a multiple of
+        # the provider's own typical per-poll decline.
+        if typical > 0 and jump < BASELINE.topup_min_ratio * typical:
+            continue
+        if typical == 0 and jump <= 0:
+            continue
+        package = extra.get("package")
+        kind = "top_up"
+        if package and v_now >= BASELINE.reset_fraction_of_package * package:
+            kind = "package_reset"
+        found.append((t_now, kind, {
+            "from": round(v_prev, 6),
+            "to": round(v_now, 6),
+            "delta": round(jump, 6),
+            "gap_s": round((t_now - t_prev).total_seconds(), 1),
+            "typical_decline_per_poll": round(typical, 6),
+            "ratio_to_typical": round(jump / typical, 1) if typical else None,
+            "refresh": extra.get("refresh"),
+        }))
+    return found
+
+
+def latest_segment(readings: Sequence[Reading], pay_model: str) -> Segment:
+    """Values since the most recent top-up or reset.
+
+    Theil-Sen already survives a single large jump, but segmenting means the
+    reported burn describes conditions *now* rather than an average across a
+    balance that has since been refilled.
+    """
+    ok = [(r.ts, r.value) for r in readings if r.state == STATE_OK and r.value is not None]
+    if not ok:
+        return Segment([])
+    cuts = [found[0] for found in detect_discontinuities(readings, pay_model)]
+    if cuts:
+        last_cut = max(cuts)
+        after = [(ts, v) for ts, v in ok if ts >= last_cut]
+        # Only honour the cut if what follows is still long enough to measure;
+        # otherwise a top-up 30 seconds ago would erase the burn rate entirely.
+        if len(after) >= BASELINE.min_samples and \
+                (after[-1][0] - after[0][0]).total_seconds() >= BASELINE.min_span_s:
+            return Segment(after)
+    return Segment(ok)
+
+
+@dataclass
+class Estimate:
+    """Burn estimate for one provider, or an explicit statement that there is none."""
+
+    rate_per_h: float | None          # positive = spending, in the provider's own unit
+    slope_per_h: float | None         # signed rate of change of the raw value
+    samples: int
+    span_s: float
+    dispersion: float | None          # MAD of pairwise slopes, same units
+    reason: str | None = None         # why there is no estimate
+
+    @property
+    def ok(self) -> bool:
+        return self.rate_per_h is not None
+
+
+def estimate_burn(readings: Sequence[Reading], pay_model: str,
+                  window_s: float | None = None) -> Estimate:
+    segment = latest_segment(readings, pay_model)
+    points = segment.points
+    if window_s is not None and points:
+        cutoff = points[-1][0] - timedelta(seconds=window_s)
+        points = [p for p in points if p[0] >= cutoff]
+
+    if len(points) < BASELINE.min_samples:
+        return Estimate(None, None, len(points), 0.0, None,
+                        f"only {len(points)} usable samples, need {BASELINE.min_samples}")
+    span = (points[-1][0] - points[0][0]).total_seconds()
+    if span < BASELINE.min_span_s:
+        return Estimate(None, None, len(points), span, None,
+                        f"span {span:.0f}s below the {BASELINE.min_span_s:.0f}s minimum")
+
+    origin = points[0][0]
+    numeric = [((t - origin).total_seconds(), v) for t, v in points]
+    slope = theil_sen(numeric)
+    if slope is None:
+        return Estimate(None, None, len(points), span, None, "no pair far enough apart to fit")
+
+    # Dispersion of the slope estimate itself, for the anomaly rule.
+    sample = _subsample(numeric, BASELINE.max_slope_points)
+    pair_slopes = [
+        (b[1] - a[1]) / ((b[0] - a[0]) / 3600.0)
+        for a, b in zip(sample, sample[1:])
+        if b[0] - a[0] >= 1.0
+    ]
+    spread = mad(pair_slopes) if pair_slopes else 0.0
+
+    # A depleting balance falls as it is spent; a spend report rises. Both are
+    # reported as a positive "spend per hour".
+    rate = -slope if pay_model in DEPLETING else slope
+    return Estimate(rate, slope, len(points), span, spread)
+
+
+# --------------------------------------------------------------------------
+# Provider state
+# --------------------------------------------------------------------------
+
+
+@dataclass
+class ProviderState:
+    provider: str
+    name: str
+    pay_model: str
+    unit: str
+    note: str
+
+    last_reading: Reading | None = None
+    last_ok: Reading | None = None
+    value: float | None = None
+    package: float | None = None
+    refresh: str | None = None
+    spend_30d: float | None = None
+
+    burn: Estimate | None = None
+    recent_burn: Estimate | None = None
+
+    stale_s: float | None = None
+    available: bool = True
+    unavailable_since: datetime | None = None
+    consecutive_failures: int = 0
+
+    runway_h: float | None = None
+    depleted_at: datetime | None = None
+    projection_at_refresh: float | None = None
+    hours_to_refresh: float | None = None
+    extrapolation_ratio: float | None = None
+
+    spark: list[float] = field(default_factory=list)
+    spark_ts: list[datetime] = field(default_factory=list)
+    window_span_s: float = 0.0
+    ok_samples: int = 0
+    total_samples: int = 0
+    alerts: list[dict[str, Any]] = field(default_factory=list)
+    events: list[dict[str, Any]] = field(default_factory=list)
+
+    @property
+    def depleting(self) -> bool:
+        return self.pay_model in DEPLETING
+
+    @property
+    def health_pct(self) -> float | None:
+        if not self.total_samples:
+            return None
+        return 100.0 * self.ok_samples / self.total_samples
+
+
+def build_state(store: Store, now: datetime, catalog: dict[str, dict[str, Any]],
+                window_s: float = BASELINE.baseline_window_s) -> list[ProviderState]:
+    since = now - timedelta(seconds=window_s)
+    states: list[ProviderState] = []
+
+    for provider, meta in catalog.items():
+        readings = store.readings_since(provider, since)
+        state = ProviderState(
+            provider=provider,
+            name=meta.get("name") or provider,
+            pay_model=meta.get("pay_model") or "unknown",
+            unit=meta.get("unit") or "unknown",
+            note=meta.get("note") or "",
+        )
+        state.total_samples = len(readings)
+        oks = [r for r in readings if r.state == STATE_OK]
+        state.ok_samples = len(oks)
+
+        if readings:
+            state.last_reading = readings[-1]
+            state.window_span_s = (readings[-1].ts - readings[0].ts).total_seconds()
+        if oks:
+            state.last_ok = oks[-1]
+            state.value = oks[-1].value
+            state.package = oks[-1].extra.get("package")
+            state.refresh = oks[-1].extra.get("refresh")
+            state.spend_30d = oks[-1].extra.get("spend_30d")
+            state.stale_s = (now - oks[-1].ts).total_seconds()
+            state.spark = [r.value for r in oks if r.value is not None][-120:]
+            state.spark_ts = [r.ts for r in oks if r.value is not None][-120:]
+
+        # Availability: how long since the last reading that carried a value.
+        # `schema_miss` counts as a failure to observe, because it is exactly
+        # that - but it is counted separately from an HTTP error everywhere it
+        # is displayed.
+        trailing = 0
+        for reading in reversed(readings):
+            if reading.state == STATE_OK:
+                break
+            trailing += 1
+        state.consecutive_failures = trailing
+        if state.stale_s is None:
+            state.available = False
+            state.unavailable_since = readings[0].ts if readings else None
+        else:
+            state.available = state.stale_s <= POLICY.stale_display_s
+            if not state.available and oks:
+                state.unavailable_since = oks[-1].ts
+
+        state.burn = estimate_burn(readings, state.pay_model)
+        state.recent_burn = estimate_burn(readings, state.pay_model,
+                                          window_s=BASELINE.recent_window_s)
+
+        _project(state, now)
+        states.append(state)
+
+    return states
+
+
+def _project(state: ProviderState, now: datetime) -> None:
+    """Fill in runway / projected-at-refresh, or leave them None and say why."""
+    burn = state.burn
+    if state.value is None or burn is None or not burn.ok or burn.rate_per_h is None:
+        return
+    rate = burn.rate_per_h
+
+    if state.pay_model == "prepaid_balance":
+        if rate > 0:
+            state.runway_h = state.value / rate
+            state.depleted_at = now + timedelta(hours=state.runway_h)
+    elif state.pay_model == "postpaid":
+        # Zero is not the boundary for postpaid credit: it may legitimately go
+        # negative between top-ups. The configured floor stands in for the
+        # credit limit nobody supplied.
+        if rate > 0:
+            headroom = state.value - POLICY.postpaid_floor
+            if headroom > 0:
+                state.runway_h = headroom / rate
+                state.depleted_at = now + timedelta(hours=state.runway_h)
+    elif state.pay_model == "credits_package":
+        if rate > 0:
+            state.runway_h = state.value / rate
+            state.depleted_at = now + timedelta(hours=state.runway_h)
+        if state.refresh:
+            try:
+                refresh_day = date.fromisoformat(str(state.refresh))
+            except ValueError:
+                return
+            refresh_at = datetime.combine(refresh_day, datetime.min.time(), tzinfo=timezone.utc)
+            hours = (refresh_at - now).total_seconds() / 3600.0
+            state.hours_to_refresh = hours
+            if hours > 0:
+                state.projection_at_refresh = state.value - rate * hours
+                if burn.span_s > 0:
+                    # How far past the observed window this projection reaches.
+                    # Carried into the alert so nobody mistakes a 32-minute
+                    # observation extrapolated over 8 days for a measurement.
+                    state.extrapolation_ratio = (hours * 3600.0) / burn.span_s
+    # spend_report has no balance, so no runway exists to compute.
+
+
+# --------------------------------------------------------------------------
+# Rules
+# --------------------------------------------------------------------------
+
+CLASS_POLICY = "operational_policy"
+CLASS_DERIVED = "data_derived"
+
+SEVERITY = {"critical": 0, "warning": 1, "info": 2}
+
+
+@dataclass
+class Candidate:
+    """A rule firing before sustain/dedup/cooldown are applied."""
+
+    key: str
+    rule: str
+    level: str
+    provider: str | None
+    text: str
+    evidence: dict[str, Any]
+    rule_class: str
+    sustain_s: float
+    signature: str
+
+
+def _fmt(value: float | None, unit: str, digits: int = 2) -> str:
+    if value is None:
+        return "n/a"
+    if unit == "credits":
+        return f"{value:,.0f} credits"
+    if unit in ("usd", "gbp"):
+        symbol = {"usd": "USD", "gbp": "GBP"}[unit]
+        return f"{value:,.2f} {symbol}"
+    return f"{value:,.{digits}f} {unit}"
+
+
+def rule_runway(state: ProviderState, now: datetime) -> Candidate | None:
+    """Balance will hit its floor sooner than the configured lead time."""
+    if state.pay_model not in ("prepaid_balance", "postpaid"):
+        return None
+    runway = state.runway_h
+    burn = state.burn
+    depleted_at = state.depleted_at
+    if runway is None or burn is None or burn.rate_per_h is None or depleted_at is None:
+        return None
+    if runway > POLICY.runway_warning_h:
+        return None
+    if burn.span_s < BASELINE.min_projection_span_s:
+        return None
+    level = "critical" if runway <= POLICY.runway_critical_h else "warning"
+    floor = 0.0 if state.pay_model == "prepaid_balance" else POLICY.postpaid_floor
+    floor_text = "zero" if floor == 0 else _fmt(floor, state.unit)
+    return Candidate(
+        key=f"runway:{state.provider}",
+        rule="runway",
+        level=level,
+        provider=state.provider,
+        text=(
+            f"{state.provider} ({state.name}, {state.pay_model}) reaches {floor_text} in "
+            f"{runway:.1f} h at the observed burn of "
+            f"{_fmt(burn.rate_per_h, state.unit)}/h; "
+            f"{_fmt(state.value, state.unit)} left, projected {iso(depleted_at)}"
+        ),
+        evidence={
+            "value": state.value,
+            "unit": state.unit,
+            "pay_model": state.pay_model,
+            "floor": floor,
+            "burn_per_h": round(burn.rate_per_h, 6),
+            "runway_h": round(runway, 3),
+            "depleted_at": iso(depleted_at),
+            "estimator": "theil_sen",
+            "samples": burn.samples,
+            "observed_span_s": round(burn.span_s, 1),
+            "threshold_h": POLICY.runway_critical_h if level == "critical" else POLICY.runway_warning_h,
+        },
+        rule_class=CLASS_POLICY,
+        sustain_s=POLICY.estimate_sustain_s,
+        signature=f"runway:{level}",
+    )
+
+
+def rule_package_exhaustion(state: ProviderState, now: datetime) -> Candidate | None:
+    """A credits package is projected to run out before its refresh date."""
+    if state.pay_model != "credits_package":
+        return None
+    projection = state.projection_at_refresh
+    burn = state.burn
+    package = state.package
+    runway = state.runway_h
+    hours_left = state.hours_to_refresh
+    if projection is None or burn is None or burn.rate_per_h is None:
+        return None
+    if package is None or runway is None or hours_left is None:
+        return None
+    if burn.span_s < BASELINE.min_projection_span_s:
+        return None
+    shortfall = -projection
+    if shortfall <= POLICY.package_shortfall_fraction * package:
+        return None
+    ratio = state.extrapolation_ratio
+    ratio_text = f" (projection extrapolates the observed window {ratio:.0f}x)" if ratio else ""
+    return Candidate(
+        key=f"package_exhaustion:{state.provider}",
+        rule="package_exhaustion",
+        level="critical" if runway <= POLICY.runway_critical_h else "warning",
+        provider=state.provider,
+        text=(
+            f"{state.provider} ({state.name}) is projected to exhaust its credits package "
+            f"{runway:.1f} h from now, {hours_left:.1f} h before the "
+            f"{state.refresh} refresh; {state.value:,.0f} of {package:,.0f} credits left, "
+            f"burning {burn.rate_per_h:,.0f} credits/h" + ratio_text
+        ),
+        evidence={
+            "remaining": state.value,
+            "package": package,
+            "refresh": state.refresh,
+            "unit": "credits",
+            "burn_per_h": round(burn.rate_per_h, 3),
+            "runway_h": round(runway, 3),
+            "hours_to_refresh": round(hours_left, 2),
+            "projected_at_refresh": round(projection, 1),
+            "estimator": "theil_sen",
+            "samples": burn.samples,
+            "observed_span_s": round(burn.span_s, 1),
+            "extrapolation_ratio": round(ratio, 1) if ratio else None,
+        },
+        rule_class=CLASS_POLICY,
+        sustain_s=POLICY.estimate_sustain_s,
+        signature="package_exhaustion",
+    )
+
+
+def rule_unavailable(state: ProviderState, now: datetime) -> Candidate | None:
+    """No usable reading from one provider for longer than the tolerance.
+
+    Deliberately per-provider. MEASURED over 66 exact cycles: 429 never hit
+    more than one provider in the same cycle - not once - so the "429 is
+    injected pool-wide" reading taken from the first minutes does not survive
+    the window, and grouping availability pool-wide would hide real per-vendor
+    outages. 500 episodes are plainly per-provider, running 11-16 consecutive
+    cycles on one ID at a time.
+
+    What stops 504 singles from becoming spam is the length of the staleness
+    window itself, which is why this rule carries no additional sustain: the
+    900 s it takes to become stale IS the sustain, and stacking another 300 s
+    on top would push detection past the longest outage ever observed. The
+    Alerter still requires the condition to survive one evaluation before
+    firing, so a single glitched evaluation cannot produce a line.
+    """
+    if state.stale_s is None:
+        if state.last_reading is None:
+            return None
+        stale_for = (now - state.last_reading.ts).total_seconds()
+        detail = "no successful reading in the whole window"
+    else:
+        stale_for = state.stale_s
+        detail = f"last value {stale_for / 60:.1f} min ago"
+    if stale_for < POLICY.unavailable_alert_s:
+        return None
+
+    recent = state.last_reading
+    return Candidate(
+        key=f"unavailable:{state.provider}",
+        rule="unavailable",
+        level="warning",
+        provider=state.provider,
+        text=(
+            f"{state.provider} ({state.name}) has returned no usable value for "
+            f"{stale_for / 60:.1f} min ({detail}); "
+            f"{state.consecutive_failures} consecutive failed polls, "
+            f"last state {recent.state if recent else 'none'}"
+            + (f" HTTP {recent.http}" if recent and recent.http else "")
+        ),
+        evidence={
+            "stale_s": round(stale_for, 1),
+            "consecutive_failures": state.consecutive_failures,
+            "last_state": recent.state if recent else None,
+            "last_http": recent.http if recent else None,
+            "last_ok_ts": iso(state.last_ok.ts) if state.last_ok else None,
+            "tolerance_s": POLICY.unavailable_alert_s,
+            "window_ok_fraction": round(state.health_pct / 100, 4) if state.health_pct is not None else None,
+        },
+        rule_class=CLASS_POLICY,
+        sustain_s=0.0,
+        signature="unavailable",
+    )
+
+
+def rule_burn_anomaly(state: ProviderState, now: datetime) -> Candidate | None:
+    """Recent burn departs from the provider's own robust baseline.
+
+    Data-derived: the threshold is k MADs of that provider's own pairwise slope
+    distribution, not a number anybody chose. The scale is floored at a
+    fraction of the baseline because MAD is exactly zero for the steadiest
+    providers, which would otherwise make every deviation infinite.
+    """
+    base, recent = state.burn, state.recent_burn
+    if base is None or recent is None or not base.ok or not recent.ok:
+        return None
+    if base.rate_per_h is None or recent.rate_per_h is None:
+        return None
+    if abs(base.rate_per_h) < 1e-9:
+        return None
+    scale = max(base.dispersion or 0.0,
+                BASELINE.anomaly_scale_floor_fraction * abs(base.rate_per_h))
+    delta = recent.rate_per_h - base.rate_per_h
+    if scale <= 0 or abs(delta) < BASELINE.anomaly_k * scale:
+        return None
+    # Only an acceleration in spend is worth waking someone for. A slowdown is
+    # recorded on the dashboard but is not an incident.
+    if delta <= 0:
+        return None
+    factor = recent.rate_per_h / base.rate_per_h if base.rate_per_h else None
+    return Candidate(
+        key=f"burn_anomaly:{state.provider}",
+        rule="burn_anomaly",
+        level="warning",
+        provider=state.provider,
+        text=(
+            f"{state.provider} ({state.name}) burn accelerated to "
+            f"{_fmt(recent.rate_per_h, state.unit)}/h over the last "
+            f"{recent.span_s / 60:.0f} min against a window baseline of "
+            f"{_fmt(base.rate_per_h, state.unit)}/h"
+            + (f" ({factor:.1f}x)" if factor else "")
+            + f"; deviation {abs(delta) / scale:.1f} MAD-equivalents"
+        ),
+        evidence={
+            "recent_burn_per_h": round(recent.rate_per_h, 6),
+            "baseline_burn_per_h": round(base.rate_per_h, 6),
+            "unit": state.unit,
+            "delta_per_h": round(delta, 6),
+            "scale": round(scale, 6),
+            "k": BASELINE.anomaly_k,
+            "deviation_in_scale_units": round(abs(delta) / scale, 2),
+            "recent_window_s": round(recent.span_s, 1),
+            "baseline_window_s": round(base.span_s, 1),
+            "estimator": "theil_sen",
+        },
+        rule_class=CLASS_DERIVED,
+        sustain_s=POLICY.estimate_sustain_s,
+        signature="burn_anomaly",
+    )
+
+
+def rule_collection_health(states: Sequence[ProviderState], now: datetime) -> Candidate | None:
+    """Most of the pool is dark at once - the collector or the API, not a vendor.
+
+    Counts providers past the *alert* staleness threshold, not the tighter
+    display one. Using the display threshold here would page someone whenever
+    half the pool went amber, and MEASURED, routine 5xx episodes overlap: three
+    providers were simultaneously mid-episode at 16:22-16:24Z. Those heal
+    themselves in minutes and nobody can act on them, so the pool rule has to
+    mean "half the pool is genuinely dark" or it means nothing.
+    """
+    if not states:
+        return None
+    dark = [s for s in states
+            if s.stale_s is None or s.stale_s >= POLICY.unavailable_alert_s]
+    fraction = len(dark) / len(states)
+    if fraction < POLICY.pool_error_fraction:
+        return None
+    unavailable = dark
+    return Candidate(
+        key="collection_health:pool",
+        rule="collection_health",
+        level="critical",
+        provider=None,
+        text=(
+            f"{len(unavailable)} of {len(states)} providers ({fraction:.0%}) have returned no "
+            f"value for over {POLICY.unavailable_alert_s / 60:.0f} min; worst observed in the "
+            f"reference window was 4 of 15 failing in a single cycle and none stayed dark that "
+            f"long, so this points at the collector or the API rather than at one vendor. "
+            f"Affected: {', '.join(sorted(s.provider for s in unavailable))}"
+        ),
+        evidence={
+            "evaluated_at": iso(now),
+            "unavailable": sorted(s.provider for s in unavailable),
+            "unavailable_count": len(unavailable),
+            "total_providers": len(states),
+            "fraction": round(fraction, 4),
+            "threshold_fraction": POLICY.pool_error_fraction,
+            "worst_observed_in_reference_window": "4/15 in a single cycle",
+        },
+        rule_class=CLASS_POLICY,
+        sustain_s=POLICY.pool_error_sustain_s,
+        signature="collection_health",
+    )
+
+
+PROVIDER_RULES: tuple[Callable[[ProviderState, datetime], Candidate | None], ...] = (
+    rule_runway,
+    rule_package_exhaustion,
+    rule_unavailable,
+    rule_burn_anomaly,
+)
+
+
+def evaluate(states: Sequence[ProviderState], now: datetime) -> list[Candidate]:
+    candidates: list[Candidate] = []
+    for state in states:
+        for rule in PROVIDER_RULES:
+            found = rule(state, now)
+            if found is not None:
+                candidates.append(found)
+    pool = rule_collection_health(states, now)
+    if pool is not None:
+        candidates.append(pool)
+    candidates.sort(key=lambda c: (SEVERITY.get(c.level, 9), c.key))
+    return candidates
+
+
+# --------------------------------------------------------------------------
+# Alerting
+# --------------------------------------------------------------------------
+
+
+class Alerter:
+    """Sustain, dedup, cooldown and durable append to alerts.jsonl.
+
+    Sustain is evaluated against the *data* clock, not the process clock, so a
+    replay of the log reproduces exactly the alerts a live run would have
+    produced. That is what makes "change a threshold, delete the DB, replay"
+    a meaningful operation.
+    """
+
+    def __init__(self, store: Store, alerts_path: str) -> None:
+        self.store = store
+        self.alerts_path = alerts_path
+        self._lock = threading.Lock()
+        os.makedirs(os.path.dirname(os.path.abspath(alerts_path)), exist_ok=True)
+
+    def process(self, candidates: Sequence[Candidate], now: datetime) -> list[dict[str, Any]]:
+        active = {c.key: c for c in candidates}
+        fired: list[dict[str, Any]] = []
+
+        for key, candidate in active.items():
+            prior = self.store.alert_state(key)
+            since = parse_ts(prior["active_since"]) if prior and prior["active_since"] else None
+            last_fired = prior["last_fired"] if prior else None
+            prior_signature = prior["signature"] if prior else None
+
+            if since is None:
+                # Condition just became true: start the sustain clock, do not fire.
+                self.store.set_alert_state(key, now, last_fired, candidate.signature)
+                continue
+
+            held_for = (now - since).total_seconds()
+            if held_for < candidate.sustain_s:
+                self.store.set_alert_state(key, since, last_fired, candidate.signature)
+                continue
+
+            # Cooldown, unless the situation has materially changed (e.g. a
+            # warning escalating to critical), which is worth a fresh line.
+            escalated = prior_signature is not None and prior_signature != candidate.signature
+            if last_fired and not escalated:
+                if (now - parse_ts(last_fired)).total_seconds() < POLICY.cooldown_s:
+                    self.store.set_alert_state(key, since, last_fired, candidate.signature)
+                    continue
+
+            payload = {
+                "ts": iso(now),
+                "level": candidate.level,
+                "rule": candidate.rule,
+                "rule_class": candidate.rule_class,
+                "provider": candidate.provider,
+                "text": candidate.text,
+                "evidence": dict(candidate.evidence,
+                                 sustained_s=round(held_for, 1),
+                                 sustain_required_s=candidate.sustain_s,
+                                 first_observed=iso(since)),
+            }
+            ident = hashlib.sha256(f"{key}|{iso(now)}".encode()).hexdigest()[:16]
+            if self.store.record_fired(ident, now, payload):
+                self._append(payload)
+                fired.append(payload)
+            self.store.set_alert_state(key, since, iso(now), candidate.signature)
+
+        # Conditions that stopped holding: clear the sustain clock but keep
+        # last_fired so the cooldown still applies if it comes straight back.
+        for row in self.store.conn().execute("SELECT key, last_fired FROM alert_state").fetchall():
+            if row["key"] not in active:
+                self.store.set_alert_state(row["key"], None, row["last_fired"], None)
+
+        return fired
+
+    def _append(self, payload: dict[str, Any]) -> None:
+        # One JSON object on one physical line is a hard requirement of the
+        # deliverable, so it is enforced rather than assumed.
+        line = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        if "\n" in line or "\r" in line:
+            raise ValueError("alert payload would break the one-object-per-line contract")
+        with self._lock, open(self.alerts_path, "a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+
+
+# --------------------------------------------------------------------------
+# Ingestion
+# --------------------------------------------------------------------------
+
+
+class Ingestor:
+    """Replays raw_samples.jsonl, then tails it.
+
+    The raw log is append-only and the sampler fsyncs each line, so a byte
+    offset is a safe resume point. Reading and event detection are idempotent
+    anyway, so a wrong offset costs time and never correctness.
+    """
+
+    OFFSET_KEY = "raw_offset"
+    EVAL_KEY = "last_eval_ts"
+
+    def __init__(self, store: Store, alerter: Alerter, raw_path: str) -> None:
+        self.store = store
+        self.alerter = alerter
+        self.raw_path = raw_path
+        self.stop = threading.Event()
+        self.last_eval: datetime | None = None
+        self.last_ingest_wall: datetime | None = None
+        self.lines_read = 0
+        self.replay_complete = threading.Event()
+        self._known_catalog: dict[str, dict[str, Any]] = {}
+
+    # -- offsets ---------------------------------------------------------
+    def _load_offset(self) -> int:
+        raw = self.store.get_state(self.OFFSET_KEY)
+        if not raw:
+            return 0
+        try:
+            offset = int(raw)
+        except ValueError:
+            return 0
+        try:
+            size = os.path.getsize(self.raw_path)
+        except OSError:
+            return 0
+        # File shrank: it was rotated or replaced, so the offset is meaningless.
+        return offset if offset <= size else 0
+
+    # -- processing ------------------------------------------------------
+    def _handle_catalog(self, record: dict[str, Any]) -> None:
+        if record.get("http") != 200:
+            return
+        try:
+            entries = json.loads(record.get("body") or "")
+        except (ValueError, TypeError):
+            return
+        if not isinstance(entries, list) or not entries:
+            return
+        self.store.upsert_catalog(entries, parse_ts(record["ts"]))
+        self._known_catalog = self.store.catalog()
+
+    def process_batch(self, records: Sequence[dict[str, Any]]) -> int:
+        readings: list[Reading] = []
+        newest: datetime | None = None
+        for record in records:
+            kind = record.get("kind")
+            if kind == "catalog":
+                self._handle_catalog(record)
+            elif kind == "balance":
+                reading = read_sample(record)
+                if reading is not None:
+                    readings.append(reading)
+            ts_raw = record.get("ts")
+            if ts_raw:
+                try:
+                    ts = parse_ts(ts_raw)
+                except ValueError:
+                    continue
+                if newest is None or ts > newest:
+                    newest = ts
+        self.store.add_readings(readings)
+        if newest:
+            self.last_ingest_wall = newest
+        return len(readings)
+
+    def maybe_evaluate(self, now: datetime, force: bool = False) -> list[dict[str, Any]]:
+        """Run the rules at a data timestamp, at most once per cycle."""
+        if not force and self.last_eval and (now - self.last_eval).total_seconds() < CYCLE_S:
+            return []
+        catalog = self._known_catalog or self.store.catalog()
+        if not catalog:
+            return []
+        states = build_state(self.store, now, catalog)
+        self._detect_events(states, now)
+        candidates = evaluate(states, now)
+        fired = self.alerter.process(candidates, now)
+        self.last_eval = now
+        self.store.put_state(self.EVAL_KEY, iso(now))
+        return fired
+
+    def _detect_events(self, states: Sequence[ProviderState], now: datetime) -> None:
+        """Record top-ups and package resets. Never an alert - normal operations."""
+        for state in states:
+            if not state.depleting:
+                continue
+            readings = self.store.readings_since(
+                state.provider, now - timedelta(seconds=BASELINE.baseline_window_s))
+            for ts, kind, detail in detect_discontinuities(readings, state.pay_model):
+                self.store.add_event(ts, state.provider, kind,
+                                     dict(detail, unit=state.unit, pay_model=state.pay_model))
+
+    # -- drivers ---------------------------------------------------------
+    def replay(self) -> int:
+        """Read the log from the stored offset to EOF, evaluating as data advances."""
+        offset = self._load_offset()
+        total = 0
+        if not os.path.exists(self.raw_path):
+            self.replay_complete.set()
+            return 0
+        with open(self.raw_path, "r", encoding="utf-8", errors="replace") as handle:
+            handle.seek(offset)
+            batch: list[dict[str, Any]] = []
+            batch_newest: datetime | None = None
+            for line in handle:
+                if not line.endswith("\n"):
+                    # Partial trailing line: the sampler is mid-write. Stop here
+                    # and leave the offset before it.
+                    break
+                offset += len(line.encode("utf-8"))
+                record = _decode(line)
+                if record is None:
+                    continue
+                total += 1
+                batch.append(record)
+                try:
+                    ts = parse_ts(record["ts"])
+                except (KeyError, ValueError):
+                    ts = None
+                if ts and (batch_newest is None or ts > batch_newest):
+                    batch_newest = ts
+                # Flush at cycle boundaries so rules see whole cycles.
+                if record.get("kind") == "catalog" and len(batch) > 1:
+                    self.process_batch(batch[:-1])
+                    if batch_newest:
+                        self.maybe_evaluate(batch_newest)
+                    batch = [record]
+                    batch_newest = ts
+            if batch:
+                self.process_batch(batch)
+                if batch_newest:
+                    self.maybe_evaluate(batch_newest)
+            self.store.put_state(self.OFFSET_KEY, str(offset))
+        self.lines_read += total
+        self.replay_complete.set()
+        return total
+
+    def tail(self, poll_s: float = 2.0) -> None:
+        while not self.stop.is_set():
+            try:
+                self.replay()
+                # Even with no new data, re-evaluate on the wall clock so
+                # staleness and unavailability still fire when the sampler dies.
+                wall = now_utc()
+                if self.last_eval is None or (wall - self.last_eval).total_seconds() >= CYCLE_S:
+                    self.maybe_evaluate(wall, force=True)
+            except Exception as exc:  # noqa: BLE001 - a bad line must not kill the loop
+                print(f"[ingest] {type(exc).__name__}: {exc}", file=sys.stderr, flush=True)
+            self.stop.wait(poll_s)
+
+
+def _decode(line: str) -> dict[str, Any] | None:
+    line = line.strip()
+    if not line:
+        return None
+    try:
+        record = json.loads(line)
+    except ValueError:
+        return None
+    return record if isinstance(record, dict) else None
+
+
+# --------------------------------------------------------------------------
+# Snapshot for the dashboard and the API
+# --------------------------------------------------------------------------
+
+
+def risk_key(state: ProviderState) -> tuple[Any, ...]:
+    """Sort order for the dashboard: most urgent first, never alphabetical.
+
+    Tier 0 is anything with a firing alert, worst level first. Tier 1 is
+    anything we cannot currently see, because an unknown balance is a risk in
+    its own right. Tier 2 is everything with a finite time-to-impact, soonest
+    first. Time-to-impact is hours, which is comparable across providers
+    without ever putting USD, GBP and credits into the same arithmetic.
+    """
+    worst = min((SEVERITY.get(a["level"], 9) for a in state.alerts), default=9)
+    if state.alerts:
+        return (0, worst, state.runway_h if state.runway_h is not None else 1e9, state.provider)
+    if not state.available:
+        return (1, 0, -(state.stale_s or 0), state.provider)
+    if state.runway_h is not None:
+        return (2, 0, state.runway_h, state.provider)
+    return (3, 0, 0.0, state.provider)
+
+
+def snapshot(store: Store, now: datetime | None = None) -> dict[str, Any]:
+    now = now or now_utc()
+    catalog = store.catalog()
+    states = build_state(store, now, catalog)
+
+    active = {}
+    for candidate in evaluate(states, now):
+        active.setdefault(candidate.provider, []).append({
+            "rule": candidate.rule,
+            "level": candidate.level,
+            "rule_class": candidate.rule_class,
+            "text": candidate.text,
+            "evidence": candidate.evidence,
+        })
+    for state in states:
+        state.alerts = active.get(state.provider, [])
+        state.events = store.events(limit=6, provider=state.provider)
+
+    states.sort(key=risk_key)
+    coverage = store.coverage()
+    fresh = [s for s in states if s.available]
+
+    # Aggregate strictly within a unit. Five different things live in this
+    # dashboard - USD balance, GBP balance, credits, trailing USD spend and
+    # postpaid USD credit - and a single "total spend" across them would be
+    # fiction, so the grouping key is (pay_model, unit) and never just unit.
+    groups: dict[str, dict[str, Any]] = {}
+    for state in states:
+        group_key = f"{state.pay_model}/{state.unit}"
+        bucket = groups.setdefault(group_key, {
+            "pay_model": state.pay_model,
+            "unit": state.unit,
+            "providers": 0,
+            "value": 0.0,
+            "burn_per_h": 0.0,
+            "measurable": 0,
+            "unmeasurable": [],
+        })
+        bucket["providers"] += 1
+        if state.value is not None and state.burn and state.burn.ok:
+            bucket["value"] += state.value
+            bucket["burn_per_h"] += state.burn.rate_per_h or 0.0
+            bucket["measurable"] += 1
+        else:
+            bucket["unmeasurable"].append(state.provider)
+
+    window_span = 0.0
+    if coverage["first_ts"] and coverage["last_ts"]:
+        window_span = (parse_ts(coverage["last_ts"]) - parse_ts(coverage["first_ts"])).total_seconds()
+
+    return {
+        "generated_at": iso(now),
+        "providers": states,
+        "groups": groups,
+        "alerts": store.fired_alerts(limit=25),
+        "events": store.events(limit=25),
+        "coverage": dict(coverage, window_span_s=round(window_span, 1),
+                         window_span_h=round(window_span / 3600.0, 3)),
+        "healthy": bool(fresh),
+        "fresh_providers": len(fresh),
+        "total_providers": len(states),
+        "policy": POLICY,
+        "baseline": BASELINE,
+    }
+
+
+# --------------------------------------------------------------------------
+# Dashboard
+# --------------------------------------------------------------------------
+
+CSS = """
+:root{--bg:#0d1117;--panel:#161b22;--line:#272e38;--fg:#e6edf3;--dim:#8b949e;
+--crit:#f85149;--warn:#d29922;--ok:#3fb950;--info:#58a6ff;--accent:#a371f7}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+a{color:var(--info)}
+header{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;
+flex-wrap:wrap;gap:16px;align-items:baseline;justify-content:space-between}
+h1{font-size:16px;margin:0;letter-spacing:.02em}
+h2{font-size:13px;margin:0 0 10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+.wrap{padding:20px;max-width:1600px;margin:0 auto}
+.meta{color:var(--dim);font-size:12px}
+.grid{display:grid;gap:16px;margin-bottom:20px}
+.cols{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px}
+.card .big{font-size:20px;margin:4px 0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--dim);font-weight:600;font-size:11px;
+text-transform:uppercase;letter-spacing:.06em;padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:middle}
+tr:hover td{background:#1b222c}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pill{display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;border:1px solid}
+.p-crit{color:var(--crit);border-color:var(--crit)}
+.p-warn{color:var(--warn);border-color:var(--warn)}
+.p-ok{color:var(--ok);border-color:var(--ok)}
+.p-dim{color:var(--dim);border-color:var(--line)}
+.p-info{color:var(--info);border-color:var(--info)}
+.p-acc{color:var(--accent);border-color:var(--accent)}
+.dim{color:var(--dim)}
+.crit{color:var(--crit)}.warn{color:var(--warn)}.ok{color:var(--ok)}
+.alert{border-left:3px solid var(--line);padding:8px 12px;margin-bottom:8px;background:var(--panel);
+border-radius:0 4px 4px 0}
+.alert.critical{border-left-color:var(--crit)}
+.alert.warning{border-left-color:var(--warn)}
+.alert .t{font-size:12px}
+.alert .e{color:var(--dim);font-size:11px;margin-top:3px;word-break:break-word}
+.rowsub{color:var(--dim);font-size:11px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media(max-width:1100px){.two{grid-template-columns:1fr}}
+code{background:#21262d;padding:1px 5px;border-radius:3px;font-size:12px}
+.foot{color:var(--dim);font-size:11px;margin-top:24px;line-height:1.7}
+"""
+
+
+def sparkline(values: Sequence[float], width: int = 150, height: int = 26) -> str:
+    if len(values) < 2:
+        return '<span class="dim">-</span>'
+    low, high = min(values), max(values)
+    span = high - low
+    if span <= 0:
+        mid = height / 2
+        return (f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
+                f'<line x1="0" y1="{mid:.1f}" x2="{width}" y2="{mid:.1f}" '
+                f'stroke="#3fb950" stroke-width="1.5"/></svg>')
+    step = width / (len(values) - 1)
+    points = " ".join(
+        f"{i * step:.1f},{height - 2 - (v - low) / span * (height - 4):.1f}"
+        for i, v in enumerate(values)
+    )
+    colour = "#f85149" if values[-1] < values[0] else "#3fb950"
+    return (f'<svg width="{width}" height="{height}" viewBox="0 0 {width} {height}" '
+            f'preserveAspectRatio="none"><polyline points="{points}" fill="none" '
+            f'stroke="{colour}" stroke-width="1.5" stroke-linejoin="round"/></svg>')
+
+
+def _freshness_cell(state: ProviderState) -> str:
+    if state.stale_s is None:
+        return '<span class="pill p-crit">no data</span>'
+    seconds = state.stale_s
+    if seconds <= POLICY.stale_display_s / 2:
+        cls, label = "p-ok", f"{seconds:.0f}s"
+    elif seconds <= POLICY.stale_display_s:
+        cls, label = "p-warn", f"{seconds:.0f}s"
+    else:
+        cls, label = "p-crit", f"{seconds / 60:.1f}m stale"
+    return f'<span class="pill {cls}">{label}</span>'
+
+
+def _impact_cell(state: ProviderState) -> str:
+    if state.pay_model == "spend_report":
+        return '<span class="dim">n/a (trailing spend)</span>'
+    if state.runway_h is None:
+        reason = state.burn.reason if state.burn and state.burn.reason else "not declining"
+        return f'<span class="dim">{escape(str(reason))}</span>'
+    hours = state.runway_h
+    cls = "crit" if hours <= POLICY.runway_critical_h else ("warn" if hours <= POLICY.runway_warning_h else "")
+    if hours < 48:
+        text = f"{hours:.1f} h"
+    else:
+        text = f"{hours / 24:.1f} d"
+    at = f'<div class="rowsub">{escape(iso(state.depleted_at))}</div>' if state.depleted_at else ""
+    return f'<span class="{cls}">{text}</span>{at}'
+
+
+def _burn_cell(state: ProviderState) -> str:
+    burn = state.burn
+    if burn is None or not burn.ok or burn.rate_per_h is None:
+        reason = burn.reason if burn and burn.reason else "no estimate"
+        return f'<span class="dim">{escape(str(reason))}</span>'
+    rate = burn.rate_per_h
+    label = _fmt(rate, state.unit)
+    sub = f"n={burn.samples}, {burn.span_s / 60:.0f} min"
+    return f'{escape(label)}/h<div class="rowsub">{escape(sub)}</div>'
+
+
+def render_dashboard(snap: dict[str, Any]) -> str:
+    states: list[ProviderState] = snap["providers"]
+    coverage = snap["coverage"]
+    window_h = coverage["window_span_h"]
+    firing = [a for s in states for a in s.alerts]
+    criticals = sum(1 for a in firing if a["level"] == "critical")
+
+    rows = []
+    for state in states:
+        alert_pills = "".join(
+            f'<span class="pill p-{"crit" if a["level"] == "critical" else "warn"}">{escape(a["rule"])}</span> '
+            for a in state.alerts
+        ) or '<span class="dim">-</span>'
+        events = "".join(
+            f'<div class="rowsub">{escape(e["kind"])} {escape(e["ts"][11:19])}Z '
+            f'{"+" if e["detail"].get("delta", 0) > 0 else ""}{e["detail"].get("delta", "")}</div>'
+            for e in state.events[:2]
+        ) or '<span class="dim">-</span>'
+        value = _fmt(state.value, state.unit) if state.value is not None else "-"
+        health = state.health_pct
+        health_cls = "ok" if health and health >= 95 else ("warn" if health and health >= 80 else "crit")
+        rows.append(f"""<tr>
+<td><strong>{escape(state.provider)}</strong>
+<div class="rowsub">{escape(state.name)}</div></td>
+<td><span class="pill p-dim">{escape(state.pay_model)}</span>
+<div class="rowsub">{escape(state.unit)}</div></td>
+<td class="num">{escape(value)}</td>
+<td class="num">{_burn_cell(state)}</td>
+<td class="num">{_impact_cell(state)}</td>
+<td>{sparkline(state.spark)}</td>
+<td class="num">{_freshness_cell(state)}</td>
+<td class="num"><span class="{health_cls}">{f"{health:.0f}%" if health is not None else "-"}</span>
+<div class="rowsub">{state.ok_samples}/{state.total_samples}</div></td>
+<td>{alert_pills}</td>
+<td>{events}</td>
+</tr>""")
+
+    group_cards = []
+    for key in sorted(snap["groups"]):
+        group = snap["groups"][key]
+        unit = group["unit"]
+        missing = group["unmeasurable"]
+        note = (f'<div class="rowsub">{len(missing)} not measurable: '
+                f'{escape(", ".join(missing))}</div>') if missing else ""
+        if group["pay_model"] == "spend_report":
+            head = "trailing spend"
+        else:
+            head = "value on hand"
+        group_cards.append(f"""<div class="card">
+<h2>{escape(group["pay_model"])} &middot; {escape(unit)}</h2>
+<div class="big">{escape(_fmt(group["value"], unit))}</div>
+<div class="meta">{escape(head)} across {group["measurable"]}/{group["providers"]} providers</div>
+<div class="big" style="font-size:15px">{escape(_fmt(group["burn_per_h"], unit))}/h</div>
+<div class="meta">summed burn, this unit only</div>{note}
+</div>""")
+
+    alert_blocks = []
+    for alert in snap["alerts"][:12]:
+        evidence = escape(json.dumps(alert.get("evidence", {}), sort_keys=True)[:400])
+        alert_blocks.append(f"""<div class="alert {escape(alert.get("level", "info"))}">
+<div class="t"><span class="pill p-{"crit" if alert.get("level") == "critical" else "warn"}">
+{escape(alert.get("level", ""))}</span>
+<span class="pill p-dim">{escape(alert.get("rule", ""))}</span>
+<span class="pill p-{"acc" if alert.get("rule_class") == "data_derived" else "info"}">
+{escape(alert.get("rule_class", ""))}</span>
+<span class="dim">{escape(alert.get("ts", ""))}</span></div>
+<div class="t" style="margin-top:4px">{escape(alert.get("text", ""))}</div>
+<div class="e">{evidence}</div></div>""")
+    if not alert_blocks:
+        alert_blocks.append('<div class="alert"><div class="t dim">'
+                            'No alert has fired since the window opened.</div></div>')
+
+    event_blocks = []
+    for event in snap["events"][:12]:
+        detail = event["detail"]
+        delta = detail.get("delta")
+        event_blocks.append(f"""<div class="alert">
+<div class="t"><span class="pill p-acc">{escape(event["kind"])}</span>
+<strong>{escape(event["provider"])}</strong>
+<span class="dim">{escape(event["ts"])}</span></div>
+<div class="e">{escape(str(detail.get("from")))} &rarr; {escape(str(detail.get("to")))}
+({"+" if isinstance(delta, (int, float)) and delta > 0 else ""}{escape(str(delta))}
+{escape(str(detail.get("unit", "")))}), gap {escape(str(detail.get("gap_s")))}s,
+{escape(str(detail.get("ratio_to_typical")))}x typical decline &mdash;
+recorded as an event, never alerted</div></div>""")
+    if not event_blocks:
+        event_blocks.append('<div class="alert"><div class="t dim">'
+                            'No top-up or package reset observed in the window.</div></div>')
+
+    stale = [s for s in states if not s.available]
+    health_line = ('<span class="pill p-ok">collecting</span>' if snap["healthy"]
+                   else '<span class="pill p-crit">no fresh data</span>')
+
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Explee spend monitor</title>
+<meta http-equiv="refresh" content="30">
+<style>{CSS}</style></head><body>
+<header>
+<div><h1>Explee &middot; company spend</h1>
+<div class="meta">{snap["total_providers"]} providers &middot; four pay models &middot;
+never summed across units</div></div>
+<div class="meta">
+{health_line}
+<span class="pill {"p-crit" if criticals else ("p-warn" if firing else "p-ok")}">
+{criticals} critical / {len(firing)} firing</span>
+<span class="pill p-dim">window {window_h:.2f} h</span>
+<span class="pill p-dim">{coverage["samples"]:,} samples</span>
+<br><span class="dim">generated {escape(snap["generated_at"])} &middot;
+T0 {escape(coverage["first_ts"] or "-")} &middot; last {escape(coverage["last_ts"] or "-")}
+&middot; auto-refresh 30s</span></div>
+</header>
+<div class="wrap">
+
+<div class="grid cols">{"".join(group_cards)}</div>
+
+<h2>Providers, sorted by risk</h2>
+<table><thead><tr>
+<th>provider</th><th>pay model</th><th class="num">value</th><th class="num">burn</th>
+<th class="num">time to impact</th><th>window</th><th class="num">freshness</th>
+<th class="num">poll health</th><th>alerts</th><th>events</th>
+</tr></thead><tbody>{"".join(rows)}</tbody></table>
+
+<div class="two" style="margin-top:24px">
+<div><h2>Alerts fired ({len(snap["alerts"])} in store)</h2>{"".join(alert_blocks)}</div>
+<div><h2>Events &mdash; top-ups and resets</h2>{"".join(event_blocks)}</div>
+</div>
+
+<h2 style="margin-top:24px">Collection health</h2>
+<div class="grid cols">
+<div class="card"><h2>window</h2><div class="big">{window_h:.2f} h</div>
+<div class="meta">{escape(coverage["first_ts"] or "-")}<br>&rarr; {escape(coverage["last_ts"] or "-")}</div></div>
+<div class="card"><h2>samples</h2><div class="big">{coverage["samples"]:,}</div>
+<div class="meta">{coverage["ok_samples"]:,} carried a value
+({100 * coverage["ok_samples"] / max(1, coverage["samples"]):.1f}%)</div></div>
+<div class="card"><h2>sample states</h2>
+<div class="meta">{"<br>".join(f"{escape(k)}: {v:,}" for k, v in sorted(coverage["by_state"].items()))}</div>
+<div class="meta" style="margin-top:6px">schema_miss is <code>{{}}</code> on HTTP 200 &mdash;
+a third state, never read as zero</div></div>
+<div class="card"><h2>stale providers</h2>
+<div class="big {"crit" if stale else "ok"}">{len(stale)}</div>
+<div class="meta">{escape(", ".join(s.provider for s in stale)) or "all fresh"}</div>
+<div class="meta" style="margin-top:6px">tolerance {POLICY.stale_display_s:.0f}s</div></div>
+</div>
+
+<div class="foot">
+<strong>How to read this.</strong> Burn is a Theil&ndash;Sen slope over the readings since the
+last top-up, not a first/last difference: in this window a first/last estimate reports
+<code>findymail</code> burning &minus;3623 credits/h, because a +1994 top-up lands inside it.
+Time to impact is hours, the only quantity comparable across providers &mdash; USD, GBP and
+credits are never added together, and each card above aggregates strictly within one
+(pay model, unit) pair.<br>
+<strong>Alert classes.</strong> <span class="pill p-info">operational_policy</span> rules encode
+choices nobody specified (runway lead time {POLICY.runway_critical_h:.0f}h critical /
+{POLICY.runway_warning_h:.0f}h warning, unavailability tolerance
+{POLICY.unavailable_alert_s / 60:.0f}min, postpaid floor {POLICY.postpaid_floor:.0f}).
+<span class="pill p-acc">data_derived</span> rules compute their threshold from the observed
+window ({BASELINE.anomaly_k:.0f} MAD of the provider's own slope distribution).<br>
+<strong>Why {POLICY.unavailable_alert_s / 60:.0f} minutes.</strong> In the reference window
+transient 504/429 failures lasted 1&ndash;2 polls (30&ndash;60s) and self-healing 5xx episodes
+lasted 6&ndash;16 polls (180&ndash;480s). The tolerance sits above the longest outage actually
+measured, so a line means "longer than anything we observed", not "the API is flaky again".
+Freshness above turns amber at {POLICY.stale_display_s:.0f}s so a provider going quiet is
+<em>visible</em> long before it is <em>alerted</em>.<br>
+<strong>Not alerts.</strong> A top-up, a package reset on its refresh date, a postpaid credit
+going negative, and a single timeout are all normal. Estimate-driven rules sustain for
+{POLICY.estimate_sustain_s:.0f}s before firing; every rule then holds a
+{POLICY.cooldown_s / 3600:.0f}h cooldown per provider.<br>
+<strong>Known measurement limit.</strong> A top-up landing in the same interval as spend is not
+observable: the API exposes a current value only, so the two are seen summed and never
+separately. Burn is a lower bound across such intervals.
+</div>
+</div></body></html>"""
+
+
+# --------------------------------------------------------------------------
+# HTTP
+# --------------------------------------------------------------------------
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "explee-spend-monitor"
+    store: Store
+    ingestor: Ingestor
+
+    def _send(self, code: int, body: bytes, content_type: str) -> None:
+        self.send_response(code)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
+        path = self.path.split("?", 1)[0].rstrip("/") or "/"
+        try:
+            if path == "/":
+                snap = snapshot(self.store)
+                self._send(200, render_dashboard(snap).encode("utf-8"),
+                           "text/html; charset=utf-8")
+            elif path == "/healthz":
+                body, code = self._healthz()
+                self._send(code, body, "application/json")
+            elif path == "/api/state":
+                snap = snapshot(self.store)
+                self._send(200, json.dumps(_jsonable(snap), default=str).encode("utf-8"),
+                           "application/json")
+            elif path == "/alerts.jsonl":
+                data = b""
+                if os.path.exists(ALERTS_PATH):
+                    with open(ALERTS_PATH, "rb") as handle:
+                        data = handle.read()
+                self._send(200, data, "application/x-ndjson")
+            else:
+                self._send(404, b'{"error":"not found"}', "application/json")
+        except Exception as exc:  # noqa: BLE001 - never take the server down
+            self._send(500, json.dumps({"error": f"{type(exc).__name__}: {exc}"}).encode(),
+                       "application/json")
+
+    def _healthz(self) -> tuple[bytes, int]:
+        """Unhealthy when the process is up but no provider has fresh data.
+
+        A live process serving stale numbers is worse than an obvious outage,
+        so this deliberately reports on the data rather than on the process.
+        """
+        now = now_utc()
+        catalog = self.store.catalog()
+        states = build_state(self.store, now, catalog, window_s=BASELINE.baseline_window_s)
+        fresh = [s for s in states if s.available]
+        coverage = self.store.coverage()
+        healthy = bool(states) and bool(fresh)
+        payload = {
+            "status": "ok" if healthy else "unhealthy",
+            "ts": iso(now),
+            "providers_total": len(states),
+            "providers_fresh": len(fresh),
+            "providers_stale": sorted(s.provider for s in states if not s.available),
+            "stale_tolerance_s": POLICY.stale_display_s,
+            "samples": coverage["samples"],
+            "last_sample_ts": coverage["last_ts"],
+            "replay_complete": self.ingestor.replay_complete.is_set(),
+            "reason": None if healthy else (
+                "no providers in catalog" if not states
+                else "every provider's data is stale"),
+        }
+        return json.dumps(payload, indent=2).encode("utf-8"), (200 if healthy else 503)
+
+    def log_message(self, format: str, *args: Any) -> None:  # noqa: A002 - base class name
+        return  # access logs would add nothing here
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, ProviderState):
+        out = {
+            k: _jsonable(v) for k, v in vars(value).items()
+            if k not in ("spark_ts",)
+        }
+        out["health_pct"] = value.health_pct
+        return out
+    if isinstance(value, (Estimate, Policy, Baseline)):
+        return {k: _jsonable(v) for k, v in vars(value).items()} if hasattr(value, "__dict__") \
+            else {f: _jsonable(getattr(value, f)) for f in value.__dataclass_fields__}
+    if isinstance(value, Reading):
+        return {"provider": value.provider, "ts": iso(value.ts), "state": value.state,
+                "value": value.value, "http": value.http, "shape": value.shape}
+    if isinstance(value, datetime):
+        return iso(value)
+    if isinstance(value, dict):
+        return {k: _jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(v) for v in value]
+    return value
+
+
+# --------------------------------------------------------------------------
+# Entry points
+# --------------------------------------------------------------------------
+
+
+def text_report(snap: dict[str, Any]) -> str:
+    lines = []
+    coverage = snap["coverage"]
+    lines.append(f"generated {snap['generated_at']}")
+    lines.append(f"window {coverage['window_span_h']:.3f} h  "
+                 f"{coverage['first_ts']} -> {coverage['last_ts']}  "
+                 f"{coverage['samples']} samples ({coverage['ok_samples']} with a value)")
+    lines.append(f"states: {coverage['by_state']}")
+    lines.append("")
+    header = (f"{'provider':12s} {'pay_model':16s} {'unit':8s} {'value':>14s} "
+              f"{'burn/h':>14s} {'impact_h':>10s} {'fresh_s':>8s} {'ok%':>6s}  alerts")
+    lines.append(header)
+    for state in snap["providers"]:
+        burn = f"{state.burn.rate_per_h:,.3f}" if state.burn and state.burn.ok else "n/a"
+        impact = f"{state.runway_h:,.1f}" if state.runway_h is not None else "-"
+        value = f"{state.value:,.2f}" if state.value is not None else "-"
+        fresh = f"{state.stale_s:.0f}" if state.stale_s is not None else "-"
+        health = f"{state.health_pct:.0f}" if state.health_pct is not None else "-"
+        rules = ",".join(a["rule"] for a in state.alerts) or "-"
+        lines.append(f"{state.provider:12s} {state.pay_model:16s} {state.unit:8s} "
+                     f"{value:>14s} {burn:>14s} {impact:>10s} {fresh:>8s} {health:>6s}  {rules}")
+    lines.append("")
+    for key in sorted(snap["groups"]):
+        group = snap["groups"][key]
+        lines.append(f"{key:28s} value={group['value']:>16,.2f}  "
+                     f"burn/h={group['burn_per_h']:>12,.3f}  "
+                     f"({group['measurable']}/{group['providers']} measurable)")
+    lines.append("")
+    lines.append(f"events: {len(snap['events'])}   alerts fired: {len(snap['alerts'])}")
+    for alert in snap["alerts"][:10]:
+        lines.append(f"  [{alert['level']:8s}] {alert['ts']} {alert['rule']}: {alert['text'][:150]}")
+    return "\n".join(lines)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--raw", default=RAW_PATH, help="raw_samples.jsonl to replay and tail")
+    parser.add_argument("--db", default=DB_PATH, help="SQLite database for derived state")
+    parser.add_argument("--alerts", default=ALERTS_PATH, help="alerts.jsonl to append to")
+    parser.add_argument("--bind", default=BIND)
+    parser.add_argument("--port", type=int, default=PORT)
+    parser.add_argument("--once", action="store_true",
+                        help="replay to EOF, print a report, exit (no server, no tail)")
+    parser.add_argument("--as-of", default=None,
+                        help="evaluate the report at this ISO-8601 instant instead of the "
+                             "end of the log; only meaningful with --once")
+    parser.add_argument("--no-serve", action="store_true", help="ingest only, no HTTP server")
+    args = parser.parse_args(argv)
+
+    store = Store(args.db)
+    alerter = Alerter(store, args.alerts)
+    ingestor = Ingestor(store, alerter, args.raw)
+
+    started = time.monotonic()
+    count = ingestor.replay()
+    # A replay that ends mid-cycle leaves the last cycle unevaluated; force one.
+    if ingestor.last_ingest_wall:
+        ingestor.maybe_evaluate(ingestor.last_ingest_wall, force=True)
+    print(f"[replay] {count} records in {time.monotonic() - started:.1f}s from {args.raw}",
+          file=sys.stderr, flush=True)
+
+    if args.once:
+        # Report as of the end of the log, not the wall clock. Replaying a
+        # historical file at 03:00 the next morning would otherwise show all 15
+        # providers as unavailable, which says something true about the file and
+        # nothing at all about the providers.
+        if args.as_of:
+            as_of = parse_ts(args.as_of)
+        else:
+            as_of = ingestor.last_ingest_wall or now_utc()
+        print(text_report(snapshot(store, as_of)))
+        return 0
+
+    thread = threading.Thread(target=ingestor.tail, name="ingest", daemon=True)
+    thread.start()
+
+    if args.no_serve:
+        try:
+            while thread.is_alive():
+                thread.join(1.0)
+        except KeyboardInterrupt:
+            ingestor.stop.set()
+        return 0
+
+    Handler.store = store
+    Handler.ingestor = ingestor
+    httpd = ThreadingHTTPServer((args.bind, args.port), Handler)
+    print(f"[serve] http://{args.bind}:{args.port}/  (healthz at /healthz)",
+          file=sys.stderr, flush=True)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        ingestor.stop.set()
+        httpd.server_close()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
