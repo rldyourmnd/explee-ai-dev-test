@@ -532,3 +532,79 @@ different case from the orchestration trace, which carried nine addresses of
 unrelated clients. Rule 3 asks for the list to be reviewed, and only the
 `HostName` count to be zero, so this is presented for a decision rather than
 treated as a blocker.
+
+### 20:32Z — both second-review defects fixed; what landed under the wrong message
+
+The two confirmed defects are fixed and all three gates are green at `7a90b2f`.
+The commit message on that hash describes Task 2's publication, because of a
+shared-index race described at the end of this entry — the Task 1 reasoning is
+recorded here instead.
+
+**Defect 1 — the UI contradicted the alerter.** `condition_status()` read
+`firing` from any `last_fired`, without asking whether that line belonged to the
+current episode. A condition that fired, recovered and recurred showed as firing
+on the dashboard while `alerts.jsonl` held no line for the new episode. The
+alerter already computed `recurred = since > last_fired`; the UI was the one
+lying. Firing now requires `last_fired >= active_since`, tested across the whole
+sequence — appears, fires, disappears, reappears, stays pending through sustain,
+fires again — plus a test that anything the UI calls firing is backed by a line
+in the file.
+
+**Defect 2 — the audit was neither side-effect free nor as thorough as claimed.**
+It now replays into a temporary database and alert path and hashes the audited
+file before and after to prove it never touched it. Rather than spot-checking
+value and runway, it re-runs the rule at the instant each line was written and
+compares every evidence field, naming line and field on a mismatch.
+
+**The counterfactual earned its place immediately.** Recomputing each incident
+with every discontinuity in its window undone found:
+
+```
+[11] 2026-08-23T18:44:34Z  package_exhaustion  bounceban
+     without the top_up at 2026-08-23T18:00:02Z (+3): the alert DISAPPEARS
+```
+
+An alert caused solely by a top-up — the one thing that must never produce one.
+Worth recording that the first attempt tested only events within 30 minutes of
+the timestamp and therefore tested nothing at all: that top-up sits 44 minutes
+earlier, inside the window whose slope produced the alert. Proximity in time was
+the wrong question; being in the window the estimate was fitted over is the
+right one.
+
+**The fix is a rule change, not a threshold tweak.** A flat 2%-of-package
+threshold cannot separate `bounceban` (7.92% shortfall) from `findymail` (5.98%)
+or `resend` (7.78%), both legitimate. A projection may now only fire if it
+survives its own estimate's uncertainty: recomputed with the burn one MAD
+slower, the claim must still hold. The bound is the provider's own dispersion
+rather than a constant, so a steady provider is held tightly and a noisy one
+loosely.
+
+| line | burn | MAD | margin | survives one MAD slower |
+|---|---:|---:|---:|---|
+| `elevenlabs` 16:48Z | 19,708.8/h | 1,035.5 | 155.2 h | yes |
+| `resend` 16:48Z | 226.6/h | 3.7 | 17.2 h | yes |
+| `scrapfly` 16:48Z | 256.0/h | 2.2 | 64.3 h | yes |
+| `findymail` 17:00Z | 55.3/h | 4.6 | 13.0 h | **no** |
+| `bounceban` 18:44Z | 37.6/h | 4.7 | 16.9 h | **no** |
+
+Replayed over the same window: **11 lines become 9**, and the audit then
+reconciles 9 of 9 and exits zero.
+
+**Not deployed.** Nothing about the running system changes while the observation
+window is open, so the guard reaches the deployment at the 22:14Z snapshot.
+`ALERT-AUDIT.md` therefore shows a genuinely failing audit against the build
+that is actually running, rather than a passing one produced by code that is
+not.
+
+Pyright is zero for every Task 1 file under the exact CI invocation, including
+the two `None`-arithmetic errors the new guard introduced — guarded rather than
+silenced, since catching that class is the point of turning the gate on.
+
+**The shared-index race, because it will happen again.** `git add` staged these
+files, the commit lost a race for `.git/index.lock`, and the next session's
+commit picked up everything already staged — so Task 1 changes landed under a
+Task 2 message. Nothing was lost and the content is correct, but the reasoning
+would have been undiscoverable from the log. Staging and committing are not
+atomic across sessions sharing one worktree; the index is shared state, and
+`git add` followed by a failed commit leaves that state for whoever commits
+next.
