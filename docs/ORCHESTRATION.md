@@ -7,6 +7,36 @@ edit this file.
 
 **Last heartbeat: 2026-08-23T17:25Z.**
 
+## ESCALATIONS — open, for the human
+
+Escalation channel is `cmux notify` plus this section plus the orchestrator's own
+pane. **`surface:7` is not written to by this session under any circumstance** —
+the owner reserves it, which supersedes the escalation instruction in
+`docs/briefs/orchestrator.md`.
+
+| # | Item | Owner's call because |
+|---|---|---|
+| 1 | **Repository visibility.** See below — flagged, not acted on. | Publishing decision |
+| 2 | **Task 3 ships with no trace?** Its trace is quarantined; the submission requires one per task. | Submission scope |
+| 3 | **Task 2 has no brief.** `surface:5` idle since 16:48Z; STT scope undecided. | Business scope |
+| 4 | **Task 1 DNS.** `spend.nddev.it.com` needs an A record; GoDaddy zone, no token, rule 2 forbids pasting one. | Access the agents do not have |
+
+### Repository is PRIVATE — and both directions cost something
+
+`rldyourmnd/explee-ai-dev-test` is private. Two consequences that pull opposite
+ways, so this cannot be resolved by default:
+
+- **Left private:** a review agent with web-only GitHub access cannot read the
+  repository at all, so the submission is unreadable to that reviewer.
+- **Made public:** it publishes `TRACE-orchestration.md` and
+  `task3-harness-artifact/TRACE-task3-quarantined.md` **including their leaks** —
+  9 third-party IPs, 16 SSH `HostName` lines, unrelated client names (RUNLOG
+  16:27Z), and `unrelated-client-a` ×20. It also publishes **all git history**, where
+  commit `f9ef23b` still carries the Task 3 trace under its original name.
+  Quarantining changed the file's disposition; it did not remove it from history.
+
+Flagging only. This session takes no action on visibility.
+
 ## Rule 1 — raw collector (outranks everything)
 
 `explee-raw-sampler.service` on `server-nddev-amsterdam`. The API has no history
@@ -169,10 +199,11 @@ session id another way.
 matches the bare word, so any trace that quotes the rule fails it. Matching
 `HostName\s+\S+` would test SSH config content instead of the word.
 
-Not yet delivered to `surface:2`: it is sitting on an interactive menu awaiting
-the human, and sending text into an open menu risks selecting an option and
-destroying its state. The warning goes out when the menu clears; its export is
-late in its plan, so nothing is lost by waiting.
+**Delivered.** The owner sent the `--list` warning to `surface:2` directly at
+~17:30Z, having closed its DNS menu with Escape first, so the open-menu hazard is
+resolved. Task 3 owns both source fixes: the `--list` project scoping and the
+unsatisfiable `HostName` gate in `AGENTS.md`. `surface:5` still needs the warning
+before it exports, and has no session to contaminate yet.
 
 ## Deadlines
 
@@ -181,7 +212,17 @@ late in its plan, so nothing is lost by waiting.
 | 2026-08-23T22:14Z | 6 h observation minimum; longer is better | on track, 0 gaps |
 | before submission | every `TRACE.md` exported via `tools/export_trace.py`, never hand-written | not yet due |
 | before submission | dashboard and report open in incognito, no login | not yet due |
-| before submission | `uv run --with pytest pytest tests/ -q && ruff check .` green | not yet due |
+| before submission | `uv run --with pytest pytest tests/ -q && ruff check .` green | **green at 17:32Z** — 84 passed in 2.24 s, `ruff` all checks passed, both exit 0 |
+
+## Push state
+
+**Synced at 17:32Z.** Gates were run first and both passed; 7 commits pushed
+`f086fe9..9c11385` to `origin/main`. Working tree is clean apart from `.serena/`
+tooling churn, which is not committed.
+
+The push includes commit `f9ef23b`, which carries the Task 3 trace under its
+original name with the leak intact. That is acceptable **only while the
+repository stays private** — see the visibility escalation above.
 
 ## Working-tree discipline
 
