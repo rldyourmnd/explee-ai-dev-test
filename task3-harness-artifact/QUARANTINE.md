@@ -1,11 +1,17 @@
-# TRACE-task3-quarantined.md is not part of the submission
+# Why the Task 3 trace was withheld
 
-Same disposition as `TRACE-orchestration.md`. Both were first quarantined in
-place, then removed from the working tree at 18:52Z on the way to publication.
-The file this record describes therefore no longer exists beside it — **but it
-still exists in git history**, so publication requires the history rewrite in
-`docs/ACCEPTANCE.md`, not merely the deletion. A deleted file and a purged file
-are different things (`AGENTS.md` rule 5).
+The trace this record describes was exported as
+`task3-harness-artifact/TRACE-task3-quarantined.md`. That file is no longer in
+the working tree, and this record is deliberately not deleted with it: the
+incident staying documented is the point.
+
+Disposition, same as `TRACE-orchestration.md`: quarantined in place, then
+removed from the working tree at 18:52Z on the way to publication. **The content
+is not gone.** It survives in git history and will until the `git filter-repo`
+rewrite in `docs/ACCEPTANCE.md` (rows X.4 and X.8) is run — that step has been
+written but not executed. A `git rm` is not a purge, and anyone reading this
+file should not conclude otherwise: until the rewrite lands, `git log -p --all`
+still contains every leaked line (`AGENTS.md` rule 5).
 
 ## What happened
 
@@ -18,10 +24,12 @@ lines 1971-1990.
 ## Why it was not re-exported instead
 
 `export_trace.py` has no flag that excludes a turn or a single tool result.
-`--max-result` truncates head-first (`body[:max_result]`, line 230) and the leak
-is in row 1 of the result, so no value removes it without gutting every tool
-result in the trace. `--allow-finding` / `--allow-secrets` only widen the
-credential gate; they do not drop content. Hand-editing was rejected under rule
+`--max-result` truncates head-first (`body[:max_result]`, `export_trace.py:272`)
+and the leak is in row 1 of the result, so no value removes it without gutting
+every tool result in the trace. `--allow-finding` / `--allow-secrets` only widen
+the credential gate; they do not drop content. Since `ca27622` the point is
+moot: `--max-result` is itself a lossy path and now refuses to write at all
+without `--allow-lossy`. Hand-editing was rejected under rule
 4: a tidied trace is worth less than a quarantined one.
 
 ## Why the scans passed
