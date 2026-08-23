@@ -2,7 +2,7 @@
 # Send a message to a cmux pane and PROVE it was submitted.
 #
 # `cmux send` types text into the target prompt; it does not submit it. Sending
-# Enter immediately afterwards races the paste — the text is still arriving when
+# Enter immediately afterwards races the paste - the text is still arriving when
 # the keystroke lands, so the message sits at the prompt unsent and the sender
 # has no idea. That has happened repeatedly here and the human has had to press
 # Enter by hand. Delivery is a claim like any other: it is not done until the
@@ -21,7 +21,7 @@ ATTEMPTS="${CMUX_SEND_ATTEMPTS:-4}"
 
 # A pane is idle-with-unsent-text when the prompt line still carries content.
 # "Press up to edit queued messages" means the recipient is busy and the message
-# is queued — that is delivered, not stuck.
+# is queued - that is delivered, not stuck.
 prompt_holds_text() {
   local screen
   screen="$(cmux read-screen --surface "$SURFACE" --lines 6 2>/dev/null)" || return 1
@@ -44,5 +44,5 @@ for attempt in $(seq 1 "$ATTEMPTS"); do
   fi
 done
 
-echo "FAIL $SURFACE: text still sitting at the prompt after $ATTEMPTS attempts — press Enter by hand" >&2
+echo "FAIL $SURFACE: text still sitting at the prompt after $ATTEMPTS attempts - press Enter by hand" >&2
 exit 1

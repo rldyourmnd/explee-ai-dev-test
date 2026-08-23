@@ -512,7 +512,7 @@ different ruleset locally than in CI, so the two can disagree and neither is
 wrong.
 
 ```bash
-uv run --with pytest pytest tests/ -q
+uv run --with pytest==8.3.4 pytest tests/ -q
 uv run --with 'ruff==0.15.17' ruff check .
 uv run --with pyright==1.1.411 --with pytest==8.3.4 --with httpx pyright
 uv run tools/repo_checks.py consistency

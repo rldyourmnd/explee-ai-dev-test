@@ -35,7 +35,7 @@ mask() { sed -E 's/[0-9]{1,3}(\.[0-9]{1,3}){3}/<ip-redacted>/g'; }
 
 before="$(ssh -o ConnectTimeout=30 "$HOST" "systemctl is-active $UNIT || true")"
 echo "collector before : $before"
-[ "$before" = "active" ] || { echo "collector is '$before' — aborting, the window is not recreatable" >&2; exit 1; }
+[ "$before" = "active" ] || { echo "collector is '$before' - aborting, the window is not recreatable" >&2; exit 1; }
 
 echo "shipping monitor.py"
 scp -q "$LOCAL_MONITOR" "$HOST:/opt/explee-spend-monitor/monitor.py"

@@ -5,14 +5,14 @@
 """Take an immutable, verifiable snapshot of the observation window.
 
 The task asks for at least six hours of observation. A claim that six hours
-happened is worth nothing on its own — a reviewer who cannot run anything has to
-take it on trust — so this produces the artifact that settles it: the digest of
+happened is worth nothing on its own - a reviewer who cannot run anything has to
+take it on trust - so this produces the artifact that settles it: the digest of
 the exact bytes, the record and line counts, the precise first-to-last span, the
 largest gap in collection, how many records were malformed, and the collector's
 state immediately before and after.
 
 Strictly read-only against the host. Nothing is restarted, nothing is written
-there — the window cannot be recreated and this tool is never a reason to risk
+there - the window cannot be recreated and this tool is never a reason to risk
 it.
 
 Verification is by *prefix*, which matters because the collector is still
@@ -206,7 +206,7 @@ def main() -> int:
 
     # Copy first, then verify. The log is append-only and the collector is still
     # writing, so hashing the host file and then copying it compares two
-    # different lengths and never agrees — the first rehearsal of this tool
+    # different lengths and never agrees - the first rehearsal of this tool
     # failed exactly that way. The correct invariant for an append-only file is
     # that the copy is a faithful *prefix*: hash the same leading byte count on
     # the host and require a match.
@@ -231,7 +231,7 @@ def main() -> int:
 
     seq = next_sequence()
     body = [
-        f"# Window snapshot {seq:02d} — {args.label}",
+        f"# Window snapshot {seq:02d} - {args.label}",
         "",
         "Immutable record of the observation window.",
         "",
@@ -241,7 +241,7 @@ def main() -> int:
         "measurements below describe the exact bytes the collector wrote. The log",
         "is append-only, which is what makes a prefix the right thing to check.",
         "",
-        "Read-only. Nothing was restarted and nothing was written on the host —",
+        "Read-only. Nothing was restarted and nothing was written on the host -",
         "this window cannot be recreated, and no snapshot is worth risking it.",
         "",
         "| | |",
@@ -334,7 +334,7 @@ def main() -> int:
 
     if args.dry_run:
         print(report)
-        print("DRY RUN — nothing written", file=sys.stderr)
+        print("DRY RUN - nothing written", file=sys.stderr)
         return 0 if faithful else 1
 
     SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
@@ -355,7 +355,7 @@ def main() -> int:
                    indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"wrote {out.relative_to(REPO)}", file=sys.stderr)
     if not faithful:
-        print("DIGEST MISMATCH — local copy is not the bytes on the host", file=sys.stderr)
+        print("DIGEST MISMATCH - local copy is not the bytes on the host", file=sys.stderr)
         return 1
     if meets is False:
         print(f"SPAN TOO SHORT: {span:.3f}s < {required:.0f}s required. The window "
