@@ -45,6 +45,19 @@ Verified on the live page at 21:30Z, `d020288`.
   actually has. Ranking on the headline number would have recommended it. This is
   the single clearest argument that "we do not trust other people's benchmarks —
   their audio is not ours" was the right instinct.
+- **The power simulation reframed Task 2's own headline, against its interest.**
+  3 points of term F1 are detected 8 % of the time, 5 points 19 %, 10 points
+  46 %. So the top tier is **unresolved, not proven equal** — and the binding
+  constraint is 138 term occurrences in an hour, not the bootstrap. Reporting
+  "we cannot tell" where the earlier draft said "statistically inseparable" is
+  the difference between a measurement and a flattering paraphrase of one.
+- **The distractor test changed the recommendation.** Ten plausible terms spoken
+  nowhere in the audio, verified absent from the reference and every stock output
+  *before* the run. Prompting lifts term recall 0.40 → 0.63; large-v3 emitted
+  zero distractors while turbo emitted two and wrote *Kubernetics* over
+  *Kubernetes*, the most frequent term in the recording. The winner changed as a
+  result — a test that only confirmed the existing answer would have been
+  decoration.
 - **wav2vec2-XLSR emitted no Latin script anywhere in the hour** — 0.000 term
   recall, 1.000 Latin-to-Cyrillic rate — the employer's exact complaint in its
   purest form, while its WER of 0.785 merely looks mediocre.
@@ -130,7 +143,7 @@ better than a claim nobody checked.
 | **Task 1 trace not exported** | 1.5 | `task1-spend-observability/TRACE.md` does not exist. Export happens at session end, deliberately — an early export stops the trace before the work does |
 | **Task 2 trace not exported** | 2.8 | same, and for the same reason |
 | **Six-hour snapshot not taken** | 1.4 | **"Run your monitor for at least 6 hours"** — *"longer = more events = a fairer read"* | `docs/SNAPSHOT-22-14Z.md` | `surface:3` | **Six-hour minimum closed at 22:14Z with an immutable snapshot; collection CONTINUES.** 22:14Z is the minimum, not the finish line — the task rewards a longer window, and we have days rather than hours. A second snapshot is planned later. The history rewrite and final gates move with it and are **not** rushed to tonight | snapshot procedure below; span asserted `>= 21600 s`, plus `systemctl is-active` before and after | — |
-| **Task 2 has 4 engines, not 5** | 2.3 | **"≥5 STT engines"** | `task2-stt-benchmark/data/raw-hlk8s/` | `surface:5` | **DONE** — 5 engines, **99/99 segments each**, verified by directory count 20:50Z: Whisper large-v3, large-v3-turbo, Parakeet-TDT-0.6b-v3, SeamlessM4T-v2, wav2vec2-XLSR-ru. Canary and GigaAM remain blocked, each named with its specific cause | `for d in data/raw-hlk8s/*/; do ls $d \| wc -l; done` → five dirs, 99 each | at `1d445be` |
+| **Task 2 has 4 engines, not 5** | 2.3 | **"≥5 STT engines"** | `task2-stt-benchmark/data/raw-hlk8s/` | `surface:5` | **DONE** — **7 output sets × 99 segments**: five engines on the default track plus two tuned tracks. Canary, GigaAM and Qwen3-ASR each blocked with a named upstream cause rather than dropped | `ls data/raw-hlk8s/` → 7 dirs, 99 files each | at `07a247c` |
 | **Task 2 publishes no ranking** | 2.5 | Engine-independent reference | `task2-stt-benchmark/data/reference-hlk8s.json` | `surface:5` | **DONE** — the publisher's own human transcript (habr 523378) for the same talk as the audio (`z2aARjKDg4w`), independent of all five ranked engines. Corpus amendment logged before any output existed on it | `kind` field = publisher human transcript; amendment dated in `PREREGISTRATION.md` | — |
 | **History still contaminated** | X.8 | two quarantined traces remain in git history; the single `filter-repo` rewrite runs last, after every worker stops, and publication is the human's |
 
