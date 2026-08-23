@@ -42,13 +42,27 @@ server, and the server copy is authoritative.
 ## 4. Export a trace when a task session ends
 
 ```bash
-uv run tools/export_trace.py --list          # find the session uuid
+uv run tools/export_trace.py --list          # this project's sessions only
 uv run tools/export_trace.py \
   --session <uuid> \
   --out task1-spend-observability/TRACE.md \
   --title "Task 1 — Spend Observability" \
-  --max-result 6000 --copy-raw
+  --copy-raw
 ```
+
+**Do not pass `--max-result`.** It previously appeared here as
+`--max-result 6000`, which was wrong: it truncates long tool results while the
+generated header still claims nothing was dropped. A submission trace is required
+to be verbatim, and a *disclosed* truncation is still not verbatim. Removed
+2026-08-23T18:45Z after the external review found it.
+
+Truncation is not the only lossless gap. Until `surface:8` closes them in the
+exporter, an export can also drop image blocks behind an omission marker, skip
+malformed JSONL records silently, and replace invalid UTF-8 rather than failing.
+For a submission trace the exporter must **fail closed** — refuse to write —
+whenever it cannot produce a lossless representation. Record the SHA-256 of the
+source session JSONL alongside the exported trace so the export can be checked
+against its input.
 
 The exporter refuses to write if it finds a credential. That is intentional: fix
 the source and re-export rather than editing the trace, which must stay verbatim.

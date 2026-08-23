@@ -52,6 +52,33 @@ the earlier judgement was vindicated when the owner cleared that menu with
 Escape. Dismissing the prompt takes the owner one keystroke; guessing at it from
 here risks the pane. Raised as escalation #7 instead.
 
+## External review, 18:05Z — verdict: **not submission-ready** at `6efe631`
+
+`docs/reviews/external-review-2026-08-23T18-05Z.md`. Read in full at 18:45Z.
+Acceptance tracking now lives in [docs/ACCEPTANCE.md](ACCEPTANCE.md).
+
+**The structural point that reframes everything else:** the reviewer could not run
+code, SSH anywhere, or see a pane. So every machine-level claim this repository
+makes — collector active, 4688 records, no gaps, 117 tests green — reads to it as
+an *agent assertion*, not proof. That is the standard our evidence has to survive,
+and most of it currently does not. It caught our own board admitting the 18:04Z
+gate ran against an uncommitted edit, which is precisely the kind of honesty that
+becomes ammunition when the rest of the evidence is not tied to a clean SHA.
+
+Four code findings were independently reproduced against `main`, so they are not
+speculative: dispersion uses adjacent rather than all-pairs slopes
+(`monitor.py:864`); credits from different providers are summed (`:1782`,
+contradicted by prose at `:2115`); `/alerts.jsonl` ignores `--alerts` (`:2213`
+vs `:2298`); the documented export truncates (`docs/HANDOFF.md:50`).
+
+**Orchestrator items taken this pass:** the truncating export instruction is
+removed from `docs/HANDOFF.md` (verified, `ACCEPTANCE.md` X.3); the acceptance
+matrix exists; the six-hour snapshot procedure and the clean-tree gate procedure
+are written down in advance rather than improvised at the deadline.
+
+**Still mine, not yet done:** the 22:14Z snapshot; the allowlisted delivery
+package (blocked on decision 3); final gates at the final SHA.
+
 ## ESCALATIONS — open, for the human
 
 Escalation channel is `cmux notify` plus this section plus the orchestrator's own
@@ -59,16 +86,28 @@ pane. **`surface:7` is not written to by this session under any circumstance** �
 the owner reserves it, which supersedes the escalation instruction in
 `docs/briefs/orchestrator.md`.
 
-| # | Item | Owner's call because |
-|---|---|---|
-| 1 | **Repository visibility.** See below — flagged, not acted on. | Publishing decision |
-| 2 | **Task 3 ships with no trace?** Its trace is quarantined; the submission requires one per task. | Submission scope |
-| 3 | **Task 2 has no brief.** `surface:5` idle since 16:48Z; STT scope undecided. | Business scope |
-| 4 | **Task 1 DNS.** `spend.nddev.it.com` needs an A record; GoDaddy zone, no token, rule 2 forbids pasting one. | Access the agents do not have |
-| 4b | **NEW 18:16Z — tunnel as an alternative to DNS.** Task 1 identified a third-party tunnel that would give the dashboard a public HTTPS hostname without a DNS record, and **refused to act on it**: it would publish company spend data through a third party and install software on the host. Unlike `nip.io` it would not leak an IP into the URL, so it is a real option, not a rejected one. | Publishing company data through a third party |
-| 5 | **`docs/briefs/review-agent-prompt.md` is untracked.** Owner-authored draft; not committed or pushed by this session. Say the word and it goes up. | It is the owner's draft |
-| 7 | **NEW 18:28Z — `surface:2` is idle behind a feedback prompt with unblocked work left.** Dismiss the overlay (one keystroke) and it can sync the missing `alerts.jsonl`. Not touched from here; typed input could select an option. | Only the owner can safely clear its input |
-| 6 | **Pre-existing pyright error**, `tools/export_trace.py:205` from `e7af3a4` — `ROLE_LABEL.get` returns `str \| None`, then `+=`. Outside every current diff; does not affect `pytest` or `ruff`. Flagged by Task 3, not fixed. | Whether a green-gates repo should also be pyright-clean |
+Renumbered to match the review's Part 4. **Six open; three block deliverables.**
+
+| # | Decision | Blocks a deliverable? | Options, in the review's framing |
+|---|---|---|---|
+| **1** | **Public dashboard hostname** | **YES — 1.3** | DNS record at the authoritative provider (minimal, needs account access, credentials must never enter a trace); another controlled domain; a platform-generated HTTPS hostname (no external DNS, adds migration + re-verification); or ship without one and fail a stated deliverable |
+| **2** | **Task 3 trace** | **YES — 3.3** | New genuine clean session (real, but not the original attempt — omission must be disclosed); ship traceless; publish the quarantined original (exposes third-party data); hand-edit (violates verbatim). **No option preserves both the original attempt and confidentiality** — you are choosing which constraint governs |
+| **3** | **Repository visibility and delivery route** | **YES — X.4** | Private + clean archive; fresh public repo with allowlisted files and orphan history; grant the grader private access; make this repo public (publishes quarantined files *and* history); rewrite history then publish (cannot retract caches or prior clones) |
+| 4 | **Task 2 audio source** | gates 2.3–2.7 | Authorised company meeting; the candidate's own work meeting; public Russian technical discussion; scripted/synthetic (supplement only — weak evidence for natural code-switching) |
+| 5 | **Task 2 budget and account set** | gates 2.5–2.7 | Max spend; which vendors may receive the audio; whether paid account creation is allowed; glossary-assisted runs in scope; zero-retention or regional processing required |
+| 6 | **Submission timing** | — | Before 22:14Z fails the six-hour requirement; after preserves eligibility; going long improves event coverage but should not silently delay a hard external deadline |
+| 7 | **Operational alert policy** | quality of 1.2 | Runway horizons, the unavailability threshold, postpaid credit floor, materiality bands, whether recovery notifications are required. Data can show each choice's consequences; it cannot invent your response SLA |
+
+Decisions 4 and 5 are partly answered: `docs/briefs/task2.md` now exists and
+`surface:5` is dispatched. Rows 2.3–2.7 stay `BLOCKED` in the matrix until the
+brief's audio and budget terms are confirmed as the ones being executed.
+
+Superseded local items, kept so nothing is silently dropped: the `nip.io`
+rejection and the third-party tunnel both fold into decision 1; the untracked
+`review-agent-prompt.md` is committed this pass; the `surface:2` feedback overlay
+cleared on its own; the pre-existing pyright error at `tools/export_trace.py:205`
+now sits under the review's instruction to run a type checker alongside pytest
+and ruff (`surface:8`).
 
 ### Repository is PRIVATE — and both directions cost something
 
