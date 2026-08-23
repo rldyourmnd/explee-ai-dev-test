@@ -49,6 +49,22 @@ against a human transcript published by the conference itself — with the evalu
 before any engine ran.</p>
 
 <div class="callout">
+<strong>Production recommendation: run Whisper large-v3-turbo.</strong>
+We recommend Whisper large-v3-turbo for transcribing your meetings. It is the engine to put
+into production today, on these grounds: it leads or ties on every quality metric we declared
+in advance, it is statistically inseparable from the only engine that scores higher, and it
+costs 1.7× less GPU time per hour of audio than that engine — 326.8 s against 565.7 s.
+Cost broke a tie that quality could not, and we say that plainly rather than dressing a
+cost decision up as a quality verdict.
+<br><br>
+The recommendation comes with one caveat we will not soften: <strong>no engine is good at
+this speech yet.</strong> The best term recall in the field is 0.40, so roughly six of every
+ten technical terms are still lost or mangled. Recommending the best available engine is not
+the same as saying the problem is solved — expect to keep a human in the loop on
+terminology-dense meetings, and revisit when the terminology-assisted track has been run.
+</div>
+
+<div class="callout">
 <strong>The answer.</strong> <strong>Whisper large-v3-turbo.</strong> On the pre-declared
 primary metric it is statistically indistinguishable from Whisper large-v3, and the frozen
 tie-break resolves that pair on measured cost: turbo needs <strong>326.8 s of GPU time

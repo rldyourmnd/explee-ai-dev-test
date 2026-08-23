@@ -21,7 +21,16 @@ from typing import Sequence
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from harness.bootstrap import bootstrap_interval, decide, paired_bootstrap  # noqa: E402
+from harness.bootstrap import (  # noqa: E402
+    BLOCK_SECONDS_PRIMARY,
+    block_size_sensitivity,
+    blocks_per_duration,
+    bootstrap_interval,
+    bootstrap_two_sided_p,
+    decide,
+    holm_adjust,
+    paired_moving_block,
+)
 from harness.document import score_document  # noqa: E402
 from harness.glossary import load as load_glossary  # noqa: E402
 from harness.metrics import SegmentScore, aggregate  # noqa: E402
@@ -103,17 +112,42 @@ def main() -> int:
     )
     declared_winner = outcome.get("winner")
     leader = declared_winner if isinstance(declared_winner, str) else ranked_by_primary[0]
+    # Moving-block, not per-segment: segments of one talk are correlated, and
+    # resampling them independently reports intervals that are too narrow.
+    corpus_seconds = float(
+        json.loads(MANIFEST.read_text(encoding="utf-8"))["total_segment_duration_s"]
+    )
+    unit_count = len(next(iter(scores.values())))
+    block_len = blocks_per_duration(unit_count, corpus_seconds, BLOCK_SECONDS_PRIMARY)
+
     comparisons = []
+    pvalues: dict[str, float] = {}
     if leader:
         for name in scores:
             if name == leader:
                 continue
-            comparison = paired_bootstrap(PRIMARY, scores[leader], scores[name])
+            comparison = paired_moving_block(
+                PRIMARY, scores[leader], scores[name], block_len=block_len
+            )
+            stability = block_size_sensitivity(
+                PRIMARY, scores[leader], scores[name], corpus_seconds=corpus_seconds
+            )
+            pvalues[name] = bootstrap_two_sided_p(
+                PRIMARY, scores[leader], scores[name], block_len=block_len
+            )
             comparisons.append({
                 "vs": name,
                 "sentence": comparison.sentence(),
                 "indistinguishable": comparison.indistinguishable,
+                "block_stability": stability.sentence(),
+                "stable": stability.stable,
+                "bootstrap_p": pvalues[name],
             })
+    # Holm across the whole family: leader against every rival at 0.05
+    # uncorrected would make a false positive likely.
+    survives = holm_adjust(pvalues) if pvalues else {}
+    for row in comparisons:
+        row["significant_after_holm"] = survives.get(row["vs"], False)
 
     result = {
         "corpus": json.loads(MANIFEST.read_text(encoding="utf-8"))["corpus_id"],
@@ -140,6 +174,13 @@ def main() -> int:
             for name in sorted(scores)
         },
         "paired_vs_leader": comparisons,
+        "bootstrap": {
+            "method": "paired moving-block",
+            "primary_block_seconds": BLOCK_SECONDS_PRIMARY,
+            "block_units": block_len,
+            "corpus_seconds": corpus_seconds,
+            "multiple_comparison_correction": "Holm, alpha=0.05",
+        },
         "primary_ranking": ranked_by_primary,
         "guardrail_note": (
             "The 0.30 WER guardrail was declared for a verbatim reference. This "
@@ -164,8 +205,12 @@ def main() -> int:
             f"halluc={_f(p.get('hallucination_rate'))}"
         )
     print("\ndecision:", json.dumps(outcome, ensure_ascii=False)[:600])
+    print(f"\nmoving-block bootstrap: {block_len} units = "
+          f"{BLOCK_SECONDS_PRIMARY:.0f}s blocks over {corpus_seconds:.0f}s")
     for c in comparisons:
         print(" ", c["sentence"])
+        print("    ", c["block_stability"])
+        print(f"     p={c['bootstrap_p']:.4f} holm_significant={c['significant_after_holm']}")
     return 0
 
 

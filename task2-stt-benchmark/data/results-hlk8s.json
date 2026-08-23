@@ -204,25 +204,48 @@
   "paired_vs_leader": [
     {
       "vs": "parakeet-tdt-0.6b-v3-default",
-      "sentence": "term_f1: whisper-large-v3-default vs parakeet-tdt-0.6b-v3-default differ by -0.0381 [-0.1399, +0.0639] — the interval contains 0, so these data do not establish a winner; the pre-declared tie-break applies.",
-      "indistinguishable": true
+      "sentence": "term_f1: whisper-large-v3-default vs parakeet-tdt-0.6b-v3-default differ by -0.0381 [-0.1426, +0.0645] — the interval contains 0, so these data do not establish a winner; the pre-declared tie-break applies.",
+      "indistinguishable": true,
+      "block_stability": "term_f1: no separation — stable across block sizes [60.0, 120.0, 180.0, 300.0].",
+      "stable": true,
+      "bootstrap_p": 0.46185381461853814,
+      "significant_after_holm": false
     },
     {
       "vs": "seamless-m4t-v2-default",
-      "sentence": "term_f1: whisper-large-v3-default is better by 0.2398 [-0.3835, -0.0959] over 99 paired segments.",
-      "indistinguishable": false
+      "sentence": "term_f1: whisper-large-v3-default is better by 0.2398 [-0.3879, -0.0897] over 99 paired segments.",
+      "indistinguishable": false,
+      "block_stability": "term_f1: whisper-large-v3-default — stable across block sizes [60.0, 120.0, 180.0, 300.0].",
+      "stable": true,
+      "bootstrap_p": 0.0011998800119988001,
+      "significant_after_holm": true
     },
     {
       "vs": "wav2vec2-xlsr-ru-default",
       "sentence": "term_f1: not measurable on this corpus.",
-      "indistinguishable": true
+      "indistinguishable": true,
+      "block_stability": "term_f1: no separation — stable across block sizes [60.0, 120.0, 180.0, 300.0].",
+      "stable": true,
+      "bootstrap_p": 1.0,
+      "significant_after_holm": false
     },
     {
       "vs": "whisper-large-v3-turbo-default",
-      "sentence": "term_f1: whisper-large-v3-default vs whisper-large-v3-turbo-default differ by -0.0361 [-0.1429, +0.0657] — the interval contains 0, so these data do not establish a winner; the pre-declared tie-break applies.",
-      "indistinguishable": true
+      "sentence": "term_f1: whisper-large-v3-default vs whisper-large-v3-turbo-default differ by -0.0361 [-0.1282, +0.0465] — the interval contains 0, so these data do not establish a winner; the pre-declared tie-break applies.",
+      "indistinguishable": true,
+      "block_stability": "term_f1: no separation — stable across block sizes [60.0, 120.0, 180.0, 300.0].",
+      "stable": true,
+      "bootstrap_p": 0.4026597340265973,
+      "significant_after_holm": false
     }
   ],
+  "bootstrap": {
+    "method": "paired moving-block",
+    "primary_block_seconds": 120.0,
+    "block_units": 4,
+    "corpus_seconds": 2952.821,
+    "multiple_comparison_correction": "Holm, alpha=0.05"
+  },
   "primary_ranking": [
     "whisper-large-v3-default",
     "whisper-large-v3-turbo-default",

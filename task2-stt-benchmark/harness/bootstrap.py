@@ -84,6 +84,44 @@ class Comparison:
         )
 
 
+#: Moving-block bootstrap settings, adopted 2026-08-24 after the methodology
+#: review. See `MOVING_BLOCK_RATIONALE`.
+BLOCK_SECONDS_PRIMARY = 120.0
+BLOCK_SECONDS_LADDER = (60.0, 180.0, 300.0)
+BLOCK_SEED = 20260824
+
+MOVING_BLOCK_RATIONALE = """
+Segments of one talk are not independent observations. Same speaker, same
+microphone, same acoustic path, same topic — and technical terms arrive in
+bursts, so an error in one segment predicts an error in its neighbour. Drawing
+99 units independently treats correlated data as 99 independent draws, which
+understates the variance and can manufacture a significant difference that is
+not there. Resampling contiguous blocks keeps the local correlation inside the
+resampled unit, so the interval reflects it.
+"""
+
+
+def blocks_per_duration(
+    unit_count: int, corpus_seconds: float, block_seconds: float
+) -> int:
+    """How many contiguous scoring units make up `block_seconds` of audio."""
+    if unit_count <= 0 or corpus_seconds <= 0:
+        return 1
+    seconds_per_unit = corpus_seconds / unit_count
+    return max(1, min(unit_count, round(block_seconds / seconds_per_unit)))
+
+
+def _moving_block_indices(
+    rng: random.Random, n: int, block_len: int
+) -> list[int]:
+    """Circular moving-block resample of `n` indices in blocks of `block_len`."""
+    picked: list[int] = []
+    while len(picked) < n:
+        start = rng.randrange(n)
+        picked.extend((start + offset) % n for offset in range(block_len))
+    return picked[:n]
+
+
 def _percentile(sorted_values: Sequence[float], q: float) -> float:
     """Linear-interpolated percentile; `q` in [0, 1]."""
     if not sorted_values:
@@ -167,6 +205,182 @@ def paired_bootstrap(
             b_is_better = difference < 0 if metric in LOWER_IS_BETTER else difference > 0
             better = engine_b if b_is_better else engine_a
     return Comparison(metric, engine_a, engine_b, interval, better, n)
+
+
+def paired_moving_block(
+    metric: str,
+    scores_a: Sequence[SegmentScore],
+    scores_b: Sequence[SegmentScore],
+    *,
+    block_len: int,
+    resamples: int = DEFAULT_RESAMPLES,
+    seed: int = BLOCK_SEED,
+    confidence: float = DEFAULT_CONFIDENCE,
+) -> Comparison:
+    """Paired moving-block bootstrap on the difference `b - a`.
+
+    Both systems draw the **same** blocks — that is what makes it paired, and
+    what removes the shared difficulty of a hard stretch of audio from the
+    comparison. Ratios are recomputed from pooled counts inside `aggregate`,
+    never by averaging per-segment ratios, because the mean of per-segment F1
+    is a different quantity from corpus F1.
+    """
+    ids_a = [s.segment_id for s in scores_a]
+    if ids_a != [s.segment_id for s in scores_b]:
+        raise ValueError("paired bootstrap needs identical segment ids in order")
+    if not ids_a:
+        raise ValueError("no segments to compare")
+    if block_len < 1:
+        raise ValueError("block_len must be at least 1")
+
+    engine_a, engine_b = scores_a[0].engine, scores_b[0].engine
+    base_a, base_b = _pooled(scores_a, metric), _pooled(scores_b, metric)
+    if base_a is None or base_b is None:
+        empty = Interval(None, None, None, confidence, resamples)
+        return Comparison(metric, engine_a, engine_b, empty, None, len(ids_a))
+
+    rng = random.Random(seed)
+    n = len(ids_a)
+    differences: list[float] = []
+    for _ in range(resamples):
+        picks = _moving_block_indices(rng, n, block_len)
+        value_a = _pooled([scores_a[i] for i in picks], metric)
+        value_b = _pooled([scores_b[i] for i in picks], metric)
+        if value_a is None or value_b is None:
+            continue
+        differences.append(value_b - value_a)
+
+    if not differences:
+        empty = Interval(None, None, None, confidence, resamples)
+        return Comparison(metric, engine_a, engine_b, empty, None, n)
+
+    differences.sort()
+    tail = (1 - confidence) / 2
+    interval = Interval(
+        point=base_b - base_a,
+        low=_percentile(differences, tail),
+        high=_percentile(differences, 1 - tail),
+        confidence=confidence,
+        resamples=len(differences),
+    )
+    difference = base_b - base_a
+    better: str | None = None
+    if interval.low is not None and interval.high is not None:
+        if interval.low > 0 or interval.high < 0:
+            b_is_better = difference < 0 if metric in LOWER_IS_BETTER else difference > 0
+            better = engine_b if b_is_better else engine_a
+    return Comparison(metric, engine_a, engine_b, interval, better, n)
+
+
+@dataclass(frozen=True)
+class Stability:
+    """Does the verdict survive the block-size sensitivity ladder?"""
+
+    metric: str
+    engine_a: str
+    engine_b: str
+    by_block_seconds: dict[float, str | None]
+
+    @property
+    def stable(self) -> bool:
+        verdicts = set(self.by_block_seconds.values())
+        return len(verdicts) == 1
+
+    def sentence(self) -> str:
+        if self.stable:
+            verdict = next(iter(self.by_block_seconds.values()))
+            outcome = verdict or "no separation"
+            return (
+                f"{self.metric}: {outcome} — stable across block sizes "
+                f"{sorted(self.by_block_seconds)}."
+            )
+        return (
+            f"{self.metric}: UNSTABLE — the verdict changes with block size "
+            f"({self.by_block_seconds}). The conclusion is not supported by "
+            f"these data and is reported as unstable."
+        )
+
+
+def block_size_sensitivity(
+    metric: str,
+    scores_a: Sequence[SegmentScore],
+    scores_b: Sequence[SegmentScore],
+    *,
+    corpus_seconds: float,
+    block_seconds: Sequence[float] = (BLOCK_SECONDS_PRIMARY, *BLOCK_SECONDS_LADDER),
+    resamples: int = DEFAULT_RESAMPLES,
+    seed: int = BLOCK_SEED,
+) -> Stability:
+    """Run the ladder. A verdict that moves with block size is not a verdict."""
+    verdicts: dict[float, str | None] = {}
+    for seconds in sorted(block_seconds):
+        block_len = blocks_per_duration(len(scores_a), corpus_seconds, seconds)
+        comparison = paired_moving_block(
+            metric, scores_a, scores_b,
+            block_len=block_len, resamples=resamples, seed=seed,
+        )
+        verdicts[seconds] = comparison.better
+    return Stability(metric, scores_a[0].engine, scores_b[0].engine, verdicts)
+
+
+def holm_adjust(pvalue_like: dict[str, float], alpha: float = 0.05) -> dict[str, bool]:
+    """Holm step-down on a family of comparisons.
+
+    Takes a mapping of comparison name to its "p-value-like" quantity — here the
+    bootstrap two-sided tail probability that the difference is zero — and
+    returns which comparisons survive at family-wise `alpha`. Comparing one
+    leader against seven rivals at 0.05 uncorrected makes a false positive more
+    likely than not; Holm is uniformly more powerful than Bonferroni and just as
+    valid.
+    """
+    ordered = sorted(pvalue_like.items(), key=lambda kv: kv[1])
+    m = len(ordered)
+    survives: dict[str, bool] = {}
+    rejected_so_far = True
+    for rank_index, (name, p) in enumerate(ordered):
+        threshold = alpha / (m - rank_index)
+        if rejected_so_far and p <= threshold:
+            survives[name] = True
+        else:
+            # Holm is step-down: once one fails, every larger p-value fails too.
+            rejected_so_far = False
+            survives[name] = False
+    return survives
+
+
+def bootstrap_two_sided_p(
+    metric: str,
+    scores_a: Sequence[SegmentScore],
+    scores_b: Sequence[SegmentScore],
+    *,
+    block_len: int,
+    resamples: int = DEFAULT_RESAMPLES,
+    seed: int = BLOCK_SEED,
+) -> float:
+    """Two-sided bootstrap tail probability that the paired difference is zero."""
+    ids_a = [s.segment_id for s in scores_a]
+    if ids_a != [s.segment_id for s in scores_b]:
+        raise ValueError("paired bootstrap needs identical segment ids in order")
+    rng = random.Random(seed)
+    n = len(ids_a)
+    base_a, base_b = _pooled(scores_a, metric), _pooled(scores_b, metric)
+    if base_a is None or base_b is None:
+        return 1.0
+    observed = base_b - base_a
+    differences: list[float] = []
+    for _ in range(resamples):
+        picks = _moving_block_indices(rng, n, block_len)
+        value_a = _pooled([scores_a[i] for i in picks], metric)
+        value_b = _pooled([scores_b[i] for i in picks], metric)
+        if value_a is not None and value_b is not None:
+            differences.append(value_b - value_a)
+    if not differences:
+        return 1.0
+    # Centre the resampled distribution on zero and ask how often it reaches the
+    # observed magnitude.
+    centre = sum(differences) / len(differences)
+    extreme = sum(1 for d in differences if abs(d - centre) >= abs(observed))
+    return (extreme + 1) / (len(differences) + 1)
 
 
 def bootstrap_interval(
