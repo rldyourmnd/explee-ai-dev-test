@@ -957,3 +957,64 @@ premise produced a plausible objection, and four lines of arithmetic against the
 raw series settled it in under a minute. The premise was never checked because
 it felt obvious.
 
+
+## A CSS variable that was never defined, and every gate said fine
+
+The cross-page palette check reported all eight shared tokens agreeing on both
+public pages, and `--accent` absent from both. I had written the lead card's
+left rule as `border-left: 3px solid var(--accent)` and never added `--accent`
+to the palette.
+
+CSS has no error for this. An undefined custom property makes the declaration
+invalid at computed-value time, the property falls back to its inherited value,
+and `border-left-color` resolves to `currentColor`. The rule intended as a muted
+blue rendered as a near-black bar, which is separately the untinted-neutral
+anti-pattern the shared spec exists to prevent.
+
+It survived every check available:
+
+| check | result |
+|---|---|
+| `ruff` | clean, it does not read strings as CSS |
+| `pyright` | 0 errors, the stylesheet is a string literal |
+| 295 tests | passed, none looked inside the stylesheet |
+| my own screenshots | showed the correct colour |
+
+The screenshots are the interesting one. They were right and useless. The leading
+group carried the `.warn` qualifier at the time, and `.card.lead.warn` sets
+`border-left-color` explicitly, so the broken declaration was overridden in
+exactly the case I photographed. A visual check confirmed a colour that came
+from a different rule than the one under test.
+
+Two tests now cover it, and both were verified by reintroducing the defect and
+confirming they fail rather than by trusting that they would:
+
+- `test_every_css_variable_used_is_defined` extracts every `var(--x)` from the
+  rendered page and asserts a matching `--x:` exists.
+- `test_status_colours_are_never_spent_on_decoration` asserts the lead card uses
+  `--accent` and none of `--alarm`, `--warn`, `--ok`. That one encodes a
+  judgement, not a fact: brick red has to keep meaning "a human must act", and
+  the moment it appears on something merely important it stops reading as
+  urgent. I had made that exact mistake an hour earlier and caught it by eye,
+  which is not a mechanism.
+
+## Undoing a test mutation destroyed an uncommitted fix
+
+While proving those two tests fail on the bug they describe, I mutated
+`monitor.py`, ran the test, then ran `git checkout -- monitor.py` to undo the
+mutation.
+
+That reverts to HEAD. The `--accent` fix was uncommitted and in the same file,
+so it went with the mutation. The command did exactly what it says and still
+destroyed work, because "undo my last edit" and "restore to HEAD" are the same
+operation only when there is nothing else uncommitted.
+
+Caught immediately, because the next command grepped for the fix and printed
+`accent defined after restore: 0`. That grep existed only because the mutation
+test had made me suspicious of what was actually in the file, which is the same
+habit that caught the 500 px viewport: check the state you are in, not the state
+you believe you put yourself in.
+
+The durable form: commit the fix first, then mutate, then restore. A mutation
+test should operate on a clean tree so that restoring cannot lose anything.
+
