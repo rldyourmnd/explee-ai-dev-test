@@ -106,30 +106,23 @@ drift — they have already caught a stale baseline, future timestamps, dead lin
 and an engine count pointed at the wrong directory.
 
 
-## UI convergence — measured on both live pages 21:41Z
-
-`docs/ui-spec.md` asks both pages to declare the **same token names**, so a
-reader meets one system rather than two that happen to resemble each other.
+## UI convergence — re-measured on both live pages 21:47Z
 
 | | Dashboard (live) | Report (live) | Spec |
 |---|---|---|---|
-| Shared tokens | only `--warn`, `--ok` | only `--warn`, `--ok` | `--paper --surface --rule --ink --muted --alarm --warn --ok` |
-| `--warn` | `#d29922` | `#8a6d1f` | **`#8a6d3a`** |
-| `--ok` | `#3fb950` | `#2f6b47` | `#2f6b47` |
-| em / en dashes | 0 / 0 | **34 / 5** | 0 |
+| Shared tokens | **none** | **all six present** | `--paper --surface --rule --ink --muted --alarm` |
+| `--warn` | `#d29922` | **`#8a6d3a`** ✔ | `#8a6d3a` |
+| em / en dashes | 0 / 0 | **0 / 0** ✔ | 0 |
 
-**Ruling: the report moves to `#8a6d3a`.** The spec states it, Task 1's build
-matches it, and when one artifact conforms to a written contract and the other
-does not, the contract wins — amending the spec to match an artifact is how a
-shared system quietly stops being shared.
+**The report has converged.** It moved to `#8a6d3a` as ruled, defined all six
+missing tokens, and cleared all 34 em dashes and 5 en dashes.
 
-**A precision correction worth recording.** Task 1 reported its dashboard work
-"verified on the rendered page". The *live* page is still the old dark build
-(`--bg:#0d1117`, no `font-family`), because the deploy correctly waits for a
-snapshot boundary — nothing changes while the window is open. What was verified
-is the local render of the committed build. The work is right; the sentence would
-have failed a reviewer who curled the URL. Cross-page checks are therefore
-build-to-build until the deploy lands, and re-verified live afterwards.
+**The dashboard has not, and that is correct.** Its build carries the warm-paper
+palette, but the deploy waits for a snapshot boundary because nothing about the
+running system changes while the observation window is open. The live page is
+still the old dark build (`--warn:#d29922`, no shared tokens). Cross-page checks
+therefore stay build-to-build until the deploy lands and are re-verified live
+afterwards — recorded so a reviewer curling both URLs today sees why they differ.
 
 ## Cross-cutting
 
@@ -214,7 +207,7 @@ TRACE.md."*
 | 2.7 | **"a published comparison report … send the link"** | `https://stt.nddev.it.com/` | `surface:5` | **DONE** — verified externally 20:50Z: HTTP 200, 15090 B, Let's Encrypt `CN=stt.nddev.it.com`, **0 auth headers, 0 cookies** | `curl -sSI` from outside the host | at `1d445be` |
 | 2.8 | **TRACE.md** | — | `surface:5` | ABSENT | tool header; lossy/leak scans | — |
 | 2.9 | Licence posture stated, `NC` named as the contestable leg | report | `surface:5` | **required** — not a footnote | report text | — |
-| 2.10 | **"Pick the best speech-to-text for our speech"** — the report must name a **production recommendation** | published report | `surface:5` | **DONE** — verified 21:30Z on the live page: *"Production recommendation: run Whisper large-v3 with a glossary prompt."* 5 hits for `recommend`, 2 for `production`, page now 24876 B. Earlier measurement at 20:53Z found 0 and 0, so this is a real change rather than a re-reading | `curl -sS <url> \| strip tags \| grep -ci recommend` → 5, and the sentence names an engine | at `26a3bda`+ |
+| 2.10 | **"Pick the best speech-to-text for our speech"** — the report must name a **production recommendation** | published report | `surface:5` | **DONE, and corrected once.** Live at 21:47Z: *"Production recommendation: Whisper large-v3-turbo with a glossary prompt."* It previously read large-v3; Task 2 found that **prompted large-v3 collapses on 19 of 99 segments**, emitting a two-word summary where the speaker talks for 30 s, and that its 0.63 term recall was an **artefact of that collapse** — a segment reduced to nothing but glossary words scores well on term recall while being useless. Turbo shows zero collapse on the same prompt | `curl` the page, strip tags, read the recommendation sentence | at `21b9f68` |
 
 ## Task 3 — harness artifact
 
