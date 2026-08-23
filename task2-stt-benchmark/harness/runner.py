@@ -28,7 +28,7 @@ import traceback
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Callable, Mapping, Sequence
 
 from .adapters.base import Adapter, EngineResult, MissingCredential
 from .manifest import Manifest, Segment, sha256_text
@@ -248,7 +248,7 @@ def pair_for_bootstrap(
 
 
 def eligibility(
-    scores: dict[str, list[SegmentScore]],
+    scores: Mapping[str, Sequence[SegmentScore]],
     corpus_size: int,
     max_failure_rate: float = MAX_FAILURE_RATE,
 ) -> dict[str, dict[str, object]]:

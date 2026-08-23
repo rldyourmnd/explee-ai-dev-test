@@ -1,0 +1,234 @@
+{
+  "corpus": "hlk8s",
+  "reference": {
+    "source_url": "https://habr.com/ru/articles/523378/",
+    "kind": "publisher human transcript, edited for readability",
+    "words": 4854
+  },
+  "glossary_fingerprint": "214a316a5a679f13fc0694765b5a990ff5cabc5f4c6931f70ecfe13a287f7593",
+  "primary": "term_f1",
+  "guardrail": {
+    "metric": "wer",
+    "max": 0.3
+  },
+  "decision": {
+    "winner": null,
+    "reason": "no engine met the guardrail",
+    "rejected": {
+      "parakeet-tdt-0.6b-v3-default": "wer=0.6011 exceeds 0.3000",
+      "seamless-m4t-v2-default": "wer=0.6546 exceeds 0.3000",
+      "wav2vec2-xlsr-ru-default": "wer=0.7852 exceeds 0.3000",
+      "whisper-large-v3-default": "wer=0.5890 exceeds 0.3000",
+      "whisper-large-v3-turbo-default": "wer=0.5780 exceeds 0.3000"
+    }
+  },
+  "eligibility": {
+    "parakeet-tdt-0.6b-v3-default": {
+      "segments_scored": 99,
+      "segments_missing": 0,
+      "failure_rate": 0.0,
+      "rankable": true
+    },
+    "seamless-m4t-v2-default": {
+      "segments_scored": 99,
+      "segments_missing": 0,
+      "failure_rate": 0.0,
+      "rankable": true
+    },
+    "wav2vec2-xlsr-ru-default": {
+      "segments_scored": 99,
+      "segments_missing": 0,
+      "failure_rate": 0.0,
+      "rankable": true
+    },
+    "whisper-large-v3-default": {
+      "segments_scored": 99,
+      "segments_missing": 0,
+      "failure_rate": 0.0,
+      "rankable": true
+    },
+    "whisper-large-v3-turbo-default": {
+      "segments_scored": 99,
+      "segments_missing": 0,
+      "failure_rate": 0.0,
+      "rankable": true
+    }
+  },
+  "engines": {
+    "parakeet-tdt-0.6b-v3-default": {
+      "wer": 0.6011349817592218,
+      "cer": 0.4837503505437323,
+      "cs_wer": 0.7475,
+      "term_precision": 0.7142857142857143,
+      "term_recall": 0.36231884057971014,
+      "term_f1": 0.4807692307692308,
+      "name_recall": 0.3333333333333333,
+      "latin_to_cyrillic_rate": 0.5289855072463768,
+      "hallucination_rate": 0.4071747061207945,
+      "omission_rate": 0.022091609241994326,
+      "boundary_error_rate": 0.6205787781350482,
+      "speaker_accuracy": null,
+      "timestamp_median_abs_error_s": null,
+      "timestamp_within_tolerance_rate": null,
+      "ref_words": 4934,
+      "segments": 99,
+      "median_inference_s": 0.14,
+      "total_inference_s": 17.5,
+      "missing": 0,
+      "term_f1_ci": [
+        0.38993710691823896,
+        0.5608465608465608
+      ],
+      "wer_ci": [
+        0.5208704904742603,
+        0.6911234124800694
+      ]
+    },
+    "seamless-m4t-v2-default": {
+      "wer": 0.6546412646939602,
+      "cer": 0.5312685009192035,
+      "cs_wer": 0.865,
+      "term_precision": 0.7058823529411765,
+      "term_recall": 0.17391304347826086,
+      "term_f1": 0.27906976744186046,
+      "name_recall": 0.1590909090909091,
+      "latin_to_cyrillic_rate": 0.7898550724637681,
+      "hallucination_rate": 0.11167409809485204,
+      "omission_rate": 0.2349006890960681,
+      "boundary_error_rate": 0.8569131832797428,
+      "speaker_accuracy": null,
+      "timestamp_median_abs_error_s": null,
+      "timestamp_within_tolerance_rate": null,
+      "ref_words": 4934,
+      "segments": 99,
+      "median_inference_s": 2.645,
+      "total_inference_s": 280.1,
+      "missing": 0,
+      "term_f1_ci": [
+        0.1702127659574468,
+        0.388579365079365
+      ],
+      "wer_ci": [
+        0.6134940548574517,
+        0.7004458856911229
+      ]
+    },
+    "wav2vec2-xlsr-ru-default": {
+      "wer": 0.7851641670044589,
+      "cer": 0.5763562147508803,
+      "cs_wer": 1.0,
+      "term_precision": 0.0,
+      "term_recall": 0.0,
+      "term_f1": null,
+      "name_recall": 0.0,
+      "latin_to_cyrillic_rate": 1.0,
+      "hallucination_rate": 0.419132549655452,
+      "omission_rate": 0.03303607620591812,
+      "boundary_error_rate": 1.0,
+      "speaker_accuracy": null,
+      "timestamp_median_abs_error_s": null,
+      "timestamp_within_tolerance_rate": null,
+      "ref_words": 4934,
+      "segments": 99,
+      "median_inference_s": 0.177,
+      "total_inference_s": 37.3,
+      "missing": 0,
+      "term_f1_ci": [
+        null,
+        null
+      ],
+      "wer_ci": [
+        0.7016607931770072,
+        0.8793939393939394
+      ]
+    },
+    "whisper-large-v3-default": {
+      "wer": 0.5889744629104176,
+      "cer": 0.4799177390708254,
+      "cs_wer": 0.675,
+      "term_precision": 0.7432432432432432,
+      "term_recall": 0.39855072463768115,
+      "term_f1": 0.5188679245283019,
+      "name_recall": 0.3787878787878788,
+      "latin_to_cyrillic_rate": 0.6014492753623188,
+      "hallucination_rate": 0.3506282934738549,
+      "omission_rate": 0.061613295500608026,
+      "boundary_error_rate": 0.6382636655948553,
+      "speaker_accuracy": null,
+      "timestamp_median_abs_error_s": null,
+      "timestamp_within_tolerance_rate": null,
+      "ref_words": 4934,
+      "segments": 99,
+      "median_inference_s": 3.494,
+      "total_inference_s": 565.7,
+      "missing": 0,
+      "term_f1_ci": [
+        0.4064171122994652,
+        0.6217238167316761
+      ],
+      "wer_ci": [
+        0.5135313839653118,
+        0.6725291054034467
+      ]
+    },
+    "whisper-large-v3-turbo-default": {
+      "wer": 0.5780299959464937,
+      "cer": 0.4687314990807964,
+      "cs_wer": 0.65,
+      "term_precision": 0.7538461538461538,
+      "term_recall": 0.35507246376811596,
+      "term_f1": 0.4827586206896552,
+      "name_recall": 0.32575757575757575,
+      "latin_to_cyrillic_rate": 0.6159420289855072,
+      "hallucination_rate": 0.349006890960681,
+      "omission_rate": 0.05289825699229834,
+      "boundary_error_rate": 0.5980707395498392,
+      "speaker_accuracy": null,
+      "timestamp_median_abs_error_s": null,
+      "timestamp_within_tolerance_rate": null,
+      "ref_words": 4934,
+      "segments": 99,
+      "median_inference_s": 0.901,
+      "total_inference_s": 326.8,
+      "missing": 0,
+      "term_f1_ci": [
+        0.35416666666666663,
+        0.5943405698264758
+      ],
+      "wer_ci": [
+        0.5018239304270922,
+        0.6620211406459882
+      ]
+    }
+  },
+  "paired_vs_leader": [
+    {
+      "vs": "parakeet-tdt-0.6b-v3-default",
+      "sentence": "term_f1: whisper-large-v3-default vs parakeet-tdt-0.6b-v3-default differ by -0.0381 [-0.1399, +0.0639] — the interval contains 0, so these data do not establish a winner; the pre-declared tie-break applies.",
+      "indistinguishable": true
+    },
+    {
+      "vs": "seamless-m4t-v2-default",
+      "sentence": "term_f1: whisper-large-v3-default is better by 0.2398 [-0.3835, -0.0959] over 99 paired segments.",
+      "indistinguishable": false
+    },
+    {
+      "vs": "wav2vec2-xlsr-ru-default",
+      "sentence": "term_f1: not measurable on this corpus.",
+      "indistinguishable": true
+    },
+    {
+      "vs": "whisper-large-v3-turbo-default",
+      "sentence": "term_f1: whisper-large-v3-default vs whisper-large-v3-turbo-default differ by -0.0361 [-0.1429, +0.0657] — the interval contains 0, so these data do not establish a winner; the pre-declared tie-break applies.",
+      "indistinguishable": true
+    }
+  ],
+  "primary_ranking": [
+    "whisper-large-v3-default",
+    "whisper-large-v3-turbo-default",
+    "parakeet-tdt-0.6b-v3-default",
+    "seamless-m4t-v2-default",
+    "wav2vec2-xlsr-ru-default"
+  ],
+  "guardrail_note": "The 0.30 WER guardrail was declared for a verbatim reference. This reference is the publisher's edited transcript: fillers and false starts are removed, so every engine's raw WER is inflated by words that were genuinely spoken but are absent from the reference. Under the frozen rule no engine clears it, and that verdict is reported as declared rather than rescued by moving the threshold."
+}
