@@ -213,6 +213,19 @@ credits, trailing spend and postpaid credit are five different things; a single
 
 ## Verification before delivery
 
+Four gates, not two. This section previously listed only the first two, which
+meant a green result here did not mean the repository was green — the type
+checker and the consistency check were the ones actually catching defects.
+Every version is pinned for the same reason: an unpinned checker runs a
+different ruleset locally than in CI, so the two can disagree and neither is
+wrong.
+
 ```bash
-uv run --with pytest pytest tests/ -q && uv run --with 'ruff==0.15.17' ruff check .
+uv run --with pytest pytest tests/ -q
+uv run --with 'ruff==0.15.17' ruff check .
+uv run --with pyright==1.1.411 --with pytest==8.3.4 --with httpx pyright
+uv run tools/repo_checks.py consistency
 ```
+
+`.claude/CLAUDE.md` carries the same list; if they ever diverge, that is a bug
+in one of them.
