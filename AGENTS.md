@@ -278,8 +278,11 @@ the thing been broken.
 ## Fix the generator, not its output
 
 `snapshots/03` carries two em dashes while `01` and `02` carry none — because the
-written files were stripped and the **template that produces them was not**. Every
-future snapshot reintroduces the defect.
+written files were stripped and the **template that produces them was not**, so every
+future snapshot reintroduced the defect. Fixed in `b890efd`: the two lines in
+`tools/snapshot_window.py` that write the snapshot markdown no longer emit them,
+which is why `04` is clean. `03` still carries its two - an already-written
+artifact is a separate cleanup, and it belongs to whoever owns that directory.
 
 Cleaning output that a generator will regenerate is not a fix; it is a delay. When
 a defect appears in generated content, the fix belongs in the generator, and the
