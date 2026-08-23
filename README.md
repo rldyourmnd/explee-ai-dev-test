@@ -11,8 +11,8 @@ because a recorded leak is data and a concealed one is not.
 
 | Task | Deliverable | Status |
 |---|---|---|
-| [1 — Spend observability](task1-spend-observability/) | `monitor.py`, `alerts.jsonl`, public dashboard | collector gap-free since T0, max gap 29.661 s; dashboard live at [spend.nddev.it.com](https://spend.nddev.it.com/) — HTTP 200, valid certificate, no login, verified externally |
-| [2 — STT comparison](task2-stt-benchmark/) | published comparison report | in progress — design frozen before any engine output was read; corpus hashed at exactly 3600.0 s across 120 segments; report host live at [stt.nddev.it.com](https://stt.nddev.it.com/) |
+| [1 — Spend observability](task1-spend-observability/) | `monitor.py`, `alerts.jsonl`, public dashboard | collector gap-free since T0, max gap 29.670 s; dashboard live at [spend.nddev.it.com](https://spend.nddev.it.com/) — HTTP 200, valid certificate, no login, verified externally |
+| [2 — STT comparison](task2-stt-benchmark/) | published comparison report | **published** at [stt.nddev.it.com](https://stt.nddev.it.com/) — 5 engines plus 2 tuned tracks over 99 hashed segments (2952.821 s) against a publisher human transcript; design frozen before any output was read; recommends Whisper large-v3 with a glossary prompt |
 | [3 — Harness artifact](task3-harness-artifact/) | one harness file + 2–3 lines | artifact, its 2–3 lines and its trace all delivered |
 
 Live status, with the measurement behind every claim, is in

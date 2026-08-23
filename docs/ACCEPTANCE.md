@@ -66,18 +66,6 @@ Verified on the live page at 21:30Z, `d020288`.
 from a genuine fresh session, scanning clean on truncation, foreign slugs, IPs,
 credentials and SSH config lines.
 
-## Still missing at `d020288`, stated so the reviewer spends its budget on judgement
-
-| Gap | Row | Why it is open |
-|---|---|---|
-| Task 1 trace not exported | 1.5 | session still running; an early export stops the trace before the work does |
-| Task 2 trace not exported | 2.8 | same |
-| Six-hour snapshot not taken | 1.4 / 01 | due 22:14Z; tooling built and rehearsed, prefix-digest defect already caught in rehearsal |
-| T1 clean-window regeneration | 1.8, 1.9 | T1 not declared; four preconditions unmet. Today's `alerts.jsonl` is an accumulation across code versions |
-| `monitor.py` not yet single-file | 1.1 | built and tested, **deliberately not deployed** — nothing changes while the window is open |
-| History rewrite not run | X.8 | runs last, after all workers stop; publication is the human's |
-| Pyright exclusion debt | X.5 | Type check clean | `pyright` | `surface:5` | **NOT GREEN — conditionally zero, and the debt is GROWING.** The checker reports 0 only because `pyrightconfig.json` excludes **four paths, not three**: `task2-stt-benchmark/modal_app` *and* the three `test_task2_*` files. Re-measured 21:35Z with the exclusion removed: **64 errors**, up from 54 at 20:47Z — `qwen_gigaam.py` added 10 while hidden. That is the real cost of the exclusion: it is not freezing a known debt, it is letting new debt accumulate invisibly. Raised by `surface:8`, correctly | remove the four excludes, then `uv run --with pyright --with pytest --with httpx pyright` → `0 errors` | — |
-
 ## Snapshot series — every six hours while collection continues
 
 The submission ships **the last** snapshot; `01` stays as the documented moment
@@ -143,7 +131,7 @@ better than a claim nobody checked.
 | **Task 1 trace not exported** | 1.5 | `task1-spend-observability/TRACE.md` does not exist. Export happens at session end, deliberately — an early export stops the trace before the work does |
 | **Task 2 trace not exported** | 2.8 | same, and for the same reason |
 | **Six-hour snapshot not taken** | 1.4 | **"Run your monitor for at least 6 hours"** — *"longer = more events = a fairer read"* | `snapshots/01-six-hour-minimum.md` + `.json` | `surface:3` | **Six-hour minimum closed at 22:14Z with an immutable snapshot; collection CONTINUES.** 22:14Z is the minimum, not the finish line — the task rewards a longer window, and we have days rather than hours. A second snapshot is planned later. The history rewrite and final gates move with it and are **not** rushed to tonight | snapshot procedure below; span asserted `>= 21600 s`, plus `systemctl is-active` before and after | — |
-| **Task 2 has 4 engines, not 5** | 2.3 | **"≥5 STT engines"** | `task2-stt-benchmark/data/raw-hlk8s/` | `surface:5` | **DONE** — **7 output sets × 99 segments**: five engines on the default track plus two tuned tracks. Canary, GigaAM and Qwen3-ASR each blocked with a named upstream cause rather than dropped | `ls data/raw-hlk8s/` → 7 dirs, 99 files each | at `07a247c` |
+| **Task 2 has 4 engines, not 5** | 2.3 | **"≥5 STT engines"** | `task2-stt-benchmark/data/raw-hlk8s/` | `surface:5` | **DONE** — **7 output sets × 99 segments**: five engines on the default track plus two tuned tracks. Canary, GigaAM and Qwen3-ASR each blocked with a named upstream cause rather than dropped | `ls task2-stt-benchmark/data/raw-hlk8s/` → 7 dirs, 99 files each | at `07a247c` |
 | **Task 2 publishes no ranking** | 2.5 | Engine-independent reference | `task2-stt-benchmark/data/reference-hlk8s.json` | `surface:5` | **DONE** — the publisher's own human transcript (habr 523378) for the same talk as the audio (`z2aARjKDg4w`), independent of all five ranked engines. Corpus amendment logged before any output existed on it | `kind` field = publisher human transcript; amendment dated in `PREREGISTRATION.md` | — |
 | **History still contaminated** | X.8 | two quarantined traces remain in git history; the single `filter-repo` rewrite runs last, after every worker stops, and publication is the human's |
 
@@ -193,7 +181,7 @@ TRACE.md."*
 |---|---|---|---|---|---|---|
 | 2.1 | Task directory | `task2-stt-benchmark/` | `surface:5` | PRESENT — harness, glossary, reference policy, frozen pre-registration | `test -d` | — |
 | 2.2 | **"the same audio (~1 hour)"** | `task2-stt-benchmark/data/manifest-hlk8s.json` | `surface:5` | **VERIFIED, with a stated shortfall.** Recomputed from the manifest 20:50Z: **2952.821 s = 49 m 13 s = 82 % of an hour**, matching the claim to the millisecond. Short of 60 min and reported as short rather than padded. Single source `sha256 4b88b8d5b9d04f17…`, 99 byte-identical segments shared by all five engines | `python3` sum of `end_s - start_s` over the manifest | `4b88b8d5b9d04f17…` |
-| 2.3 | **"≥5 STT engines"** | `task2-stt-benchmark/data/raw/` | `surface:5` | **3 of 5 — NON-COMPLIANT on a countable requirement.** Whisper large-v3, large-v3-turbo, Parakeet-TDT-0.6b-v3, full precision, all 120/120 segments, zero empty outputs. Canary-1b-v2 and GigaAM blocked with named causes. Slate extension to two more open models directed 20:32Z | `ls task2-stt-benchmark/data/raw/ \| wc -l` → must be ≥5 | — |
+| 2.3 | **"≥5 STT engines"** | `task2-stt-benchmark/data/raw-hlk8s/` | `surface:5` | **DONE** — **7 output sets × 99 segments**: five engines on the default track plus two tuned tracks. Canary, GigaAM and Qwen3-ASR each blocked with a named upstream cause rather than dropped | `ls task2-stt-benchmark/data/raw-hlk8s/` → 7 dirs, 99 files each | at `07a247c` |
 | 2.4 | **"the eval behind it"** — design frozen before results | `PREREGISTRATION.md` | `surface:5` | **DONE** — `FROZEN` anchored to commit `9fd6ff8`, not a self-declared stamp | `git show 9fd6ff8` | `9fd6ff8` |
 | 2.5 | Reference transcript for ranking | — | `surface:5` | **NOT PRODUCED, deliberately.** No independent reference existed: no annotator, and no publisher transcript for this episode. A reference drafted from engines under test measures agreement, not accuracy — the code refuses it and a test asserts the refusal. **No ranking is published**, which is the honest result rather than a missing one | test asserting `reference.build` fails closed | — |
 | 2.6 | Eval code + result table + ranking | `task2-stt-benchmark/rank.py`, published report | `surface:5` | **DONE** — ranking decided by the frozen rule rather than judgement: term F1 cannot separate the top three (intervals contain zero), code-switch WER eliminates Parakeet, the two Whispers stay indistinguishable, and step 4 (measured GPU cost, 326.8 s vs 565.7 s) breaks the tie. The report states plainly that cost is not a quality judgement | re-run `rank.py`, compare to the published table | at `1d445be` |
