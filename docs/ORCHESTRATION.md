@@ -5,7 +5,7 @@ single place that says what is true right now, with the measurement behind each
 claim. Maintained by the orchestrator (`surface:3`); workers report, they do not
 edit this file.
 
-**Last heartbeat: 2026-08-23T18:54Z.**
+**Last heartbeat: 2026-08-23T19:15Z.**
 
 ## STATE CHANGE 18:54Z — all three workers active for the first time
 
@@ -144,6 +144,38 @@ that orchestrator changes are recorded under an unrelated message.
 history rewrite under live sessions destroys uncommitted work. Rewriting to fix a
 commit message would contradict that for cosmetics. Recorded here instead, and
 both sessions have moved to explicit `git add <paths>`.
+
+## Heartbeat 19:15Z — the commit order worked; two rows verified DONE
+
+**Working tree is clean.** Every worker committed, so the remote now equals
+reality and the round-2 reviewer will read the real state rather than a
+three-hour-old snapshot. Four commits landed since `0886087`:
+
+| Commit | What |
+|---|---|
+| `1ee633e` | exporter refuses to write a trace naming another project — the guard approved at 19:07Z |
+| `e3da56a` | every alert line audited against raw evidence; state no longer reads the future |
+| `9bb774e` | corpus span rule declared **before** cutting; full-precision local engines |
+| `7aebe52` | corpus frozen — 120 hashed segments, exactly 3600.0 s |
+
+**Row 1.2 → DONE, verified not accepted.** `alerts.jsonl` is finally in the
+repository, and it was checked rather than counted: 11 lines, 0 unparseable,
+**0 timezone-naive timestamps**, **0 future-dated** (the defect that hit Task 2's
+pre-registration and this board), no row missing a required key.
+`package_exhaustion` ×8, `runway` ×2, `burn_anomaly` ×1, spanning 16:48:58Z to
+18:44:34Z.
+
+**Row X.2 — the export guard is real.** `scan_foreign_slugs` is wired into the
+same refusal path as the credential scanner, fail-closed, with 44 passing tests.
+It derives the permitted slug from the session being exported instead of
+enumerating the projects directory, which was the specific trap: building the
+allowlist by listing would have reproduced the `--list` defect inside the fix for
+it. **Task 1 and Task 2 can now export**, which unblocks rows 1.5 and 2.8 — the
+two remaining traces are the last artifacts that could still leak.
+
+**Corpus frozen at exactly 3600.0 s across 120 hashed segments**, and the span
+rule was declared before cutting. Declaring the rule first is what makes the
+duration a measurement rather than a number chosen to look round.
 
 ## Pre-review sync, 19:07Z — remote must equal reality
 
@@ -292,14 +324,12 @@ endpoint, so an interruption is unrecoverable and cannot be faked.
 | State | `active` |
 | T0 | `2026-08-23T16:13:26.775Z` (first record, matches the logged T0) |
 | First record | `2026-08-23T16:13:26.775Z` |
-| Last record | `2026-08-23T18:53:35.265Z`, 27 s before the check |
-| Lines | 5136 (+448 since 18:39Z) |
-| Growth | 31.8 lines/min over 14.1 min |
-| **Max consecutive gap** | **29.661 s** — below the 30 s sample interval, so no cycle has been missed |
-| Gaps > 45 s | 0 |
+| Last record | `2026-08-23T19:14:06.425Z`, 20 s before the check |
+| Lines | 5792 |
+| **Max consecutive gap** | **29.661 s** — unchanged across 15 checks, below the 30 s interval |
 | Malformed lines | 0 |
-| Span | 9608 s = 2 h 40 m; `>= 21600 s`: **False**, as expected at this hour |
-| 6 h mark | `2026-08-23T22:14Z` — **3 h 20 m remaining** |
+| Span | 10839 s = **3 h 01 m**; `>= 21600 s`: **False** |
+| 6 h mark | `2026-08-23T22:14Z` — **2 h 59 m remaining**, now under three hours |
 
 Now reporting **max consecutive gap** rather than only a count over a threshold,
 per the review. It is the stronger statement: a count of zero gaps over 45 s is
