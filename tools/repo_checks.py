@@ -373,6 +373,30 @@ def check_snapshot(problems: list[str], strict: bool) -> None:
         print(f"snapshot {rel}: span {int(span)}s >= 21600s")
 
 
+def _engine_tracks(payload: object) -> list[str]:
+    """Every engine/track identifier discoverable in a results document.
+
+    Written to search rather than to assume a shape: the results schema has
+    already been reorganised once this run, and a check that hard-codes a key
+    path is the same defect as one that hard-codes a directory.
+    """
+    for key in ("engines", "systems", "tracks", "by_engine", "results"):
+        if isinstance(payload, dict) and key in payload:
+            value = payload[key]
+            if isinstance(value, dict) and value:
+                return sorted(value)
+            if isinstance(value, list) and value and isinstance(value[0], dict):
+                for ident in ("engine", "system", "name", "id"):
+                    if ident in value[0]:
+                        return sorted({r[ident] for r in value if ident in r})
+    if isinstance(payload, dict):
+        for value in payload.values():
+            found = _engine_tracks(value)
+            if found:
+                return found
+    return []
+
+
 def check_engines(problems: list[str], strict: bool) -> None:
     """`docs/TASK.md`: "a comparison of >=5 STT engines ... on the same audio".
 
@@ -386,6 +410,34 @@ def check_engines(problems: list[str], strict: bool) -> None:
     if not os.path.isdir(data):
         (problems.append if strict else NOTES.append)("no Task 2 data directory")
         return
+
+    # Prefer the COMMITTED evidence over directories on this machine. The raw
+    # engine outputs are gitignored for size, so counting subdirectories asked
+    # "did I run the engines here?" while claiming to answer "does this
+    # submission prove five engines were compared?". Those differ for exactly
+    # the reader who matters: on a clean clone of the published repository this
+    # check FAILED under --strict while passing on the machine that ran the
+    # benchmark. A gate that only passes where the work happened tests the
+    # working environment, not the deliverable.
+    for name in sorted(os.listdir(data)):
+        if not (name.startswith("results-") and name.endswith(".json")):
+            continue
+        try:
+            with open(os.path.join(data, name), encoding="utf-8") as fh:
+                payload = json.load(fh)
+        except (OSError, ValueError):
+            continue
+        tracks = _engine_tracks(payload)
+        if not tracks:
+            continue
+        # "-default" / "-tuned" are configurations of one engine; the task asks
+        # for five ENGINES, so a tuned track must not inflate the count.
+        engines = sorted({re.sub(r"-(default|tuned)$", "", t) for t in tracks})
+        if len(engines) < 5:
+            (problems.append if strict else NOTES.append)(
+                f"only {len(engines)} engines in {name}, task requires >=5: {engines}")
+        return
+
     candidates = []
     for name in os.listdir(data):
         if name == "raw" or name.startswith("raw-"):
