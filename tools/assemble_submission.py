@@ -229,9 +229,18 @@ def check() -> tuple[list[str], list[str]]:
         # unsatisfiable three times: a document discussing a pattern is not an
         # instance of it. Require the marker at the start of a line, which is how
         # the exporter writes it and how quoted source never appears.
-        for marker in ("This export is not verbatim", "truncated by --max-result"):
-            if re.search(r"^[>\s]*" + re.escape(marker), text, re.M):
-                problems.append(f"{fname}: lossy-export marker present ({marker!r})")
+        # Kept byte-for-byte in step with tools/repo_checks.py. The line-start
+        # anchor below was replaced because it discriminated by WHERE the phrase
+        # sat, not by what a marker is: an indented real marker would have been
+        # missed, and a false negative is the dangerous direction here. The
+        # bracket-and-count form matches only what the exporter renders.
+        for pattern, what in (
+            (r"^[>\s]*This export is not verbatim", "header declares a lossy export"),
+            (r"\[\.\.\. [0-9,]+ characters truncated by --max-result",
+             "rendered body truncation marker"),
+        ):
+            if re.search(pattern, text, re.M):
+                problems.append(f"{fname}: lossy export - {what}")
 
     return problems, notes
 

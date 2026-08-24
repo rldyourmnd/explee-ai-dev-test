@@ -242,9 +242,33 @@ def check_traces(problems: list[str], strict: bool) -> None:
         # never propagated here, so one tool passed the trace and the other
         # failed it. Fixing a defect class in one of two copies is how a repo
         # ends up arguing with itself.
-        for marker in ("This export is not verbatim", "truncated by --max-result"):
-            if re.search(r"^[>\s]*" + re.escape(marker), body, re.M):
-                _fail(problems, f"{rel}: contains a lossy-export marker ({marker!r})")
+        # Match what the exporter RENDERS, not a phrase that also occurs in its
+        # source. export_trace.py has two distinct paths: losses.append() at line
+        # 490, which blocks the write outright and cannot coexist with
+        # --submission, and the body marker at 493, which renders as
+        # "[... N characters truncated by --max-result; ...]". Only the second is
+        # evidence of a truncated trace.
+        #
+        # The previous line-start anchor happened to pass, but it discriminated
+        # by WHERE the phrase sat rather than by what a marker is - so an
+        # indented real marker would have slipped through, and that false
+        # NEGATIVE is the dangerous direction for a gate guarding verbatimness.
+        # The bracket-and-count form cannot match source and cannot miss an
+        # indented marker.
+        #
+        # It also matters that the loose form was unsatisfiable by construction:
+        # any verbatim trace of a session that READ export_trace.py contains the
+        # phrase, so the only way to pass was to excise a legitimate tool result.
+        # A check that can only be satisfied by deleting real evidence is worse
+        # than no check.
+        lossy = [
+            (r"^[>\s]*This export is not verbatim", "header declares a lossy export"),
+            (r"\[\.\.\. [0-9,]+ characters truncated by --max-result",
+             "rendered body truncation marker"),
+        ]
+        for pattern, what in lossy:
+            if re.search(pattern, body, re.M):
+                _fail(problems, f"{rel}: lossy export - {what}")
 
 
 def check_alerts_schema(problems: list[str], strict: bool) -> None:
