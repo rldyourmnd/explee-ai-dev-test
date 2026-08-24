@@ -9,6 +9,13 @@ delivery work.
 
 ## The form
 
+**The field names below are transcribed from the form, dashes included.** They
+are data, not our prose, so the em-dash rule does not apply to them and the
+dash gate in `tools/repo_checks.py` deliberately does not cover this file.
+Rewriting `Task 1 — Alert log` to `Task 1: Alert log` would make this table stop
+matching the thing it exists to map. Same reason rule R7's false-start dash
+survives in `task2-stt-benchmark/docs/reference-policy.md`.
+
 | Field | Type | Notes |
 |---|---|---|
 | Name | text | Danil Silantyev |
