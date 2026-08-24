@@ -141,6 +141,18 @@ docs/HANDOFF.md              picking this up on another machine
 ## Verification
 
 ```bash
-uv run --with pytest pytest tests/ -q
-ruff check .
+# Pinned to the versions .github/workflows/ci.yml uses. An unpinned tool is not a
+# gate: an unpinned ruff once resolved to a different version in CI than on the
+# machine that ran it, so the same tree was clean in one place and had 49 errors
+# in the other. `ruff check .` bare is worse still, since it runs whatever
+# happens to be on your PATH.
+uv run --with 'pytest==8.3.4' pytest tests/ -q
+uv run --with 'ruff==0.15.17' ruff check .
+uv run --with pyright==1.1.411 --with pytest==8.3.4 --with httpx pyright
+uv run tools/repo_checks.py consistency
+uv run tools/repo_checks.py acceptance --strict
 ```
+
+The last two are this repository's own checks: `consistency` fails if a document
+contradicts the tree, and `acceptance --strict` is what runs at submission. Both
+pass on a clean clone, not only here, which was itself a defect once.

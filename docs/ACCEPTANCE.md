@@ -359,8 +359,8 @@ rewrite that improves structure and silently drops content.
 | # | Deliverable | Path | Owner | Status | Verification | Hash / SHA |
 |---|---|---|---|---|---|---|
 | X.1 | Gates green on a clean tree at the final SHA | — | `surface:3` | pending submission | `git status --porcelain` empty, then all four gates with versions and exit codes | — |
-| X.2 | Lossless export + foreign-slug guard + `--submission` mode | `tools/export_trace.py` | `surface:8` | **hardened** — unknown block types now a whitelist, non-dict blocks and scalar/null content fail closed (`f21487f`); `--allow-secrets` no longer covers foreign slugs, which have no override at all; `--submission` refuses every override and exits 5 | `uv run --with pytest pytest tests/test_export_trace.py -q` | — |
-| X.5 | Type check clean | `pyright` | `surface:5` | **GREEN — cleared, not hidden.** Verified 22:59Z: `pyrightconfig.json` excludes only `**/.venv`, `**/__pycache__`, `**/node_modules`, `browser`, `docs` — `modal_app/` and all three `test_task2_*` files are gone from it, and pyright reports **0 errors with nothing task-related excluded**. The 64 were two populations: **23 real** Optional-arithmetic defects, fixed with narrowing helpers (one helper was itself wrong on first write and a test caught it); **41 were not defects** — `torch`, `librosa`, `transformers`, `soundfile`, `nemo`, `gigaam` exist only inside the container image, suppressed **by rule name, per file, with the reason written above each pragma**, so every other rule stays live there. That is the correct answer to the objection: a directory exclusion is where new defects land unseen, which is exactly how `qwen_gigaam.py` arrived carrying 10 | `uv run --with pyright --with pytest --with httpx pyright` → `0 errors`; inspect `pyrightconfig.json` excludes | at `fdb52b7` |
+| X.2 | Lossless export + foreign-slug guard + `--submission` mode | `tools/export_trace.py` | `surface:8` | **hardened** — unknown block types now a whitelist, non-dict blocks and scalar/null content fail closed (`f21487f`); `--allow-secrets` no longer covers foreign slugs, which have no override at all; `--submission` refuses every override and exits 5 | `uv run --with 'pytest==8.3.4' pytest tests/test_export_trace.py -q` | — |
+| X.5 | Type check clean | `pyright` | `surface:5` | **GREEN — cleared, not hidden.** Verified 22:59Z: `pyrightconfig.json` excludes only `**/.venv`, `**/__pycache__`, `**/node_modules`, `browser`, `docs` — `modal_app/` and all three `test_task2_*` files are gone from it, and pyright reports **0 errors with nothing task-related excluded**. The 64 were two populations: **23 real** Optional-arithmetic defects, fixed with narrowing helpers (one helper was itself wrong on first write and a test caught it); **41 were not defects** — `torch`, `librosa`, `transformers`, `soundfile`, `nemo`, `gigaam` exist only inside the container image, suppressed **by rule name, per file, with the reason written above each pragma**, so every other rule stays live there. That is the correct answer to the objection: a directory exclusion is where new defects land unseen, which is exactly how `qwen_gigaam.py` arrived carrying 10 | `uv run --with pyright==1.1.411 --with pytest==8.3.4 --with httpx pyright` → `0 errors`; inspect `pyrightconfig.json` excludes | at `fdb52b7` |
 | X.7 | Working tree free of third-party identifiers | whole repo | `surface:3` | **DONE** | `git ls-files -z \| xargs -0 grep -lEi '<client>'` → empty | — |
 | X.8 | History free of third-party identifiers | all refs | `surface:3` | **DONE — verified on the published repository, not on this checkout.** The rewrite preserved every commit rather than flattening: the retraction chain is the evidence, and pre-rewrite SHAs stay navigable via [COMMIT-MAP.md](COMMIT-MAP.md) instead of being edited inside traces. Cloned **unauthenticated** (no credentials, so it is genuinely public) and scanned the working tree *and every blob in every ref*: **0 hits**. The quarantine *records* remain present on purpose — a recorded leak is data, a concealed one is not; what was removed is the contaminated trace content. **Limit stated rather than glossed:** a scan is worth exactly what its pattern file is worth, and completeness of that file cannot be proven from inside — you cannot regex a name you have never seen | `git clone https://github.com/rldyourmnd/explee-ai-dev-test.git` (unauthenticated) → ok; then per pattern `git grep -IiE -c <pat> $(git rev-list --all)` → **0 matching blob/rev pairs**; working tree → **0 hits** | at `3b44a4c` |
 | X.9 | Raw-log verbatim claim bounded at the 8000-char cap | `task1-spend-observability/README.md` | `surface:2` | **DONE** — 6240 records, max stored body 6422, 0 at the cap, headroom 1578 | `python3` over `raw_samples.jsonl` | — |
@@ -558,7 +558,24 @@ commands, tool versions and exit codes:
 ```bash
 git status --porcelain          # must be empty
 git rev-parse HEAD              # the final SHA
-uv --version; python3 -V; ruff --version
-uv run --with pytest pytest tests/ -q; echo "pytest exit=$?"
-ruff check .;                   echo "ruff exit=$?"
+
+# Pinned to the versions ci.yml uses. `ruff --version` and `ruff check .` bare
+# report whatever is on PATH, which is how a submission checklist ends up
+# certifying a different check than the one CI ran.
+uv --version; python3 -V
+uv run --with 'ruff==0.15.17' ruff --version
+uv run --with pyright==1.1.411 pyright --version
+
+uv run --with 'pytest==8.3.4' pytest tests/ -q;  echo "pytest exit=$?"
+uv run --with 'ruff==0.15.17' ruff check .;      echo "ruff exit=$?"
+uv run --with pyright==1.1.411 --with pytest==8.3.4 --with httpx pyright
+                                                 echo "pyright exit=$?"
+uv run tools/repo_checks.py consistency;         echo "consistency exit=$?"
+uv run tools/repo_checks.py acceptance --strict; echo "strict exit=$?"
+uv run tools/assemble_submission.py --check;     echo "preflight exit=$?"
+uv run tools/alert_audit_doc.py --check;         echo "audit exit=$?"
 ```
+
+`alert_audit_doc.py` is expected to exit non-zero on documented findings; every
+other command must exit 0. **`--check` is not optional on that one** — the bare
+form regenerates the audit document.
