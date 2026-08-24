@@ -1280,3 +1280,52 @@ exposed the second. Had the fix been applied together with anything else, the
 still-failing result would have been ambiguous between "the archive was not the
 cause" and "the archive was one of two causes". Change one thing, re-run the same
 thing, read the signature.
+
+## 2026-08-24T11:5xZ — a "safe" mechanical sweep with a 12% damage rate
+
+Two sessions swept dashes independently and both measured what a blanket
+dash-to-comma rule actually did:
+
+| Session | Replacements | Comma splices created | Damage rate |
+|---|---|---|---|
+| `surface:5` (Task 2) | ~80 | **10** | 12% |
+| `surface:8` (AGENTS, Task 3) | 44 | **14** | **32%** |
+
+A rule anyone would have called safe damaged between one line in eight and one in
+three, and it traded a machine-text tell for a grammatical error, which is the
+worse defect because it is harder to see. This repository had already shipped
+`decline , recorded` from exactly this. Every splice was repaired by reading the
+sentence, not by a second rule.
+
+That is the number behind the instruction "rewrite the sentence where the dash
+carried it". It was written as a style preference and it is really a correctness
+requirement.
+
+**One dash is deliberate and must survive the documentation pass.**
+`task2-stt-benchmark/docs/reference-policy.md` rule R7 defines how a false start
+is transcribed, and its worked example carries a dash marking the point where the
+speaker cuts themselves off: `*«мы ре— мы решили»*`. That dash is **data**.
+Removing it corrupts the example that defines the rule. It is annotated inline,
+and it is outside the dash gate's scope — checked, not assumed. Had that gate
+been scoped to "all tracked markdown" it would have been the second check in this
+run whose only passing state is corrupting a record.
+
+### `git commit -m "…"` executes anything between backticks
+
+`surface:5` lost two quotations from a commit message this way: backticked
+identifiers inside a double-quoted shell string are command substitution, and the
+shell replaced them with the empty output of the commands it ran. The code in
+that commit was unaffected; only the message lost text.
+
+Confirmed here directly rather than taken on report:
+
+    "a `echo SUBSTITUTED` b"   ->  a SUBSTITUTED b
+    'a `echo SUBSTITUTED` b'   ->  a `echo SUBSTITUTED` b
+
+This repository writes long commit messages full of backticked identifiers, so
+the hazard is live for every session. A heredoc into `git commit -F -` is immune.
+
+They corrected the record in a **follow-up commit rather than amending**, which
+is right: amending a pushed commit means a force push, and three sessions are
+working in this tree while the repository is published. A wrong message plus a
+correction is cheaper than a history rewrite nobody expected.
