@@ -1256,3 +1256,27 @@ identical thing before theorising about what changed in your files.
 GitHub refuses to retry a run that failed at startup, and neither workflow had a
 manual trigger, so the only way to re-test was to push. A diagnosis should not
 cost commits.
+
+### Un-archiving was necessary and not sufficient: Actions stayed disabled
+
+The first push after un-archiving produced the identical signature — both
+workflows failed with **zero jobs created**. The archive was therefore half the
+answer, and the other half is one field on the callee:
+
+    gh api repos/NDDev-it-com/ci-workflows/actions/permissions   ->  {"enabled": false}
+
+**Archiving a repository disables its Actions; un-archiving does not re-enable
+them.** A repository whose Actions are disabled cannot serve a reusable workflow,
+which produces exactly the same symptoms as the archive did. Two distinct causes,
+one signature, and the second was invisible until the first was cleared.
+
+Everything else about the call was verified intact at that moment: the pin still
+declares `on: workflow_call`, all five called files resolve at it, and it remains
+reachable from the callee's default branch. So the remaining fix is a single
+setting on a repository in another organisation, which is not ours to change.
+
+**The method note worth keeping:** clearing one cause and re-testing is what
+exposed the second. Had the fix been applied together with anything else, the
+still-failing result would have been ambiguous between "the archive was not the
+cause" and "the archive was one of two causes". Change one thing, re-run the same
+thing, read the signature.
