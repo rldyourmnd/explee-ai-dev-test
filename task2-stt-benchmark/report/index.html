@@ -632,7 +632,7 @@ modal run task2-stt-benchmark/modal_app/whisper_family.py::run_corpus \
   --manifest task2-stt-benchmark/data/manifest-hlk8s.json \
   --model-key whisper-large-v3-turbo --tuned true
 python3 task2-stt-benchmark/rank.py
-uv run --with pytest pytest tests/ -q</pre>
+uv run --with 'pytest==8.3.4' pytest tests/ -q</pre>
 
 <footer>
 <p>Evaluation design frozen at 2026-08-23T19:00:14Z, before any

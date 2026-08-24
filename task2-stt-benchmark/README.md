@@ -78,6 +78,6 @@ rather than quietly reporting four.
 ## Running it
 
 ```bash
-uv run --with pytest pytest tests/test_task2_metrics.py tests/test_task2_bootstrap.py \
-                            tests/test_task2_harness.py -q
+uv run --with 'pytest==8.3.4' pytest tests/test_task2_metrics.py \
+    tests/test_task2_bootstrap.py tests/test_task2_harness.py -q
 ```
