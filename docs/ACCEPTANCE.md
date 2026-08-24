@@ -633,9 +633,25 @@ The sequence at submission:
 
 1. Push the final commit.
 2. Push nothing further.
-3. `gh run watch <id>` until it concludes, and read `conclusion` explicitly —
-   an empty conclusion means still running, not passing.
-4. Only then treat the SHA as final.
+3. Select the run **by SHA, never by position**, then watch it:
+
+   ```bash
+   SHA=$(git rev-parse --short HEAD)
+   RID=$(gh run list --workflow=ci.yml --limit 5 --json databaseId,headSha \
+         -q "[.[]|select(.headSha|startswith(\"$SHA\"))][0].databaseId")
+   gh run watch "$RID"
+   gh api "repos/<owner>/<repo>/actions/runs/$RID" --jq '.status + " " + (.conclusion // "-")'
+   ```
+
+   `gh run list --limit 1` returns the most recent run, which is **not
+   necessarily the run for your commit**: a run takes a moment to appear, so
+   querying straight after a push returns the *previous* commit's run. That
+   happened here, and the watcher reported `success` for a different SHA. It read
+   as confirmation and was not.
+
+4. Read `conclusion` explicitly. An empty conclusion means still running, not
+   passing.
+5. Only then treat the SHA as final.
 
 `alert_audit_doc.py` is expected to exit non-zero on documented findings; every
 other command must exit 0.
