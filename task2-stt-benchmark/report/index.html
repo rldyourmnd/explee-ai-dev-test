@@ -250,6 +250,29 @@ segments. For large-v3 the apparent gain is not usable at all, for the reason in
 section. We cannot say whether prompting would help the engines that have no prompt
 interface, because we could not test it on them.</p>
 
+<p><strong>The evidence behind "wins outright".</strong> The paired moving-block test
+separates prompted turbo from every configuration that clears the guardrail, and the
+separation survives correction for testing one leader against several rivals:</p>
+
+<div class="scroll">
+<table>
+<colgroup><col style="width: 30ch"><col style="width: 10ch"><col style="width: 14ch"><col style="width: 14ch"></colgroup>
+<thead><tr><th>Prompted turbo against</th><th class="num">p</th><th>Survives Holm</th><th>Stable across block sizes</th></tr></thead>
+<tbody>
+<tr><td>Whisper large-v3, stock</td><td class="num">0.0089</td><td class="ok">yes</td><td class="ok">yes</td></tr>
+<tr><td>Whisper large-v3-turbo, stock</td><td class="num">0.0026</td><td class="ok">yes</td><td class="ok">yes</td></tr>
+<tr><td>Parakeet-TDT v3</td><td class="num">0.0003</td><td class="ok">yes</td><td class="ok">yes</td></tr>
+<tr><td>large-v3 + glossary</td><td class="num">0.7600</td><td class="warn">no</td><td class="ok">yes</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The last row is the honest one. Prompted turbo is <em>not</em> separated from prompted
+large-v3: they differ by 1.3 points of term F1, far below what this corpus can resolve. What
+separates them is not the score, it is that prompted large-v3 collapses on 19 segments and
+fails the guardrail, so it is not eligible. Every comparison used contiguous 120 second
+blocks, 10 000 resamples, both systems drawing the same blocks.</p>
+
 <h2>How much can 49 minutes prove?</h2>
 
 <p>Before trusting any claim that two engines are equivalent, we simulated systems differing
