@@ -3,12 +3,26 @@
 ## 1. Clone
 
 ```bash
-git clone git@github.com:rldyourmnd/explee-ai-dev-test.git
+# HTTPS, not SSH: the repository is public, so this works for anyone. An SSH URL
+# only works for someone with a key on the owning account, which is the wrong
+# assumption for a document about picking the work up on another machine.
+git clone https://github.com/rldyourmnd/explee-ai-dev-test.git
 cd explee-ai-dev-test
-uv run --with pytest pytest tests/ -q     # expect all green
+
+# Pinned, for the reason the rest of the repository pins: an unpinned tool is
+# not a gate. An unpinned ruff once resolved to a different version in CI than
+# on the machine that ran it, so the same tree was clean in one place and had 49
+# errors in the other, and every local "gates green" claim was about a different
+# check than the one that ran. These three versions match .github/workflows/ci.yml.
+uv run --with 'pytest==8.3.4' pytest tests/ -q
+uv run --with 'ruff==0.15.17' ruff check .
+uv run --with pyright==1.1.411 --with pytest==8.3.4 --with httpx pyright
+uv run tools/repo_checks.py consistency
 ```
 
-Requires `uv`, `gh` (authenticated), and SSH access to `server-nddev-amsterdam`.
+Cloning and running the tests needs only `uv`. **`gh` and SSH access to
+`server-nddev-amsterdam` are needed for section 2 onwards**, not for the clone:
+a reader who only wants to check the code can stop after the block above.
 
 ## 2. Confirm the collector is still alive
 
