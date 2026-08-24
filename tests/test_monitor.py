@@ -1056,6 +1056,86 @@ def test_a_recurrence_long_after_the_last_line_is_a_new_incident(tmp_path):
     assert len(lines) == 2, "a recurrence past the forget window is a new incident"
 
 
+def test_a_new_incident_announces_no_previous_band(tmp_path):
+    """A recurrence past the forget window is a start, not a re-fire.
+
+    The band an incident ended on belongs to an incident that finished.
+    Carrying it into the next one made the line read `previous_band` equal to
+    `band`, which the audit correctly reported as a re-fire that did not worsen:
+    a line carrying no new information, the exact spam the materiality bands
+    exist to prevent. `findymail` shipped one at `lt168` to `lt168`.
+    """
+    store = m.Store(str(tmp_path / "monitor.sqlite"))
+    alerts = tmp_path / "alerts.jsonl"
+    alerter = m.Alerter(store, str(alerts))
+
+    alerter.process([_runway_candidate(50.0)], T0)
+    alerter.process([_runway_candidate(50.0)], T0 + timedelta(minutes=1))
+    alerter.process([], T0 + timedelta(minutes=5))
+    later = T0 + timedelta(seconds=m.POLICY.incident_forget_s + 600)
+    alerter.process([_runway_candidate(50.0)], later)
+    alerter.process([_runway_candidate(50.0)], later + timedelta(minutes=1))
+
+    lines = _alert_lines(alerts)
+    assert len(lines) == 2
+    first, second = lines[0]["evidence"], lines[1]["evidence"]
+    assert first["previous_band"] is None, "the first line of all is a start"
+    assert second["previous_band"] is None, (
+        "a recurrence past the forget window is a new incident and has no "
+        f"previous band; got {second['previous_band']!r} -> {second['band']!r}"
+    )
+    assert second["band"] == first["band"], "setup: the band must be unchanged"
+
+
+def test_the_audit_normalises_projections_but_not_observations():
+    """Normalisation, not tolerance, and only where precision is absent.
+
+    `depleted_at` is `now + value / rate` hours: a float division against a burn
+    estimate whose own uncertainty is measured in MADs over hours. Two
+    recomputations landing a few hundred milliseconds apart denote the same
+    claim, so the comparator normalises both sides to the second.
+
+    `first_observed` is an instant we watched happen. A sub-second difference
+    there IS information, so it must still compare exactly. Getting this
+    backwards would turn the audit into something that cannot detect a real
+    disagreement, which is the failure mode the whole document guards against.
+    """
+    a, b = "2026-08-24T22:35:31.863Z", "2026-08-24T22:35:32.000Z"
+    assert m._close_enough(a, b, "depleted_at"), \
+        "a projection differing by sub-second noise is the same claim"
+    assert not m._close_enough(a, b, "first_observed"), \
+        "an observed instant must still compare exactly"
+    assert not m._close_enough(a, b, None), \
+        "with no key named, fall back to exact comparison"
+
+    far = "2026-08-24T22:35:40.000Z"
+    assert not m._close_enough(a, far, "depleted_at"), \
+        "normalising to the second must not swallow a nine second disagreement"
+
+
+def test_a_projected_instant_is_stable_across_recomputation():
+    """The same inputs must render the same string, every time.
+
+    `depleted_at` is `now + timedelta(hours=value / rate)` and that division is
+    a float, so rebuilding the same state by a different route lands a few
+    microseconds away. At millisecond precision that became a visible
+    disagreement: the written line said ...31.863Z, the audit's re-run said
+    ...31.862Z, and the audit refused to call two different strings equal.
+
+    Quantising at the source is the fix; teaching the comparator to accept
+    near-misses would stop it detecting real ones.
+    """
+    base = datetime(2026, 8, 24, 22, 35, 31, 862_500, tzinfo=timezone.utc)
+    assert m.at_whole_second(base).microsecond == 0
+
+    # Two runway estimates a hair apart must not produce two different strings.
+    now = datetime(2026, 8, 23, 22, 37, 24, tzinfo=timezone.utc)
+    a = m.at_whole_second(now + timedelta(hours=23.9690001))
+    b = m.at_whole_second(now + timedelta(hours=23.9690002))
+    assert m.iso(a) == m.iso(b)
+    assert m.iso(a).endswith(".000Z"), "a projection carries no sub-second claim"
+
+
 def test_an_anomaly_line_states_the_change_not_just_the_rate():
     """The headline number must be the one the reader thinks it is.
 
