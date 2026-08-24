@@ -9,7 +9,15 @@ on:
   push: { branches: [main] }
   schedule:
     - cron: "31 2 * * 1"
-permissions: {}
+# The union of what the jobs below need. An empty map here grants the
+# GITHUB_TOKEN nothing, and a job cannot expand what the workflow never held -
+# so `id-token: write` at job level was asking for something undelegatable, and
+# the run failed at startup with no jobs and no logs. Jobs still narrow from
+# this; the workflow-level set is the ceiling, not the grant.
+permissions:
+  id-token: write
+  contents: read
+  actions: read
 jobs:
   scorecard:
     permissions:

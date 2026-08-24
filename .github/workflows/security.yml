@@ -21,7 +21,14 @@ name: security
 on:
   push: { branches: [main] }
   pull_request: { branches: [main] }
-permissions: {}
+# Union of the four jobs' needs; each job narrows from it below. See the note
+# in scorecard.yml: `permissions: {}` here left nothing for a job requesting
+# `security-events: write` to narrow from, which fails the run before any job
+# is created.
+permissions:
+  actions: read
+  contents: read
+  security-events: write
 concurrency:
   group: security-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
