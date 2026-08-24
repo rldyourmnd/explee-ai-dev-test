@@ -577,5 +577,15 @@ uv run tools/alert_audit_doc.py --check;         echo "audit exit=$?"
 ```
 
 `alert_audit_doc.py` is expected to exit non-zero on documented findings; every
-other command must exit 0. **`--check` is not optional on that one** — the bare
-form regenerates the audit document.
+other command must exit 0.
+
+**`--check` is not optional on that one, and it takes minutes.** The bare form
+regenerates the audit document; `--check` replays the whole window against the
+raw records, so on a window this long it runs for several minutes with no output
+until it finishes. That is work, not a hang. `assemble_submission.py` calls it
+internally and inherits the same wait.
+
+Read-only verified by measurement rather than by reading the flag: the audit
+document's `sha256` is byte-identical before and after a completed `--check`
+run. Five documents tell a reader to use that flag, so the promise it makes is
+checked rather than assumed.
