@@ -36,9 +36,11 @@ this commit on a clean tree, and the output is transcribed, not summarised:
 | `uv run tools/assemble_submission.py --check` | 0 | `pre-flight: ok (0 outstanding)` |
 | `uv run tools/alert_audit_doc.py --check` | **1** | `audited 30, unreconciled 2, caused solely by a top-up 0, by a reverted blip 0` |
 
-**The audit's non-zero exit is reported, not hidden.** The one unreconciled line
-is the `scrapfly` re-fire repeating the same band: cause closed at source, but
-the emitted line cannot be repaired because the log only grows. The gate keeps
+**The audit's non-zero exit is reported, not hidden.** What it names is one
+*class*, not a tally: a `package_exhaustion` alert re-firing into an **unchanged**
+band — `scrapfly` and `resend` — every instance emitted before the fix deployed.
+The cause is closed at source, but the emitted lines cannot be repaired because
+the log only grows. The gate keeps
 naming a defect the current code would not produce, which is the correct
 behaviour for an append-only record and the reason it is a gate and not a
 document.
@@ -93,12 +95,19 @@ The submission ships **the last** snapshot; `01` stays as the documented moment
 the stated six-hour minimum was met. Numbered rather than time-named so the
 sequence, and any gap in it, is obvious.
 
-| # | Due | Status | Artifact |
-|---|---|---|---|
-| 01 | 2026-08-23T22:14Z | pending — closes the six-hour minimum | `snapshots/01-*.md` + `.json` |
-| 02 | 2026-08-24T04:14Z | scheduled | `snapshots/02-*` |
-| 03 | 2026-08-24T10:14Z | scheduled | `snapshots/03-*` |
-| 04 | 2026-08-24T16:14Z | scheduled | `snapshots/04-*` |
+**No table of snapshots is kept here.** An earlier version listed four rows with
+`pending`/`scheduled` statuses and was still saying `01 — pending` after five
+snapshots existed. A schedule transcribed into a document is a claim that ages
+every six hours; the directory is the record.
+
+    ls task1-spend-observability/snapshots/
+
+The one that ships is the highest-numbered snapshot whose `closes_six_hour_minimum`
+is true — which is the same selection `tools/repo_checks.py` performs, so the
+prose and the gate describe one operation rather than two kept in agreement by
+hand. `01` is retained deliberately: it spanned 21,587.803 s and fell **12.197 s
+short** despite being taken *after* the six-hour instant, and it is the evidence
+that span was measured rather than the clock trusted.
 
 Each is standalone: `sha256`, bytes, lines, first and last timestamp, exact span,
 largest consecutive gap, malformed count, provider count, response-class
@@ -167,7 +176,7 @@ permits.
 
 | # | Artifact | State |
 |---|---|---|
-| 1 | `task1-alerts.jsonl` | **17 lines, all parse, all timezone-aware** — pre-flight verified |
+| 1 | `task1-alerts.jsonl` | **all parse, all timezone-aware** — pre-flight verified; `wc -l` for the line count, which grows as the system emits |
 | 2 | `task1-monitor.py` | placed; 0 `raw_sampler` imports, so it ships alone as *"the code (a file)"* |
 | 3 | `task1-TRACE.md` | **absent** — session live |
 | 4 | `task2-TRACE.md` | **absent** — session live |
@@ -274,7 +283,7 @@ passed it:
 | Counterfactual | does it survive *removing a discrete event*? | **fails** — the step moves where the series **segments** |
 
 **Why (b) and not the two cheaper options.** *(Argument as made against the
-13-line cut; the shipped artifact is now 17 lines. The numbers are left as
+13-line cut; the shipped artifact has grown since. The numbers are left as
 written because the reasoning is what is being recorded, and re-numbering an
 argument without re-deriving it is how a document starts asserting something
 nobody checked.)* The packaged 13-line artifact is

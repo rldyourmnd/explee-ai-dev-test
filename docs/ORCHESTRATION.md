@@ -19,7 +19,7 @@ true when written**. Where they disagree, ACCEPTANCE wins.
 |---|---|
 | Collector | `active`, `NRestarts=0`, never restarted since T0 `2026-08-23T16:13:26.775Z`. **33,392 records, 0 malformed**, max consecutive gap **29.684 s** — under the 30 s interval, so the series has no hole. Span **17.40 h** and still growing |
 | Six-hour requirement | **closed** by snapshot `04-final`, span **26,842 s** against the 21,600 s minimum. Snapshot 01 spanned 21,587.8 s and fell **12.2 s short** despite arriving after the mark; it is kept as evidence that span was measured rather than the clock trusted |
-| Task 1 | dashboard live at `spend.nddev.it.com` (200, valid cert, no login). Shipped `alerts.jsonl` is **17 lines**, cut at `2026-08-23T23:15:00.509Z`; the served log only grows and is ahead of it by construction |
+| Task 1 | dashboard live at `spend.nddev.it.com` (200, valid cert, no login). shipped `alerts.jsonl` carries the decisions the system actually emitted; `wc -l` for its size. The served log only grows, so any cut of it is behind the live record by construction |
 | Task 2 | **published** at `stt.nddev.it.com` — 5 engines + 2 tuned tracks, 99 hashed segments (2952.821 s), publisher human transcript. Recommends **Whisper `large-v3-turbo` with a glossary prompt**. `large-v3` is **retracted** — it collapses on 19 of 99 segments |
 | Task 3 | **complete** — artifact, its 2–3 lines, and a real tool-exported trace |
 | Repository | **public**, history rewritten and *not* flattened. `git rev-list --count HEAD` for the commit count; pre-rewrite SHAs resolve via [COMMIT-MAP.md](COMMIT-MAP.md) and are never edited inside traces |
