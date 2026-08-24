@@ -281,6 +281,23 @@ def parse_ts(raw: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
+def at_whole_second(moment: datetime) -> datetime:
+    """A projected instant, rounded to the second it lands in.
+
+    `depleted_at` is `now + timedelta(hours=value / rate)`, and `value / rate` is
+    a float. Rebuilding the same state by a different route, which is exactly
+    what the audit does, can land a few microseconds away, and rendering at
+    millisecond precision turns that into a visible disagreement: the live line
+    said ...31.863Z and the re-run said ...31.862Z, and the audit correctly
+    refused to call two different strings equal.
+
+    The fix belongs here rather than in the comparator. A comparator taught to
+    accept near-misses stops being able to detect real ones, and this projection
+    carries hours of uncertainty, so a millisecond on it was never information.
+    """
+    return (moment + timedelta(seconds=0.5)).replace(microsecond=0)
+
+
 def iso(moment: datetime) -> str:
     """Render an aware datetime as ISO-8601 with an explicit Z."""
     if moment.tzinfo is None:
@@ -1160,7 +1177,8 @@ def _project(state: ProviderState, now: datetime) -> None:
     if state.pay_model == "prepaid_balance":
         if rate > 0:
             state.runway_h = state.value / rate
-            state.depleted_at = now + timedelta(hours=state.runway_h)
+            state.depleted_at = at_whole_second(
+                now + timedelta(hours=state.runway_h))
     elif state.pay_model == "postpaid":
         # Zero is not the boundary for postpaid credit: it may legitimately go
         # negative between top-ups. The configured floor stands in for the
@@ -1169,11 +1187,13 @@ def _project(state: ProviderState, now: datetime) -> None:
             headroom = state.value - POLICY.postpaid_floor
             if headroom > 0:
                 state.runway_h = headroom / rate
-                state.depleted_at = now + timedelta(hours=state.runway_h)
+                state.depleted_at = at_whole_second(
+                now + timedelta(hours=state.runway_h))
     elif state.pay_model == "credits_package":
         if rate > 0:
             state.runway_h = state.value / rate
-            state.depleted_at = now + timedelta(hours=state.runway_h)
+            state.depleted_at = at_whole_second(
+                now + timedelta(hours=state.runway_h))
         if state.refresh:
             try:
                 refresh_day = date.fromisoformat(str(state.refresh))
@@ -1725,6 +1745,7 @@ class Alerter:
                 self.store.set_alert_state(key, since, last_fired, fired_signature)
                 continue
 
+            fresh_incident = last_fired is None
             if last_fired is not None:
                 was = signature_severity(fired_signature)
                 now_severity = signature_severity(candidate.signature)
@@ -1736,7 +1757,8 @@ class Alerter:
                 recurred = since > parse_ts(last_fired)
                 aged_out = (now - parse_ts(last_fired)).total_seconds() >= \
                     POLICY.incident_forget_s
-                if not (recurred and aged_out):
+                fresh_incident = recurred and aged_out
+                if not fresh_incident:
                     if now_severity < was:
                         # Recovering. Not worth a line - nobody acts on an
                         # anomaly easing from 20 to 14 MAD - but the stored band
@@ -1758,6 +1780,13 @@ class Alerter:
                                                    fired_signature)
                         continue
 
+            # A recurrence that aged out is a NEW incident: the band the last
+            # one ended on belongs to an incident that finished. Carrying it
+            # forward made the line read as a re-fire that did not worsen,
+            # lt168 to lt168, which is the shape the materiality design exists
+            # to prevent and which the audit rightly flagged. A start has no
+            # previous band.
+            announced_from = None if fresh_incident else fired_signature
             payload = {
                 "ts": iso(now),
                 "level": candidate.level,
@@ -1770,7 +1799,7 @@ class Alerter:
                                  sustain_required_s=candidate.sustain_s,
                                  first_observed=iso(since),
                                  band=candidate.signature,
-                                 previous_band=fired_signature),
+                                 previous_band=announced_from),
             }
             ident = hashlib.sha256(f"{key}|{iso(now)}".encode()).hexdigest()[:16]
             if self.store.record_fired(ident, now, payload):
@@ -3083,10 +3112,46 @@ ALERTER_EVIDENCE_KEYS = frozenset({
 DRIFTING_EVIDENCE_KEYS = frozenset({"observed_span_s", "samples", "evaluated_at"})
 
 
-def _close_enough(claimed: Any, fresh: Any) -> bool:
-    """Numbers within 2% (or 0.01 absolute) count as reproduced; others must match."""
+# Fields whose value is a PROJECTED instant rather than an observed one. They
+# are compared at whole-second precision, because that is the precision they
+# carry: `depleted_at` is `now + value / rate` hours, a float division against a
+# burn estimate whose own uncertainty is measured in MADs over hours. Observed
+# instants such as `first_observed` and `last_ok_ts` are NOT in this set and are
+# compared exactly, because a sub-second difference in something we watched
+# happen is information.
+PROJECTED_INSTANT_KEYS = frozenset({"depleted_at", "projected_at_refresh"})
+
+
+def _same_second(claimed: Any, fresh: Any) -> bool:
+    """Whether two rendered instants denote the same second."""
+    try:
+        return at_whole_second(parse_ts(str(claimed))) == \
+            at_whole_second(parse_ts(str(fresh)))
+    except (ValueError, TypeError):
+        return claimed == fresh
+
+
+def _close_enough(claimed: Any, fresh: Any, key: str | None = None) -> bool:
+    """Numbers within 2% (or 0.01 absolute) count as reproduced; others must match.
+
+    Projected instants are normalised to the second on BOTH sides first. That is
+    a normalisation and not a tolerance, and the difference decides whether this
+    weakens the audit. A tolerance says "these differ, accept it if the gap is
+    small": it is threshold-dependent and hides real disagreements sitting near
+    the threshold. A normalisation says "this field's meaningful precision is one
+    second, compare at that precision": identical treatment of both sides, no
+    threshold, nothing to hide behind.
+
+    Rounding only the emitted value would not have worked, and was tried:
+    `alerts.jsonl` only grows, so every line already written at millisecond
+    precision then disagreed with its rounded recomputation. That change took
+    the audit from 2 unreconciled to 4. Reconciliation has to happen where the
+    comparison happens.
+    """
     if isinstance(claimed, bool) or isinstance(fresh, bool):
         return claimed == fresh
+    if key in PROJECTED_INSTANT_KEYS:
+        return _same_second(claimed, fresh)
     if isinstance(claimed, (int, float)) and isinstance(fresh, (int, float)):
         return abs(fresh - claimed) <= max(0.01, abs(claimed) * 0.02)
     return claimed == fresh
@@ -3181,7 +3246,7 @@ def audit_alerts(store: Store, lines: Sequence[dict[str, Any]]) -> tuple[str, in
                         problems.append(f"evidence field '{key}' is absent on re-run")
                         continue
                     checked += 1
-                    if not _close_enough(claimed_value, fresh.evidence[key]):
+                    if not _close_enough(claimed_value, fresh.evidence[key], key):
                         problems.append(
                             f"field '{key}': line says {claimed_value!r}, "
                             f"re-run gives {fresh.evidence[key]!r}")
