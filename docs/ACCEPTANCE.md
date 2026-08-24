@@ -592,6 +592,17 @@ concluded in 49, 50 and 57 seconds, and the very next one took **ten minutes**
 from creation to conclusion with GitHub reporting Actions fully operational. So
 "it usually takes a minute" is not a basis for deciding a run has failed.
 
+**Re-baseline this file at the final SHA before submitting.** The `Baseline:`
+line at the top names the commit the transcribed outputs were produced at, and it
+does not follow HEAD on its own. It has sat dozens of commits behind before now.
+The consistency check does not catch this: it only requires that this file was
+revisited when deliverables moved, which it was, every time. A stale baseline is
+therefore invisible to the gate and visible to a reader.
+
+So the last edit before submission is: run the gates on the clean final tree,
+replace the `Baseline:` SHA, and re-transcribe the outputs beneath it. That also
+closes row X.1, which is the row asserting exactly this.
+
 The sequence at submission:
 
 1. Push the final commit.
