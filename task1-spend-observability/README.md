@@ -61,9 +61,19 @@ proves it: span **21,677.879 s = 6.0216 h** across 11,568 records, 0 malformed,
 largest consecutive gap 29.67 s, verified by prefix digest against the host with
 the collector active before and after.
 
-The series continues past that mark: [`snapshots/04-final.md`](snapshots/04-final.md)
-records **7.4562 h across 14,320 records**, 0 malformed, largest consecutive gap
-29.68 s, taken at the point this work stopped.
+Collection continues past that mark, and so does the series. Every artifact in
+[`snapshots/`](snapshots/) is a standalone record of the window as it stood at
+one instant, numbered in order, each carrying its own span, record count,
+malformed count, largest consecutive gap and prefix digest. **The one that
+matters for any given question is the highest-numbered file whose
+`closes_six_hour_minimum` is true**, which is how `tools/repo_checks.py` selects
+it rather than by name.
+
+That phrasing is deliberate. An earlier version named one file as the latest,
+which made this paragraph false the moment the next snapshot landed, and a
+sentence that expires every six hours is the same defect as a frozen count: it
+is precise about the wrong thing. Naming the selection rule instead of the
+selection stays true for as long as the series runs.
 
 [`snapshots/01-six-hour-short.md`](snapshots/01-six-hour-short.md) is kept
 alongside it and spans **21,587.803 s**, which is 12.197 s short. It was taken
