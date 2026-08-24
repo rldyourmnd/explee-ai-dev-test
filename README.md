@@ -156,3 +156,31 @@ uv run tools/repo_checks.py acceptance --strict
 The last two are this repository's own checks: `consistency` fails if a document
 contradicts the tree, and `acceptance --strict` is what runs at submission. Both
 pass on a clean clone, not only here, which was itself a defect once.
+
+### Two workflows on the Actions tab are red, and it is not this repository
+
+`CI` is green and carries every correctness gate above. `security` and
+`scorecard` fail, and they fail **before creating a single job**. No logs, no
+steps, and the run is named after its file path, because nothing ever parsed the
+file far enough to read its `name:`.
+
+The cause is entirely outside this repository. Both call reusable workflows from
+`NDDev-it-com/ci-workflows`, which was archived. Archiving a repository disables
+its Actions, and **un-archiving does not re-enable them**, so there were two
+causes wearing one signature and the second stayed invisible until the first was
+cleared. Check it yourself:
+
+```bash
+gh api repos/NDDev-it-com/ci-workflows -q .archived            # false
+gh api repos/NDDev-it-com/ci-workflows/actions/permissions      # enabled: false
+```
+
+Nothing in our workflow files is wrong: the pinned commit still declares
+`on: workflow_call` and all five called workflows resolve at it. What settled it
+was re-running a previously **successful** run unchanged and watching it flip to
+`startup_failure`. Nothing in the repository differed between the two attempts,
+which put the variable outside it.
+
+The fix is one setting on a repository in another organisation, so it is not ours
+to make. This is written here rather than left for you to find, because a red
+badge with no explanation is indistinguishable from one nobody looked at.
