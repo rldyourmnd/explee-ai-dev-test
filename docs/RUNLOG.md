@@ -1068,3 +1068,47 @@ or by a reverted blip — has stayed at **zero** while the sample tripled. What
 grew is duplicate-suppression residue: quality, not correctness. A rising count
 against a tripling sample with the correctness class at zero is convergence, not
 drift, and reading the raw count alone would have said the opposite.
+
+## 2026-08-24T11:0xZ — one working session cannot be published, and the reason is a property we chose
+
+`surface:8` cannot export its own working session under `--submission`. Verified
+by them, recorded here because `docs/` is this session's zone and the reasoning
+should outlive the pane.
+
+Of the 24 blocks carrying a real third-party identifier, excision reaches **9**:
+all `tool_result`s. The other 15 are commands they typed and prose they wrote
+while diagnosing and fixing the original leak. Excision cannot touch tool inputs
+or assistant messages **by design** — that boundary exists so the mode can never
+be used to launder a session's own words.
+
+That property is now what blocks the trace, and it is the correct outcome rather
+than a bug to route around. The alternatives were all worse: hand-editing
+destroys the verbatim guarantee; `--allow-finding` on a real identifier is the
+precise act every guard here exists to prevent; weakening the tool at the freeze
+for one's own convenience is the override-becomes-routine failure. Not publishing
+is the only option that costs nothing but the artifact.
+
+**Task 3's deliverable is unaffected and shipped.** Verified independently here:
+`task3-harness-artifact/TRACE.md`, 91,674 bytes, session
+`9502fd71-d44d-45eb-aeca-193465d9448b`, exporter header present. The task asks
+for a trace of the work; the unpublishable session was the working one, never the
+deliverable.
+
+### The fifth unsatisfiable gate, and the first where the artifact is fine
+
+Submission mode is **unsatisfiable for any session that writes the scanner's own
+test fixtures.** 9 of the 13 findings are synthetic strings invented as fixtures
+— fake user paths, fake token constants — sitting in tool *inputs*, where
+excision cannot reach, while `--submission` forbids `--allow-finding`, the one
+mechanism for saying "I read this turn and it is a fixture". Publishing those
+strings would cost nobody anything.
+
+The other four unsatisfiable gates this run were checks that could not reach a
+passing state against correct data. This one is different and worse: the artifact
+is genuinely clean and the gate still cannot pass.
+
+**Deliberately not fixed at the freeze.** Changing a guard so one's own trace
+passes, at the moment of submission, is the move this project keeps proving
+wrong. The shape of a fix, for whoever picks it up: an acknowledgement that names
+the specific fixture and is itself recorded in the trace — not a blanket
+override.
