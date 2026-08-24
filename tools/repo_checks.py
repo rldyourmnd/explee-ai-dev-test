@@ -125,7 +125,16 @@ def check_no_future_timestamps(problems: list[str]) -> None:
     # ignore the check, which is worse than not having it.
     forward = re.compile(r"\b(mark|deadline|earliest|target|scheduled|due|"
                          r"at/after|at or after|remaining|until|before|by then|"
-                         r"will|window closes|not before|pending)\b", re.I)
+                         r"will|window closes|not before|pending|"
+                         # A PROJECTION is future by definition: the whole point
+                         # of `depleted_at` is to name an instant that has not
+                         # happened. This gate flagged a quoted alert line whose
+                         # own text said "projected", which is a check failing on
+                         # correct data - and one that would fire on any document
+                         # quoting a runway alert. Added by NAME rather than by
+                         # widening: "projects"/"projection"/"projected" all
+                         # assert a forecast, never a past event.
+                         r"project(s|ed|ion)?|reaches zero|runs out)\b", re.I)
     for rel in CLAIM_DOCS:
         path = os.path.join(ROOT, rel)
         if not os.path.exists(path):

@@ -1329,3 +1329,33 @@ They corrected the record in a **follow-up commit rather than amending**, which
 is right: amending a pushed commit means a force push, and three sessions are
 working in this tree while the repository is published. A wrong message plus a
 correction is cheaper than a history rewrite nobody expected.
+
+## 2026-08-24T12:3xZ — both Task 1 fixes are now visible in production output, not just in replay
+
+The window passed twenty hours and the live alert log emitted a new line. It is
+worth recording because of *what* it emitted, not that it emitted.
+
+    ts        2026-08-24T10:31:43.117Z
+    rule      runway            provider  openrouter
+    band      None -> 03|runway:warning:lt48
+    text      ... reaches zero in 42.4 h ... projected 2026-08-26T04:54:55.000Z
+
+**The `previous_band` fix is working in the deployed system.** This is an
+incident *start*, and it correctly carries `None` rather than repeating its own
+band. That is precisely the defect the audit still names on two lines written
+about nine hours before the fix deployed. Until now the claim "the cause is
+closed at source" rested on a replay of the window under current code; it now
+also rests on the live system emitting a new incident correctly. Replay says the
+code would not produce the defect; this says the running code did not.
+
+**The `depleted_at` normalisation is working too.** The projection renders as
+`…04:54:55.000Z` — whole seconds, which is the change that reconciled the audit
+at the comparison rather than by re-emitting shipped lines.
+
+Neither was verified in production before. Both were inferred from a replay and a
+test, which is weaker evidence than an artifact the running system wrote by
+itself.
+
+The live log is now ahead of the shipped cut by one line, which is the documented
+structural condition rather than drift: the log only grows, so any cut of it is
+behind by construction, and the shipped artifact is a deliberate boundary.
