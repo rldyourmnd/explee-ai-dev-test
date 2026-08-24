@@ -1,7 +1,7 @@
 name: CI
 
 # Runs on GitHub-hosted ubuntu-latest runners, free for this repository, and
-# deliberately independent of the publication decision — Actions runs on private
+# deliberately independent of the publication decision, Actions runs on private
 # repositories too.
 #
 # Why this exists: the external review's central point is that a reviewer who

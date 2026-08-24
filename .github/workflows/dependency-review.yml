@@ -1,4 +1,4 @@
-# Dependency Review — pull_request only, and free on public repositories.
+# Dependency Review: pull_request only, and free on public repositories.
 # Pinned to a full commit SHA for the same reason as security.yml.
 name: dependency-review
 on:

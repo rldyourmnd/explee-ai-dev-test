@@ -1,4 +1,4 @@
-# Public OSS security suite — the free set that a public repository gets at no
+# Public OSS security suite, the free set that a public repository gets at no
 # cost: CodeQL, native secret scanning, actionlint and zizmor with SARIF.
 #
 # Composed from NDDev-it-com/ci-workflows rather than hand-rolled, and pinned to
@@ -14,16 +14,20 @@
 # silently move fork PRs onto private infrastructure. Public callers name their
 # runner.
 #
-# ci.yml is deliberately untouched: it holds the correctness gates — pinned
-# pytest, ruff and pyright, plus the repository consistency check — and this file
+# ci.yml is deliberately untouched: it holds the correctness gates: pinned
+# pytest, ruff and pyright, plus the repository consistency check, and this file
 # only adds security scanning alongside them.
 #
-# WAS FAILING FOR AN EXTERNAL REASON, RESOLVED 2026-08-24. Runs ended in
+# STILL FAILING AS OF 2026-08-24, CAUSE NOT CONFIRMED. Runs end in
 # startup_failure: zero jobs, no logs, and the run named by this file path
 # rather than by `name:`. Nothing in this file was ever wrong.
 #
-# Cause: NDDev-it-com/ci-workflows was ARCHIVED, and GitHub will not serve a
-# reusable workflow from an archived repository. The owner un-archived it.
+# Leading theory was that NDDev-it-com/ci-workflows was ARCHIVED, since GitHub
+# will not serve a reusable workflow from an archived repository. The owner
+# un-archived it (verified archived=false) and BOTH WORKFLOWS STILL FAIL the
+# same way: zero jobs, no logs, run named by path. So the archive was either not
+# the cause or not the only one. Possible that workflow resolution is cached and
+# needs longer than one push to propagate; that is untested.
 #
 # Kept because the hunt was expensive and the signature is worth recognising:
 # instant failure with NO LOGS means the platform refused to start the

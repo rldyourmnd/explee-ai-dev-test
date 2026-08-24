@@ -354,12 +354,21 @@ existing artifacts are a separate cleanup.
 
 ## No logs means the platform refused to start, so stop reading the file
 
-`security.yml` and `scorecard.yml` failed for hours. The signature: instant
-failure, **zero jobs created, no logs at all**, and the run named by its file
-path instead of its `name:` field. Nothing in either file was wrong. The cause
-was that `NDDev-it-com/ci-workflows`, whose reusable workflows they call, had
-been **archived**, and GitHub will not serve a reusable workflow from an
-archived repository.
+`security.yml` and `scorecard.yml` failed for hours, and **as of 2026-08-24 they
+still do**. The signature: instant failure, **zero jobs created, no logs at
+all**, and the run named by its file path instead of its `name:` field. Nothing
+in either file is known to be wrong.
+
+The leading theory was that `NDDev-it-com/ci-workflows`, whose reusable
+workflows they call, had been **archived**, since GitHub will not serve a
+reusable workflow from an archived repository. The owner un-archived it,
+verified `archived=false`, and both workflows failed again identically on the
+next push: zero jobs, no logs, named by path. **So that theory is unconfirmed
+too** - either it was not the cause, or not the only one, or workflow
+resolution is cached longer than one push, which is untested. This paragraph
+says so rather than closing the case, because a fix that was applied and did not
+work is evidence, and recording it as resolved would cost the next person the
+whole hunt again.
 
 **The cause of a CI failure can sit entirely outside your repository**, and this
 signature says so. A job that runs and fails writes logs. A run with no logs
@@ -368,7 +377,7 @@ which means the answer is in the platform's view of the world and not in the
 YAML. Time spent re-reading the file is time spent looking where the answer
 cannot be.
 
-Three hypotheses were tested and all three were wrong, which is the useful part:
+Four hypotheses have been tested and none has held, which is the useful part:
 
 1. **Permissions delegation**: that `permissions: {}` at workflow level left a
    job-level `id-token: write` nothing to narrow from. Disproved by a
@@ -381,6 +390,9 @@ Three hypotheses were tested and all three were wrong, which is the useful part:
 3. **Unresolvable pins.** The pins examined were `actions/checkout` and
    `astral-sh/setup-uv`, from other repositories entirely, so they could not
    explain a failure in calls to a third.
+4. **The callee being archived.** Un-archiving it did not fix the runs. The
+   most plausible remaining reading is that this was necessary but not
+   sufficient, which is not the same as being the cause.
 
 What settled it was **a re-run, not a file read**: the same run id, same commit,
 same event went `success` to `startup_failure` with zero repository changes
