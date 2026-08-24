@@ -1,4 +1,4 @@
-# Corpus freeze — Радио-Т, and the rules that chose it
+# Corpus freeze: Радио-Т, and the rules that chose it
 
 Approved by the orchestrator at 2026-08-23T19:06Z, licence ruling at 19:10Z.
 The span-selection rule below was **declared before the audio was cut and before
@@ -48,7 +48,7 @@ times**, so a reader re-derives the same segments from the publisher's file.
 Four hosts on a remote call: overlapping speech, interruption, unequal levels
 and telephone-grade acoustics, with English IT terminology code-switched inside
 Russian sentences almost continuously. It is the hardest realistic case rather
-than a flattering one — which is the point. A good score on easy audio would
+than a flattering one, which is the point. A good score on easy audio would
 tell the employer nothing about the speech they actually have.
 
 Note the source is **mono at 44.1 kHz**, so the frozen segments at 16 kHz mono
@@ -65,21 +65,21 @@ exception requests.
 **This must appear in the report body, not a footnote** (orchestrator ruling,
 19:10Z):
 
-* **What we publish:** metrics, short quoted error spans, and the recipe —
+* **What we publish:** metrics, short quoted error spans, and the recipe:
   episode number, source URL, SHA-256 of the publisher original, exact cut
   points. Nothing else.
 * **What we do not publish:** the segment files, any processed audio, and the
   full reference transcript.
 * **The ND leg is not in tension.** No derivative is distributed at all.
   Reproducibility comes from the recipe, verified against the *publisher's*
-  file — which is stronger than shipping our own copy, because the reader
+  file, which is stronger than shipping our own copy, because the reader
   checks us against the source rather than against ourselves.
 * **The NC leg is the contestable one, and we say so plainly.** Creative Commons
   defines NonCommercial as not primarily directed toward commercial advantage or
   monetary compensation. A hiring submission is, at some remove, directed toward
   being paid. That is a real tension, not a technicality. We proceed because the
-  only licence-governed act is a private download and local analysis — the
-  posture academic benchmarking has long taken with NC corpora — and because the
+  only licence-governed act is a private download and local analysis, the
+  posture academic benchmarking has long taken with NC corpora, and because the
   published artifact contains no licensed content: a measurement is a fact about
   a recording, not a reproduction of one.
 * **The alternative was considered and rejected on the merits, not dodged.** A
@@ -103,5 +103,5 @@ quantisation detail is now moot, and the change is recorded as an amendment in
 `PREREGISTRATION.md` §12.
 
 Modal discipline: one app created and named for this benchmark, every command
-scoped to it by name, and the workspace never enumerated — it contains unrelated
+scoped to it by name, and the workspace never enumerated, it contains unrelated
 deployments whose names must not reach a published trace.

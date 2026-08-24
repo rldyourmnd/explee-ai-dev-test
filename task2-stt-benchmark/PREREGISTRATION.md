@@ -1,6 +1,6 @@
-# Pre-registration — STT benchmark evaluation design
+# Pre-registration: STT benchmark evaluation design
 
-**Status: FROZEN — commit `9fd6ff8`, committed 2026-08-23T19:00:14Z.** Declared
+**Status: FROZEN, commit `9fd6ff8`, committed 2026-08-23T19:00:14Z.** Declared
 before any corpus was selected, before any engine was called, and before any
 engine output existed in this repository.
 Nothing below may be changed after the first engine result is read.
@@ -12,7 +12,7 @@ commit recorded under "Amendments" below. A pre-registration is worth exactly as
 much as its dating, so the dating is delegated to an object nobody here writes
 by hand: verify with `git log -1 --format=%cI 9fd6ff8`.
 If something here turns out to be wrong, the amendment is recorded as an
-amendment — dated, justified, and reported alongside the original — never as a
+amendment, dated, justified, and reported alongside the original, never as a
 silent edit.
 
 That order is the whole point. A threshold chosen after seeing the numbers is
@@ -32,7 +32,7 @@ word-error rate says. Both are encoded as test fixtures
 
 ## 2. Primary metric
 
-**IT-term F1** — exact recognition of the frozen glossary terms
+**IT-term F1**: exact recognition of the frozen glossary terms
 (`glossary.json`, SHA-256 recorded at run time), precision and recall pooled
 over the corpus.
 
@@ -57,15 +57,15 @@ If **no** engine clears the guardrail, that is the finding, reported as such.
 ## 4. Tie-break order
 
 Applied only when the paired bootstrap on the primary metric cannot separate
-two engines — that is, when the 95 % interval on the difference contains 0.
+two engines, that is, when the 95 % interval on the difference contains 0.
 
-1. **Code-switched-span WER** (`cs_wer`), lower wins — measured only where the
+1. **Code-switched-span WER** (`cs_wer`), lower wins, measured only where the
    speech actually switches language.
-2. **Latin-to-Cyrillic substitution rate**, lower wins — the `РАКа` failure
+2. **Latin-to-Cyrillic substitution rate**, lower wins, the `РАКа` failure
    mode, measured directly.
-3. **Hallucination rate**, lower wins — an invented sentence in a meeting record
+3. **Hallucination rate**, lower wins, an invented sentence in a meeting record
    is worse than a missing one, because it is indistinguishable from a real one.
-4. **Measured cost per hour of audio**, lower wins — from billed figures where
+4. **Measured cost per hour of audio**, lower wins, from billed figures where
    the vendor exposes them, otherwise from the vendor's own tariff applied to
    measured duration and labelled as a tariff calculation, not a measurement.
 5. **Median latency per segment**, lower wins.
@@ -90,14 +90,14 @@ is not a quality judgement.
   their own column and never imputed as empty strings; an engine failing more
   than 10 % of the corpus is not ranked.
 * A metric with no observations is reported as unmeasured, never as `0.0`.
-* Speaker attribution and timestamp quality are **not scored** — see the
+* Speaker attribution and timestamp quality are **not scored**, see the
   amendment log. The task asks which engine hears this speech correctly, not
   who said it or exactly when.
 
 ## 6. Two rankings, never mixed
 
-* **Default track** — stock model, no terminology assistance.
-* **Tuned track** — vendor terminology assistance (keyterm prompting, custom
+* **Default track**: stock model, no terminology assistance.
+* **Tuned track**: vendor terminology assistance (keyterm prompting, custom
   vocabulary, phrase hints) supplied with the *same frozen glossary* for every
   vendor that supports it.
 
@@ -132,8 +132,8 @@ themselves without buying anything.
 | Whisper large-v3, full precision | **run**, 120/120 segments | initial-prompt biasing |
 | Whisper large-v3-turbo, full precision | **run**, 120/120 segments | initial-prompt biasing |
 | Parakeet-TDT-0.6b-v3, full precision | **run**, 120/120 segments | none |
-| NVIDIA Canary-1b-v2 | **blocked** — NeMo 2.1.0 asserts on the canary2 prompt format (`Expected the last token in answer_ids to be EOS`); needs a newer NeMo than the pinned image | none |
-| GigaAM v2 RNNT (Russian-specific) | **blocked** — short-form API refuses audio at 30 s and our frozen segments are exactly 30.000 s; the vendor's long-form path needs a gated pyannote VAD requiring `HF_TOKEN`. Trimming the audio for one engine only would have voided §7 | none |
+| NVIDIA Canary-1b-v2 | **blocked**: NeMo 2.1.0 asserts on the canary2 prompt format (`Expected the last token in answer_ids to be EOS`); needs a newer NeMo than the pinned image | none |
+| GigaAM v2 RNNT (Russian-specific) | **blocked**: short-form API refuses audio at 30 s and our frozen segments are exactly 30.000 s; the vendor's long-form path needs a gated pyannote VAD requiring `HF_TOKEN`. Trimming the audio for one engine only would have voided §7 | none |
 | Voxtral / Qwen2-Audio (multilingual audio LLM) | candidate if budget allows a further image build | prompt |
 
 Blocked engines are named with their specific blocker rather than dropped
@@ -193,11 +193,11 @@ Amendments are recorded, never applied silently.
 | When | Change | Reason |
 |---|---|---|
 | 2026-08-24, **after engine output existed** | **Guardrail metric changed** from overall WER ≤ 0.30 to **reference-coverage error rate (substitutions + deletions) / reference words ≤ 0.30**. The threshold number is unchanged; the metric it applies to is not. | **Engine output already existed when this changed, and that must be weighed against it.** The original rule was declared for a *verbatim* reference. The corpus was later amended to a publisher transcript edited for readability, so every engine is charged for words a human editor deliberately deleted. That artefact lands entirely in the **insertion** term: measured insertion rates are 0.35 to 0.42 for four independent engines while deletions are 0.02 to 0.06, a five to eighteen-fold asymmetry in the same direction that no set of independent engines would produce by hallucinating in unison. Excluding insertions removes the editing artefact and leaves what the guardrail was always for: how much of the reference an engine got wrong or missed. **The change is not a rescue, and the evidence is that it still fails things:** 3 of 7 configurations fail the new guardrail, including `whisper-large-v3 + glossary`, which this report had previously recommended and which the new metric independently caught degenerating. A threshold moved to make a favourite pass would not have failed the favourite. |
-| 2026-08-23T20:45Z, **before any engine output existed on the new corpus** | **Corpus changed** from Радио-Т 1027 to a conference talk that ships with a publisher-made human transcript: "Оператор в Kubernetes для управления кластерами БД", Владислав Клименко (Altinity), HighLoad Channel, 2953 s, transcript at habr.com/ru/articles/523378. | This dissolves the blocker rather than bounding it. A publisher transcript is **independent of every engine we rank**, so the circularity that stopped the previous corpus disappears at the root — no draft-assisted reference, no six-segment residual-bias slice, no human annotation. It was produced by people who know the domain and spell ClickHouse, Kubernetes, StatefulSet and ConfigMap correctly, which is precisely the axis being measured. A reader can fetch the same transcript and re-derive our numbers without trusting us. **The cost, stated rather than hidden:** the transcript is edited for readability — fillers and false starts removed, grammar smoothed — so raw WER is inflated identically for every engine. Ranking stays valid; absolute WER does not. Term-level metrics, which are primary, are barely affected because product names survive editing. The editing distance is measured on a sample of segments and published as a property of the reference, the same move used for residual bias. No metric, guardrail, tie-break or glossary changed. |
-| 2026-08-23T20:32Z, **before either engine was run** | **Slate extended by two open models** chosen to avoid the two blockers that stopped Canary and GigaAM: Seamless-M4T-v2-large (Meta, open weights, ungated) and a Russian wav2vec2/XLS-R fine-tune. Same frozen hour, same 120 segments, same identical-input rule, no trimming, nothing paid. | The task requires ≥5 engines and three is non-compliant on a hard, countable requirement. Canary and GigaAM were blocked for reasons specific to them — a NeMo version and a gated pyannote VAD — not reasons that block open ASR generally, so the shortfall was fixable without touching the design. **Nothing about the frozen design changed**: no metric, guardrail, tie-break, corpus, glossary or segmentation was altered, and no ranking is produced either way because no independent reference exists. Two engines simply arrived later than the first three, and the report says so. Different architectures were preferred over a third Whisper size, which would have added least. |
-| 2026-08-23, commit `c7e9e45` | **Speaker-attribution and timestamp-quality metrics dropped** from §6 and from the results table. | The task asks which transcriber hears this speech correctly; it never asks for diarisation. Scoring a capability the employer did not request spent effort on the wrong question. The report states plainly that diarisation and timestamp quality were **out of scope and therefore not scored** — which is honest, and better than a half-built forced-alignment pipeline. No engine had been ranked when this was decided. |
+| 2026-08-23T20:45Z, **before any engine output existed on the new corpus** | **Corpus changed** from Радио-Т 1027 to a conference talk that ships with a publisher-made human transcript: "Оператор в Kubernetes для управления кластерами БД", Владислав Клименко (Altinity), HighLoad Channel, 2953 s, transcript at habr.com/ru/articles/523378. | This dissolves the blocker rather than bounding it. A publisher transcript is **independent of every engine we rank**, so the circularity that stopped the previous corpus disappears at the root, no draft-assisted reference, no six-segment residual-bias slice, no human annotation. It was produced by people who know the domain and spell ClickHouse, Kubernetes, StatefulSet and ConfigMap correctly, which is precisely the axis being measured. A reader can fetch the same transcript and re-derive our numbers without trusting us. **The cost, stated rather than hidden:** the transcript is edited for readability, fillers and false starts removed, grammar smoothed, so raw WER is inflated identically for every engine. Ranking stays valid; absolute WER does not. Term-level metrics, which are primary, are barely affected because product names survive editing. The editing distance is measured on a sample of segments and published as a property of the reference, the same move used for residual bias. No metric, guardrail, tie-break or glossary changed. |
+| 2026-08-23T20:32Z, **before either engine was run** | **Slate extended by two open models** chosen to avoid the two blockers that stopped Canary and GigaAM: Seamless-M4T-v2-large (Meta, open weights, ungated) and a Russian wav2vec2/XLS-R fine-tune. Same frozen hour, same 120 segments, same identical-input rule, no trimming, nothing paid. | The task requires ≥5 engines and three is non-compliant on a hard, countable requirement. Canary and GigaAM were blocked for reasons specific to them, a NeMo version and a gated pyannote VAD, not reasons that block open ASR generally, so the shortfall was fixable without touching the design. **Nothing about the frozen design changed**: no metric, guardrail, tie-break, corpus, glossary or segmentation was altered, and no ranking is produced either way because no independent reference exists. Two engines simply arrived later than the first three, and the report says so. Different architectures were preferred over a third Whisper size, which would have added least. |
+| 2026-08-23, commit `c7e9e45` | **Speaker-attribution and timestamp-quality metrics dropped** from §6 and from the results table. | The task asks which transcriber hears this speech correctly; it never asks for diarisation. Scoring a capability the employer did not request spent effort on the wrong question. The report states plainly that diarisation and timestamp quality were **out of scope and therefore not scored**, which is honest, and better than a half-built forced-alignment pipeline. No engine had been ranked when this was decided. |
 | 2026-08-23, commit `c7e9e45` | **Reference protocol changed** to draft-assisted correction (two excluded engines) plus a from-scratch residual-bias slice, replacing "two independent annotators over the full corpus". | The agent cannot hear; the human declined to annotate. Recorded here because the earlier protocol change was made without an amendment, which is exactly the drift a pre-registration exists to prevent. Detail in `docs/reference-protocol.md`. |
 | 2026-08-23, commit `c7e9e45` | **Slate restricted to open models on the employer's own Modal GPUs.** No paid signups, no cloud free tiers. | The human's ruling. Two consequences worth stating rather than burying: the audio never leaves our perimeter, which removes the licence-exposure question entirely, and the employer can re-run the whole benchmark without buying anything. Engines that could not be reached are named with the specific blocker. |
 | 2026-08-23, commit `c7e9e45` | **Ranking eligibility now requires a measured failure rate ≤ 10 %** of the corpus, reported per engine. | Previously an engine's failures silently removed those segments from every other engine, making the corpus easier for the survivors. Reliability is now its own column. |
 | after the corpus ruling, 2026-08-23T19:10Z | Self-hosted engines run **full-precision** Whisper large-v3 and Parakeet-TDT-0.6b-v3 on Modal GPU (free credits), replacing the quantised whisper.cpp `q5_0` / ONNX int8 builds adopted from meetily. | The quantisation was a concession to 8 GB arm64, not a design choice. Removing it strengthens the comparison: a local model that loses can no longer be excused as a casualty of quantisation. No metric, guardrail, tie-break or corpus rule changed. |
-| the first Task 2 commit after `9fd6ff8` (`git log --oneline 9fd6ff8..HEAD -- task2-stt-benchmark`) | Replaced hand-written freeze timestamps in this file, `docs/reference-policy.md`, `glossary.json` and `docs/corpus-candidates.md` with the commit that contains them. | The typed times (19:05–19:50Z) were assumed rather than read from a clock, and were later than the work they dated — the freeze commit is 19:00:14Z. No design content changed; only the dating, and only in the direction of being checkable. |
+| the first Task 2 commit after `9fd6ff8` (`git log --oneline 9fd6ff8..HEAD -- task2-stt-benchmark`) | Replaced hand-written freeze timestamps in this file, `docs/reference-policy.md`, `glossary.json` and `docs/corpus-candidates.md` with the commit that contains them. | The typed times (19:05–19:50Z) were assumed rather than read from a clock, and were later than the work they dated, the freeze commit is 19:00:14Z. No design content changed; only the dating, and only in the direction of being checkable. |
