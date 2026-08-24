@@ -7,7 +7,7 @@ No placeholders remain, and every figure below traces to a committed artifact:
 the Task 2 numbers to the published report, the audit numbers to
 `ALERT-AUDIT.md`. The audit sentence is written to describe the *class* of
 finding rather than freeze a tally, because the window keeps growing and a
-count written here would go stale between drafting and submitting — which is
+count written here would go stale between drafting and submitting, which is
 exactly what happened to the sentence it replaced.
 
 ---
@@ -28,9 +28,9 @@ normal operations. We regenerated the artifact from a single frozen build rather
 than shipping a file we had already disproven.
 
 **The submitted log still does not pass the audit, and we would rather tell you
-than have you find it.** It is 30 lines and two do not reconcile — both the same
-class: a `package_exhaustion` alert re-firing when the materiality band had not
-changed, so a line carrying no new information. Both were written about nine
+than have you find it.** It is 30 lines and two do not reconcile. Both are the
+same class: a `package_exhaustion` alert re-firing when the materiality band had
+not changed, so a line carrying no new information. Both were written about nine
 hours before the fix for that landed, and replaying the whole window under the
 current code produces none of them; the log is append-only, so the lines stay and
 the audit keeps naming them. That is the behaviour we want from a gate.
@@ -38,7 +38,7 @@ the audit keeps naming them. That is the behaviour we want from a gate.
 What the task actually forbids is at zero and has stayed there: the top-up-caused
 line the first audit found is gone, and no alert is caused solely by a top-up or
 by a reverted blip. `uv run tools/alert_audit_doc.py --check` prints the current
-verdict — if the window grows before you read this, the count may differ and the
+verdict. If the window grows before you read this the count may differ, and the
 class will not.
 
 Task 2 has the same shape. We recommended Whisper large-v3 with a glossary

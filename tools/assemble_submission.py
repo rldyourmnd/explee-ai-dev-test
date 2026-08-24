@@ -125,13 +125,13 @@ def fetch_status(url: str) -> str:
 def write_links() -> None:
     body = f"""# Links
 
-Both open without login — verified by fetching them, unauthenticated, during
+Both open without login. Verified by fetching them, unauthenticated, during
 `tools/assemble_submission.py --check`, which fails if either is not `200`.
 
 | What | URL |
 |---|---|
-| Task 1 — spend dashboard | {DASHBOARD_URL} |
-| Task 2 — STT comparison report | {REPORT_URL} |
+| Task 1, spend dashboard | {DASHBOARD_URL} |
+| Task 2, STT comparison report | {REPORT_URL} |
 
 Here so neither URL is retyped from memory into the form.
 """
