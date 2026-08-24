@@ -5,16 +5,28 @@
 # experimental. Folding it into the pull_request-triggered suite would produce a
 # job that fails for reasons unrelated to the change under review.
 #
-# STILL FAILING AS OF 2026-08-24, CAUSE NOT CONFIRMED. Runs end in
+# FAILING FOR AN EXTERNAL REASON, CAUSE CONFIRMED 2026-08-24. Runs end in
 # startup_failure: zero jobs, no logs, and the run named by this file path
 # rather than by `name:`. Nothing in this file was ever wrong.
 #
-# Leading theory was that NDDev-it-com/ci-workflows was ARCHIVED, since GitHub
-# will not serve a reusable workflow from an archived repository. The owner
-# un-archived it (verified archived=false) and BOTH WORKFLOWS STILL FAIL the
-# same way: zero jobs, no logs, run named by path. So the archive was either not
-# the cause or not the only one. Possible that workflow resolution is cached and
-# needs longer than one push to propagate; that is untested.
+# Cause: the callee NDDev-it-com/ci-workflows has ACTIONS DISABLED.
+#   gh api repos/NDDev-it-com/ci-workflows/actions/permissions -> {"enabled": false}
+# Archiving a repository disables its Actions, and UN-ARCHIVING DOES NOT
+# RE-ENABLE THEM. The owner un-archived it (archived=false, verified) and both
+# workflows failed again identically, because the second condition was still in
+# force. A repository with Actions disabled cannot serve a reusable workflow.
+# Two distinct causes wearing one signature, and the second was invisible until
+# the first was cleared.
+#
+# Fix is one setting on the callee, and it is the owner's to make: enabling
+# Actions on another org's repository is not a unilateral change. Nothing in
+# this file is wrong. Ruled out at the same time: the pin still declares
+# `on: workflow_call`, all five called files resolve at it, and it remains
+# reachable from the callee default branch (behind 97, ahead 0).
+#
+# To retry once Actions are back: `gh workflow run security.yml` (both files
+# keep `workflow_dispatch` for exactly this). GitHub refuses to retry a startup
+# failure, so without dispatch you would need a synthetic commit.
 #
 # Kept because the hunt was expensive and the signature is worth recognising:
 # instant failure with NO LOGS means the platform refused to start the
