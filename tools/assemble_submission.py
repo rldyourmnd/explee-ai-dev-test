@@ -97,10 +97,36 @@ def leak_patterns() -> list[str]:
             and not ln.startswith("#")]
 
 
+def fetch_status(url: str) -> str:
+    """Actually fetch a URL and return its status, or the failure reason.
+
+    This exists because `LINKS.md` claimed "fetched and checked by
+    tools/assemble_submission.py" while this file made ZERO network calls. The
+    facts were true - both URLs were live - but the provenance was not, and an
+    artifact handed to an employer asserting evidence nobody gathered is the
+    exact failure this repository argues against. The claim is now made true by
+    performing the check rather than made safe by softening the sentence.
+
+    No login is sent and none is configured, so a 200 here also demonstrates the
+    "opens without login" half of the claim.
+    """
+    import urllib.request
+    import urllib.error
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=20) as resp:   # noqa: S310
+            return str(resp.status)
+    except urllib.error.HTTPError as exc:
+        return str(exc.code)
+    except Exception as exc:                       # DNS, TLS, timeout, offline
+        return f"unreachable ({type(exc).__name__})"
+
+
 def write_links() -> None:
     body = f"""# Links
 
-Both open without login. Fetched and checked by `tools/assemble_submission.py`.
+Both open without login — verified by fetching them, unauthenticated, during
+`tools/assemble_submission.py --check`, which fails if either is not `200`.
 
 | What | URL |
 |---|---|
@@ -187,6 +213,16 @@ def check() -> tuple[list[str], list[str]]:
             if ts and not (ts.endswith("Z") or re.search(r"[+-]\d\d:?\d\d$", ts)):
                 problems.append(f"task1-alerts.jsonl:{lineno}: ts {ts!r} has no offset")
         print(f"  task1-alerts.jsonl: {n} lines, all parse, all timezone-aware")
+
+    # The two live URLs are deliverables in their own right, so verify them here
+    # rather than trusting that they were up when someone last looked.
+    for label, url in (("dashboard", DASHBOARD_URL), ("report", REPORT_URL)):
+        status = fetch_status(url)
+        if status == "200":
+            print(f"  {label}: {url} -> HTTP 200, no credentials sent")
+        else:
+            problems.append(f"{label} {url} returned {status}, expected 200 — "
+                            f"LINKS.md ships a claim that it opens without login")
 
     pats = leak_patterns()
     if not pats:

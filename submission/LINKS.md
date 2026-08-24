@@ -1,6 +1,7 @@
 # Links
 
-Both open without login. Fetched and checked by `tools/assemble_submission.py`.
+Both open without login — verified by fetching them, unauthenticated, during
+`tools/assemble_submission.py --check`, which fails if either is not `200`.
 
 | What | URL |
 |---|---|
