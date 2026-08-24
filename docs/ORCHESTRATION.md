@@ -30,7 +30,9 @@ single-file `--poll` deploy, which waits for a snapshot boundary.
 The pyright exclusion debt is **closed** — row X.5 is GREEN, cleared rather than
 hidden: no Task 2 path remains in `pyrightconfig.json` and pyright reports 0 with
 nothing task-related excluded. The history rewrite has **run**; the repository is
-public at 193 commits, and pre-rewrite SHAs resolve through
+public with its full history preserved (`git rev-list --count HEAD` for the
+current number — it grows, and writing it here made it wrong within the hour),
+and pre-rewrite SHAs resolve through
 [COMMIT-MAP.md](COMMIT-MAP.md). Both were still listed here as open long after
 they were done, which is the contradiction this board exists to catch and had
 started producing.

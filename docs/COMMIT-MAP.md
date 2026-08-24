@@ -12,7 +12,13 @@ falsification this repository exists to argue against. The mapping is published
 here instead, so every old reference stays navigable while every record stays
 as it was written.
 
-193 commits, in history order. 0 removed entirely.
+193 rewritten commits, in history order. 0 removed entirely.
+
+This is the size of the **mapping**, not of the repository. It is fixed: the map
+covers exactly the commits that existed when the rewrite ran, and commits made
+after it have always had their published SHA and need no entry. A reader
+comparing this to `git rev-list --count HEAD` should expect a larger number
+there.
 
 | pre-rewrite | published | subject |
 |---|---|---|
