@@ -135,6 +135,23 @@ def check_no_future_timestamps(problems: list[str]) -> None:
                          # widening: "projects"/"projection"/"projected" all
                          # assert a forecast, never a past event.
                          r"project(s|ed|ion)?|reaches zero|runs out)\b", re.I)
+    # A PAST assertion beats a forward word. The exemption above is line-level:
+    # any forward word anywhere on a line exempted EVERY timestamp on it, so
+    # "We projected the dashboard and verified it at <future>" sailed through.
+    # That hole predates the projection vocabulary - "will", "until" and
+    # "scheduled" all had it - so widening the list did not create it, but it
+    # did widen it. Tested rather than reasoned about: both masked cases escaped.
+    #
+    # These verbs claim the timestamped thing ALREADY HAPPENED. When one appears
+    # next to a future stamp the line is self-contradictory whatever else it
+    # says, so the forward exemption does not apply.
+    # Up to three words may sit between the verb and its preposition:
+    # "verified IT at", "confirmed THE PAGE on". Bounded rather than open, so the
+    # verb and the stamp stay associated instead of matching across a sentence.
+    claimed_done = re.compile(r"\b(verified|confirmed|completed|finished|"
+                              r"recorded|measured|observed|ran|happened|"
+                              r"landed|shipped|passed|emitted)"
+                              r"(\s+\w+){0,3}\s+(at|on)\b", re.I)
     for rel in CLAIM_DOCS:
         path = os.path.join(ROOT, rel)
         if not os.path.exists(path):
@@ -160,7 +177,8 @@ def check_no_future_timestamps(problems: list[str]) -> None:
                                         tzinfo=dt.timezone.utc)
                 except ValueError:
                     continue
-                if stamp > horizon and not forward.search(line):
+                if stamp > horizon and not (forward.search(line)
+                                           and not claimed_done.search(line)):
                     _fail(problems, f"{rel}:{lineno}: timestamp {date}T{clock}Z is in the "
                                     f"future (now {now:%Y-%m-%dT%H:%M:%SZ})")
             if forward.search(line):
