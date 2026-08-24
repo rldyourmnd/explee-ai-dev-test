@@ -148,7 +148,7 @@ permits.
 
 | # | Artifact | State |
 |---|---|---|
-| 1 | `task1-alerts.jsonl` | **12 lines, all parse, all timezone-aware** — pre-flight verified |
+| 1 | `task1-alerts.jsonl` | **17 lines, all parse, all timezone-aware** — pre-flight verified |
 | 2 | `task1-monitor.py` | placed; 0 `raw_sampler` imports, so it ships alone as *"the code (a file)"* |
 | 3 | `task1-TRACE.md` | **absent** — session live |
 | 4 | `task2-TRACE.md` | **absent** — session live |
@@ -254,7 +254,11 @@ passed it:
 | Uncertainty guard | does the projection survive the burn recomputed one MAD slower? | **passes** — a +4 step barely moves the slope |
 | Counterfactual | does it survive *removing a discrete event*? | **fails** — the step moves where the series **segments** |
 
-**Why (b) and not the two cheaper options.** The packaged 13-line artifact is
+**Why (b) and not the two cheaper options.** *(Argument as made against the
+13-line cut; the shipped artifact is now 17 lines. The numbers are left as
+written because the reasoning is what is being recorded, and re-numbering an
+argument without re-deriving it is how a document starts asserting something
+nobody checked.)* The packaged 13-line artifact is
 clean of this class *only because it stops at 13 lines*. Shipping it would mean
 choosing the artifact that happens to exclude a known defect — the one dishonest
 move in a set built on publishing a failing audit, keeping a snapshot that fell
@@ -374,7 +378,7 @@ dashboard link (opens without login), and TRACE.md."*
 | # | Deliverable (task wording) | Path / URL | Owner | Status | Verification | Hash / SHA |
 |---|---|---|---|---|---|---|
 | 1.1 | **"the code (a file)"** — singular | `task1-spend-observability/monitor.py` | `surface:2` | **DONE** — verified 19:50Z by copying `monitor.py` alone into an empty directory and running it: no `raw_sampler` import, `--poll` fetched all 15 providers from the live API, wrote its own raw log and captured **90 readings in 45 s**. One file is the whole system; the deployed instance still replays the untouched raw log | `cp monitor.py /tmp/onefile/ && uv run monitor.py --poll --poll-interval 10 --no-serve` in a directory containing nothing else | at `b4f51df` |
-| 1.2 | **"your alerts.jsonl"** | `task1-spend-observability/alerts.jsonl` | `surface:2` | **DONE, with a deliberate temporary divergence.** Repo copy 12 lines, audit gate exits 0 (*audited 12, unreconciled 0*). The **served endpoint now has 13** — a first `critical` fired at 22:37:24Z (`openrouter` runway 24.0 h, burn 5.10 → 8.50 USD/h, escalating through the materiality bands). Re-sync is deliberately deferred: `POLICY-SENSITIVITY` is mid-regeneration against the local raw copy and overwriting it would corrupt that run. due to reconcile at ~23:16Z, when the audit regenerates | `uv run tools/alert_audit_doc.py; echo $?` → `0`; `curl /alerts.jsonl \| grep -c .` | at `5d07243` |
+| 1.2 | **"your alerts.jsonl"** | `task1-spend-observability/alerts.jsonl` | `surface:2` | **DONE, with a divergence that is structural rather than temporary.** The shipped copy is **17 lines**, cut at `2026-08-23T23:15:00.509Z`. The served log only ever grows, so any cut of it is behind the live record by construction — this is not a defect to be chased to zero but a snapshot boundary, and it is re-cut once at final assembly rather than repeatedly. The audit gate currently exits non-zero on documented, ruled-on findings that are published in `ALERT-AUDIT.md` beside the artifact rather than resolved by omission. **No count is frozen in this row**: an earlier version of it recorded "12 lines, unreconciled 0", which was true when written and false within the hour | `uv run tools/alert_audit_doc.py; echo $?`; `wc -l < task1-spend-observability/alerts.jsonl` | pre-rewrite `5d07243`, see [COMMIT-MAP.md](COMMIT-MAP.md) |
 | 1.2a | Task text: *"Required keys: ts … and text. Recommended: provider"* | same | `surface:2` | **DONE** — all three present on all 11 rows | included above | — |
 | 1.2b | 5 of 11 lines are `package_exhaustion` resends — must read as justified refiring, not spam | same | `surface:2` | **open** — line-by-line audit against raw records | each line traced to raw records around its `ts` | — |
 | 1.3 | **"a publicly deployed dashboard link (opens without login)"** | `https://spend.nddev.it.com/` | `surface:2` | **DONE** — HTTP 200, 53461 bytes, valid Let's Encrypt cert for that exact hostname, `/healthz` 15/15 fresh; verified externally, no `Host` override, no `--resolve`, no auth | `curl` from outside the host + `openssl s_client` | — |

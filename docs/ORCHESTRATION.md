@@ -18,7 +18,7 @@ disagreement between them and this block resolves in favour of this block, and
 |---|---|
 | Collector | `active`, 10096 records, **0 malformed**, max consecutive gap **29.670 s**, span **5.25 h** |
 | Six-hour mark | `22:14Z`, **45 min out**. Snapshot 01 closes the minimum; **collection continues** — the submission ships the last snapshot, not this one |
-| Task 1 | dashboard live at `spend.nddev.it.com` (200, valid cert, no login); `alerts.jsonl` 13 lines verified **on the served endpoint** |
+| Task 1 | dashboard live at `spend.nddev.it.com` (200, valid cert, no login); shipped `alerts.jsonl` is **17 lines**, cut at `2026-08-23T23:15:00.509Z`; the served log only grows and is ahead of it. For the audit's current verdict run `uv run tools/alert_audit_doc.py` — the count is deliberately not frozen here, because a number copied into a table is stale the moment the replay changes |
 | Task 2 | **published** at `stt.nddev.it.com` — 5 engines + 2 tuned tracks, 99 hashed segments (2952.821 s), publisher human transcript, recommends Whisper large-v3 + glossary prompt |
 | Task 3 | **complete** — artifact, its 2–3 lines, and a real tool-exported trace |
 | Gates | pytest 293 · ruff 0.15.17 clean · pyright **0** · consistency ok · CI green |
