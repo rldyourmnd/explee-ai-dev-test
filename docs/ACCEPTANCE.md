@@ -23,9 +23,28 @@ the same reason. A gate that cannot reach its passing state reads as rigour whil
 proving nothing, and both directions must be tested — against the leak *and*
 against a clean file that merely mentions the pattern.
 
-**Baseline: `2de1442`**, re-derived against the measured tree at 21:30Z.
-This commit was `d020288` before the history rewrite of 2026-08-24; the tree it
-names is unchanged. See [COMMIT-MAP.md](COMMIT-MAP.md) for the full mapping.
+**Baseline: `d58fbe8`** — the documentation-pass SHA. Every gate below was run at
+this commit on a clean tree, and the output is transcribed, not summarised:
+
+| Command | Exit | Output |
+|---|---|---|
+| `uv run --with 'pytest==8.3.4' pytest tests/ -q` | 0 | `321 passed` |
+| `uv run --with 'ruff==0.15.17' ruff check .` | 0 | `All checks passed!` |
+| `uv run --with pyright==1.1.411 … pyright` | 0 | `0 errors, 0 warnings, 0 informations` |
+| `uv run tools/repo_checks.py consistency` | 0 | — |
+| `uv run tools/repo_checks.py acceptance` | 0 | — |
+| `uv run tools/assemble_submission.py --check` | 0 | `pre-flight: ok (0 outstanding)` |
+| `uv run tools/alert_audit_doc.py --check` | **1** | `audited 17, unreconciled 1` |
+
+**The audit's non-zero exit is reported, not hidden.** The one unreconciled line
+is the `scrapfly` re-fire repeating the same band: cause closed at source, but
+the emitted line cannot be repaired because the log only grows. The gate keeps
+naming a defect the current code would not produce, which is the correct
+behaviour for an append-only record and the reason it is a gate and not a
+document.
+
+The earlier baseline was `2de1442`, which was `d020288` before the history
+rewrite of 2026-08-24. See [COMMIT-MAP.md](COMMIT-MAP.md) for the full mapping.
 which `main` had long passed — a matrix that lags the tree is the same defect as
 a stale board, and this is the artifact a grader is handed as proof.
 
