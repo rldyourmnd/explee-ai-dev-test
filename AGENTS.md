@@ -352,6 +352,50 @@ Cleaning output that a generator will regenerate is not a fix; it is a delay. Wh
 a defect appears in generated content, the fix belongs in the generator, and the
 existing artifacts are a separate cleanup.
 
+## No logs means the platform refused to start, so stop reading the file
+
+`security.yml` and `scorecard.yml` failed for hours. The signature: instant
+failure, **zero jobs created, no logs at all**, and the run named by its file
+path instead of its `name:` field. Nothing in either file was wrong. The cause
+was that `NDDev-it-com/ci-workflows`, whose reusable workflows they call, had
+been **archived**, and GitHub will not serve a reusable workflow from an
+archived repository.
+
+**The cause of a CI failure can sit entirely outside your repository**, and this
+signature says so. A job that runs and fails writes logs. A run with no logs
+never started, which means the platform rejected it before executing anything,
+which means the answer is in the platform's view of the world and not in the
+YAML. Time spent re-reading the file is time spent looking where the answer
+cannot be.
+
+Three hypotheses were tested and all three were wrong, which is the useful part:
+
+1. **Permissions delegation**: that `permissions: {}` at workflow level left a
+   job-level `id-token: write` nothing to narrow from. Disproved by a
+   counterexample already in this repository, `dependency-review.yml`, which
+   does empty-then-elevate against the same pin and parses fine.
+2. **Privileged scopes being rejected before job creation.** Disproved without
+   spending a push, from run history: `scorecard.yml` requests `id-token: write`
+   and **succeeded** at 2026-08-23T23:59:15Z. A theory that forbids a run which
+   demonstrably happened is finished.
+3. **Unresolvable pins.** The pins examined were `actions/checkout` and
+   `astral-sh/setup-uv`, from other repositories entirely, so they could not
+   explain a failure in calls to a third.
+
+What settled it was **a re-run, not a file read**: the same run id, same commit,
+same event went `success` to `startup_failure` with zero repository changes
+between attempts. Holding every input fixed and watching the output flip proves
+the variable is external. No amount of inspecting the file could have found
+that, because the file was never the variable.
+
+The counterexample lesson also has a trap in it, and it caught me: I first used
+`dependency-review.yml` to argue cross-owner calls were fine. That file has
+**never run** - it is `pull_request`-triggered and there had been no PRs - so its
+registered `name:` proved GitHub could *parse* it, not that GitHub could
+*execute* the call. Parsing and executing are different things, and only the
+second touches the archived repository. **A component that has never executed
+cannot testify about run-time behaviour.**
+
 ## A check can pass while testing something next to the break
 
 The families above are about tools reporting success while doing something else.
