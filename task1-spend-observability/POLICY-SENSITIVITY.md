@@ -106,10 +106,22 @@ in `POLICY`, and the first table states what it will cost.
   restatements at any setting, because the materiality bands absorb drift. The
   most aggressive setting tested, 48 h critical and 168 h warning, produces 17
   lines against the shipped 12.
-- **The re-fire floor still barely matters.** 0 s and the shipped 600 s give
-  identical counts, because band changes here are genuine deteriorations minutes
-  apart rather than a value oscillating across an edge. The floor is insurance
-  against a case this window does not contain, now after twice the observation.
+- **The re-fire floor is no longer untested.** 0 s and the shipped 600 s give
+  identical counts over the window measured above, because every band change in
+  it is a genuine deterioration rather than a value oscillating across an edge.
+  An earlier version of this bullet concluded from that the floor was insurance
+  against a case the window did not contain. It contains it now: `meta_ads`
+  crossed the `burn_anomaly` `lt50`/`lt100` edge at 2026-08-24T07:32:06Z, fell
+  back to `lt50`, and crossed it again at 07:50:18Z at a **lower** deviation,
+  50.7 MAD against 66.7. The floor correctly did not suppress the second line,
+  because the gap was 1,080 s against a 600 s floor and a condition that
+  genuinely improves and then worsens again should speak. Note where that
+  evidence lives: those crossings are **not** in the `alerts.jsonl` shipped
+  beside this document, which is cut at 17 lines ending
+  `2026-08-23T23:15:00.509Z`. They are in the live log at
+  <https://spend.nddev.it.com/alerts.jsonl>, which only grows. The gap is stated
+  rather than glossed, because a threshold defended with evidence the reader
+  cannot open is an assertion wearing the clothes of a proof.
 - **Anomaly `k` is the sharpest dial, and it has moved.** `k=3` fires seven
   `burn_anomaly` lines, the shipped `k=6` fires three, `k=12` fires none. The
   three at `k=6` are the `resend` acceleration and two `meta_ads` lines. All
