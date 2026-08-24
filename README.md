@@ -7,9 +7,8 @@ re-measurement was possible hours later without losing a single record.
 
 Three deliverables, one repository, one module per task. Traces are exported by
 `tools/export_trace.py` from real sessions — never hand-written, never truncated.
-**Task 3's trace is shipped; Task 1's and Task 2's are not yet exported**, because
-those sessions are still running and an early export would stop the trace before
-the work does.
+**All three traces are exported and shipped.** Each was exported at the genuine
+end of its session, because an early export stops the trace before the work does.
 
 **Start here if you are grading this:**
 [`task1-spend-observability/ALERT-AUDIT.md`](task1-spend-observability/ALERT-AUDIT.md)

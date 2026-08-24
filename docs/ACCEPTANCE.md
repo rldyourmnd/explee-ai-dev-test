@@ -23,7 +23,9 @@ the same reason. A gate that cannot reach its passing state reads as rigour whil
 proving nothing, and both directions must be tested — against the leak *and*
 against a clean file that merely mentions the pattern.
 
-**Baseline: `d020288`**, re-derived against the measured tree at 21:30Z.
+**Baseline: `2de1442`**, re-derived against the measured tree at 21:30Z.
+This commit was `d020288` before the history rewrite of 2026-08-24; the tree it
+names is unchanged. See [COMMIT-MAP.md](COMMIT-MAP.md) for the full mapping.
 which `main` had long passed — a matrix that lags the tree is the same defect as
 a stale board, and this is the artifact a grader is handed as proof.
 
@@ -34,7 +36,7 @@ a stale board, and this is the artifact a grader is handed as proof.
 
 Three results carry more weight than the ranking they sit inside, because each
 is evidence that the **metric design was necessary rather than decorative**.
-Verified on the live page at 21:30Z, `d020288`.
+Verified on the live page at 21:30Z, `2de1442` (pre-rewrite `d020288`).
 
 - **The distractor test caught a hallucination the WER would have rewarded.**
   Whisper large-v3-turbo invented *Kubernetics* where the reference says

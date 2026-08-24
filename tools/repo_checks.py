@@ -37,11 +37,14 @@ CLAIM_DOCS = ["README.md", "AGENTS.md", "docs/ACCEPTANCE.md", "docs/ORCHESTRATIO
               "docs/RUNLOG.md", "docs/HANDOFF.md"]
 
 TS_RE = re.compile(r"\b(20\d\d-\d\d-\d\d)T(\d\d:\d\d(?::\d\d(?:\.\d+)?)?)Z")
+# Any full date on a line, used as the governing date for the BARE stamps that
+# follow it in the same document. A bare time is only judgeable against a date
+# the document actually states; see check body for why guessing "today" failed.
+DATE_RE = re.compile(r"\b20\d\d-\d\d-\d\d\b")
 # Bare time-of-day stamps like "21:46Z" are the dominant format in these
 # documents and were completely unchecked by the dated pattern above, which
 # requires a full ISO date. A 21:46Z stamp written at 21:42Z sailed through
-# the gate that exists to catch exactly that. Matched separately and dated to
-# today, since that is what a bare stamp means in a same-day log.
+# the gate that exists to catch exactly that.
 BARE_TS_RE = re.compile(r"(?<![\d:-])([0-2]\d):([0-5]\d)Z\b")
 # The snapshot series runs every six hours from the six-hour mark.
 SCHEDULED_INSTANTS = {"22:14", "04:14", "10:14", "16:14"}
@@ -127,7 +130,18 @@ def check_no_future_timestamps(problems: list[str]) -> None:
         path = os.path.join(ROOT, rel)
         if not os.path.exists(path):
             continue
+        governing_date: str | None = None
         for lineno, line in enumerate(open(path, encoding="utf-8"), 1):
+            # Only a date in a HEADING governs the bare stamps beneath it. A date
+            # inside a sentence is a fact being mentioned, not a declaration of
+            # which day the section describes. Accepting prose dates re-dated a
+            # whole document the moment one was added mid-file: adding the words
+            # "the history rewrite of 2026-08-24" to a paragraph immediately made
+            # every bare stamp below it fail as "in the future".
+            if line.lstrip().startswith("#"):
+                seen_date = DATE_RE.search(line)
+                if seen_date:
+                    governing_date = seen_date.group(0)
             for date, clock in TS_RE.findall(line):
                 parts = [int(x) for x in clock.split(".")[0].split(":")]
                 while len(parts) < 3:
@@ -142,19 +156,37 @@ def check_no_future_timestamps(problems: list[str]) -> None:
                                     f"future (now {now:%Y-%m-%dT%H:%M:%SZ})")
             if forward.search(line):
                 continue
-            for hh, mm in BARE_TS_RE.findall(line):
+            # Scan for BARE times only on what is left after the fully-dated ones
+            # are removed. `2026-08-23T18:45Z` is dated and was already judged
+            # correctly above, but BARE_TS_RE still matched the `18:45Z` inside
+            # it and re-judged it against TODAY - so every minute-precision
+            # timestamp from a previous day turned into a "future" failure the
+            # moment the clock passed midnight. 144 of them fired at once on the
+            # first rollover, on data that was entirely correct. A stamp with
+            # seconds escaped only because the lookbehind happened to block it,
+            # which is luck, not a rule.
+            for hh, mm in BARE_TS_RE.findall(TS_RE.sub(" ", line)):
                 # The declared six-hourly snapshot cadence is future BY DESIGN.
                 # Widening the forward-looking vocabulary until these stopped
                 # matching would have blunted the check into uselessness; naming
                 # the four scheduled instants keeps it sharp.
                 if f"{hh}:{mm}" in SCHEDULED_INSTANTS:
                     continue
+                # A bare time carries no date, so it can only be judged against
+                # the date the document itself supplies. Without one the check is
+                # UNDECIDABLE - `21:30Z` written yesterday about yesterday is
+                # indistinguishable from `21:30Z` invented today - and the old
+                # code resolved the ambiguity by assuming today. That held while
+                # the run was one day long and broke at the first midnight: 141
+                # correct lines failed at once. Guessing is not a weaker check,
+                # it is a check that reports the calendar rather than the data.
+                if governing_date != now.strftime("%Y-%m-%d"):
+                    continue
                 stamp = now.replace(hour=int(hh), minute=int(mm), second=0, microsecond=0)
-                # Only same-day stamps are meaningful; a bare time far in the past
-                # is yesterday's log, not a claim about the future.
                 if stamp > horizon:
                     _fail(problems, f"{rel}:{lineno}: bare timestamp {hh}:{mm}Z is in the "
-                                    f"future (now {now:%H:%M}Z)")
+                                    f"future (now {now:%H:%M}Z, per the {governing_date} "
+                                    f"heading above it)")
 
 
 def check_referenced_paths_exist(problems: list[str]) -> None:
