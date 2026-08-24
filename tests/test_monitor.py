@@ -247,7 +247,7 @@ def test_a_clipped_body_fails_closed_rather_than_yielding_a_wrong_value():
     """The safety property behind the 8000-character cap.
 
     Nothing in the observed window came within 1,578 characters of the bound, so
-    this has not happened — but "it has not happened yet" is not a safety
+    this has not happened, but "it has not happened yet" is not a safety
     argument. Clipping valid JSON almost always produces invalid JSON, which the
     parser rejects, so a truncated body becomes `unparseable` rather than a
     plausible-looking wrong number. That is the difference between a visible gap
@@ -797,7 +797,7 @@ def test_a_projection_must_survive_its_own_estimates_uncertainty():
     """The real discriminator, with the numbers that motivated it.
 
     `resend` at 16:48Z projected exhaustion on a burn of 226.6 credits/h whose
-    MAD was 3.7 — the claim holds comfortably if the rate is a dispersion
+    MAD was 3.7, so the claim holds comfortably if the rate is a dispersion
     slower. `bounceban` at 18:44Z projected on 37.6/h with a MAD of 4.7 and only
     a 16.9 h margin, and the claim evaporates. Both cleared the flat
     2%-of-package threshold, so that threshold was not the thing telling them
@@ -1016,7 +1016,7 @@ def test_a_condition_flickering_across_its_threshold_speaks_once(tmp_path):
     A projection sitting close to its own threshold clears and returns every few
     minutes. Wiping the announced band on clear made every return look like a
     fresh incident, so the log carried a second line whose runway had gone from
-    180.4 h to 187.6 h — nothing a human would act on.
+    180.4 h to 187.6 h, which is nothing a human would act on.
     """
     store = m.Store(str(tmp_path / "monitor.sqlite"))
     alerts = tmp_path / "alerts.jsonl"
@@ -1140,7 +1140,7 @@ def test_an_anomaly_line_states_the_change_not_just_the_rate():
     """The headline number must be the one the reader thinks it is.
 
     The live line read "trailing-24h cost is climbing 12.50 USD/h faster than
-    usual" — but 12.50 was the recent *rate*; the change was +27.82/h. The
+    usual", but 12.50 was the recent *rate*; the change was +27.82/h. The
     sentence attached "faster than usual" to the wrong quantity and understated
     the move by more than half. An alert that misstates its own headline number
     is worse than no alert.
@@ -1308,7 +1308,7 @@ def test_a_flapping_provider_produces_one_line_per_episode_not_per_cycle(tmp_pat
     """Alternating up/down is the classic alert-storm generator.
 
     400 cycles is 200 minutes containing five distinct 20-minute outages. Five
-    lines is the honest answer — they are five separate incidents — and the
+    lines is the honest answer (they are five separate incidents) and the
     number that matters is that it is not 200.
     """
     def builder(_provider, i):
@@ -1445,7 +1445,7 @@ def test_since_scopes_derived_state_without_touching_the_raw_log(tmp_path):
 
     The submitted artifacts must be the product of one stable configuration
     rather than an accumulation across code versions. That is achieved by
-    replaying the raw log from a marker instant with frozen code — the collector
+    replaying the raw log from a marker instant with frozen code: the collector
     keeps running untouched throughout, because raw capture is independent of
     alert logic. Deriving from an append-only log rather than from memory is
     what buys this.
@@ -1740,7 +1740,7 @@ def test_a_recurrence_reads_as_pending_until_its_own_line_is_written(tmp_path):
     Full sequence: appears, fires, disappears, reappears, stays pending through
     the sustain period, fires again. Reading `last_fired` without comparing it
     to `active_since` showed the second episode as firing from the moment it
-    reappeared, while alerts.jsonl contained no line for it — the dashboard
+    reappeared, while alerts.jsonl contained no line for it, while the dashboard
     claiming an incident had been raised that nobody had been told about.
     """
     store = m.Store(str(tmp_path / "monitor.sqlite"))
@@ -1754,7 +1754,7 @@ def test_a_recurrence_reads_as_pending_until_its_own_line_is_written(tmp_path):
     def status_at(when):
         return m.condition_status(store, candidate, when)
 
-    # 1. appears — pending, sustain running
+    # 1. appears: pending, sustain running
     alerter.process([candidate], T0)
     assert status_at(T0)["status"] == "pending"
 
@@ -2146,7 +2146,7 @@ def test_state_as_of_an_instant_does_not_read_the_future(tmp_path):
 
     Live replay never exposed this: there the newest record and the evaluation
     instant advance together, so nothing later exists yet. Against a fully
-    populated database, `--as-of` and `--audit` were both reading forward — the
+    populated database, `--as-of` and `--audit` were both reading forward, and the
     audit re-derived openrouter at 18:03:32Z as 236.03 when the raw reading at
     that instant was 243.99.
     """

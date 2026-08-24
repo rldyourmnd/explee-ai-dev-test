@@ -338,13 +338,13 @@ the captured data at all, and across 66 exact cycles:
 
 | Code | Providers hit in the *same* cycle | Which providers | Run length |
 |---|---|---|---|
-| 429 | **always exactly 1**, never 2 | tremendous ×16, findymail ×12 | 1–2 cycles |
-| 500 | 1–3 | meta_ads, bounceban, findymail, zerobounce | **11–16 cycles** |
+| 429 | **always exactly 1**, never 2 | tremendous ×16, findymail ×12 | 1-2 cycles |
+| 500 | 1-3 | meta_ads, bounceban, findymail, zerobounce | **11-16 cycles** |
 | 503 | 1 | vastai | 6 cycles |
-| 504 | 1–2 | 10 different providers | 1–2 cycles, ~3.1 s latency |
+| 504 | 1-2 | 10 different providers | 1-2 cycles, ~3.1 s latency |
 
-Over the longer window the 5xx episodes run **10–22 consecutive polls
-(300–630 s)**: 15 of them across 10 of 15 providers in under three hours, every
+Over the longer window the 5xx episodes run **10-22 consecutive polls
+(300-630 s)**: 15 of them across 10 of 15 providers in under three hours, every
 one self-healing. The 66-cycle figures above are left as first measured, since
 they are what the design was drawn from.
 
@@ -381,16 +381,16 @@ outages.
 
 `findymail` took a +1994 credit top-up inside the window. A first/last
 difference reports it **burning −3623 credits/h**, that is, gaining credits.
-Theil–Sen reports −55 credits/h, the rate it was actually consuming at.
+Theil-Sen reports −55 credits/h, the rate it was actually consuming at.
 
 A median of *adjacent* differences is no better: `anthropic` is flat between
 batch charges, so half its adjacent deltas are zero and the median is
 meaningless.
 
-Theil–Sen alone is still not sufficient. It survives a jump only while fewer
+Theil-Sen alone is still not sufficient. It survives a jump only while fewer
 than half the pairwise slopes straddle it; with the jump at the exact midpoint
 of the window, 900 of 1770 pairs cross it and the median flips sign. So the
-series is **segmented** at genuine top-ups and Theil–Sen is fitted within the
+series is **segmented** at genuine top-ups and Theil-Sen is fitted within the
 latest segment. Both the limit and the fix are asserted in the test suite.
 
 ### A rise that is handed back is not a top-up
