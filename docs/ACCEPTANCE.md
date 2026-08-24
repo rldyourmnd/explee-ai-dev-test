@@ -166,7 +166,7 @@ Measured by fetching both URLs and comparing extracted token values, not by
 reading either build.
 
 
-## Submission package — assembled 22:55Z, 5 of 7 artifacts placed
+## Submission package
 
 Built by `tools/assemble_submission.py` rather than by hand, because the package
 is a placeholder for a longer window: swapping the six-hour cut for a 12- or
@@ -628,6 +628,17 @@ therefore invisible to the gate and visible to a reader.
 So the last edit before submission is: run the gates on the clean final tree,
 replace the `Baseline:` SHA, and re-transcribe the outputs beneath it. That also
 closes row X.1, which is the row asserting exactly this.
+
+**The baseline cannot name the commit that contains it, and pretending otherwise
+is the circularity to avoid.** Writing the SHA creates a new commit with a new
+SHA, so the baseline necessarily names the commit the gates were *run at*, which
+is the parent of the re-baseline commit. Say so in the line rather than leaving a
+reader to wonder why the two differ. The re-baseline commit changes this file
+only, so nothing it introduces can alter a gate result: that is what makes the
+one-commit lag honest rather than a gap.
+
+Then, and only then, run the sequence below. The re-baseline commit IS the final
+commit; there is no separate push after it.
 
 The sequence at submission:
 
