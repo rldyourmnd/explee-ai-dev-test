@@ -592,6 +592,32 @@ concluded in 49, 50 and 57 seconds, and the very next one took **ten minutes**
 from creation to conclusion with GitHub reporting Actions fully operational. So
 "it usually takes a minute" is not a basis for deciding a run has failed.
 
+### If the alerts artifact is re-cut, derive what that falsifies
+
+Re-cutting `alerts.jsonl` from the live record has twice stranded documents that
+quoted it. The first time we thought the coupling was two files, then five, then
+six; the sixth was found by the agent who owned it, after the other five were
+already fixed. Counting from memory failed every time, so do not keep a list.
+Derive it:
+
+```bash
+# Every maintained document asserting something about the alerts artifact.
+grep -rlnE 'alerts\.jsonl|unreconciled|package_exhaustion|audited [0-9]+' \
+  README.md AGENTS.md docs/*.md submission/*.md task1-spend-observability/*.md \
+  | grep -vE 'TRACE\.md|RUNLOG|ORCHESTRATION|COMMIT-MAP'
+
+# Of those, the claims a re-cut actually breaks: line counts and cut times.
+grep -rnE '[0-9]+ lines|cut at|unreconciled [0-9]|audited [0-9]+' <the files above>
+```
+
+`TRACE.md`, `RUNLOG.md` and `ORCHESTRATION.md` are excluded on purpose: they are
+records, and a record quoting yesterday's count is correct. Only maintained
+documents move.
+
+Everything the second command finds moves in the **same commit** as the re-cut,
+or none of it does. A re-cut that lands alone leaves the shipped Notes claiming a
+line count the shipped file no longer has.
+
 **Re-baseline this file at the final SHA before submitting.** The `Baseline:`
 line at the top names the commit the transcribed outputs were produced at, and it
 does not follow HEAD on its own. It has sat dozens of commits behind before now.
