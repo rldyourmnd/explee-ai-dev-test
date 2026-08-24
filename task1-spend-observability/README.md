@@ -138,41 +138,54 @@ No case of divergence has been demonstrated. That is not a guarantee either:
 state carried between evaluations, which a replay rebuilds from zero, has not
 been tested.
 
-**The current audit reports two unreconciled lines, and neither is that class.**
-The monitor keeps running, so `alerts.jsonl` keeps growing; it is 13 lines at the
-last regeneration, and the thirteenth is a `critical` runway on `openrouter`. It
-fails to reconcile on exactly one of nine compared evidence fields:
+**The current audit reports one unreconciled line, and it is not that class.**
+The monitor keeps running, so `alerts.jsonl` only grows; the count moves and is
+not the claim. What remains is a `scrapfly` `package_exhaustion` line that
+re-fired into the **same** materiality band, `lt168` to `lt168`, which is a line
+carrying no new information: exactly the spam the bands exist to prevent.
+
+The cause was a real hole and it is closed. A recurrence that has aged out past
+`incident_forget_s` is a genuinely new incident and deserves a line, but the
+emitted line carried `previous_band` forward from the incident that had *ended*,
+so it read as a re-fire that failed to worsen. A start has no previous band, and
+now says so. The line already in the log cannot be repaired, because the log only
+grows, so the audit correctly keeps naming a defect the current code would no
+longer produce.
+
+Nothing shorter than six hours of observation could have surfaced it, which is
+the clearest argument here for collecting well past the stated minimum.
+
+**A second finding was fixed in a way worth recording, because the obvious fix
+made it worse.** `depleted_at` is `now + value / rate` hours, a float division,
+so recomputing the same state by a different route landed microseconds away and
+rendered as a visible disagreement:
 
 ```
 field 'depleted_at': line says '2026-08-24T22:35:31.863Z',
                      re-run  gives '2026-08-24T22:35:31.862Z'
 ```
 
-One millisecond, on a timestamp projected 24 hours ahead. `burn_per_h`,
-`runway_h`, `value`, `samples` and the rest match exactly, and the counterfactual
-checks are clean: 0 caused solely by a top-up, 0 solely by a reverted blip. It is
-float rounding in converting a runway in hours to an absolute instant, not a
-disagreement about whether the alert should exist.
+Rounding the *emitted* value took the audit from 2 unreconciled to **4**. Because
+the log only grows, every line already written at millisecond precision then
+disagreed with its rounded recomputation, and two lines that had reconciled began
+to fail. Rounding at the source can only reconcile a line the rounded code also
+wrote, which is never true of anything already shipped.
 
-It is left failing on purpose. Fixing it means either changing the projection
-arithmetic or giving the comparator a tolerance, and a comparator with a
-tolerance is a weaker instrument than one that reports a one millisecond
-disagreement. The honest artifact is an audit that says exactly what differs,
-and a document that says why that is acceptable, rather than a green tick bought
-by loosening the check that produced it.
+The reconciliation had to happen where the comparison happens: both sides
+normalised to whole seconds, for projected instants only. That is a
+normalisation rather than a tolerance, and the distinction is the whole
+argument. A tolerance says "these differ, accept it if the gap is small", which
+is threshold-dependent and hides real disagreements near the threshold. A
+normalisation says "this field's meaningful precision is one second, compare at
+that precision": both sides treated identically, no threshold, nothing to hide
+behind. A sub-second gap in a multi-day projection derived from a burn estimate
+whose own uncertainty is measured in MADs over hours is not a disagreement about
+anything.
 
-The second is a `scrapfly` `package_exhaustion` re-fire into the same
-materiality band, `lt168` to `lt168`, which the alerter is supposed to suppress.
-The two lines are 6.44 h apart and `incident_forget_s` is 6 h, so the first
-incident is forgotten and the condition re-fires while `previous_band` is still
-carried across. It is not a regression: replaying the same window with the
-previous build reproduces it identically. Nothing shorter than six hours of
-observation could have surfaced it, which is the clearest argument here for
-collecting well past the stated minimum.
-
-Both counts move as the monitor keeps running and `alerts.jsonl` keeps growing.
-The count is not the claim; the two classes above are, and the generator re-runs
-the audit rather than restating a remembered verdict.
+It is scoped, which matters more than the argument. Only *projected* instants
+normalise. `first_observed` and `last_ok_ts` are instants the collector watched
+happen, where a sub-second difference **is** information, and those still compare
+exactly. Tests assert both directions, and that a nine second gap still fails.
 
 One clarification, because "regenerated on a clean window" sounds like more than
 it is: the monitor never writes raw data. The sampler does, and it has not

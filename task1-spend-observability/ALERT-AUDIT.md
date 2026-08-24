@@ -27,7 +27,7 @@ so the document cannot claim a verdict the audit did not produce.
 | provenance | |
 |---|---|
 | alert lines audited | 17 |
-| unreconciled | **2** |
+| unreconciled | **1** |
 | caused solely by a top-up | **0** |
 | caused solely by a reverted blip | **0** |
 | raw records | 14,320 |
@@ -50,7 +50,7 @@ so the document cannot claim a verdict the audit did not produce.
 | 10 | 2026-08-23T21:05:41.043Z | `unavailable` | `zerobounce` | 930.5 s | yes |
 | 11 | 2026-08-23T21:08:41.192Z | `burn_anomaly` | `meta_ads` | 7.1 MAD | yes |
 | 12 | 2026-08-23T22:08:44.011Z | `burn_anomaly` | `meta_ads` | 11.7 MAD | yes |
-| 13 | 2026-08-23T22:37:24.129Z | `runway` | `openrouter` | 24.0 h | **no** |
+| 13 | 2026-08-23T22:37:24.129Z | `runway` | `openrouter` | 24.0 h | yes |
 | 14 | 2026-08-23T23:05:25.027Z | `package_exhaustion` | `findymail` | 142.5 h | yes |
 | 15 | 2026-08-23T23:08:57.098Z | `burn_anomaly` | `zerobounce` | 22.9 MAD | yes |
 | 16 | 2026-08-23T23:09:27.371Z | `package_exhaustion` | `zerobounce` | 186.1 h | yes |
@@ -58,7 +58,7 @@ so the document cannot claim a verdict the audit did not produce.
 
 ## State of this audit
 
-**This audit fails: 2 of 17 lines do not reconcile**, 0 caused solely by a top-up and 0 solely by a reverted blip. The failing lines are marked in the table above and detailed below. A failing audit is published rather than hidden, because the alternative is a document that agrees with itself and not with the data.
+**This audit fails: 1 of 17 lines do not reconcile**, 0 caused solely by a top-up and 0 solely by a reverted blip. The failing lines are marked in the table above and detailed below. A failing audit is published rather than hidden, because the alternative is a document that agrees with itself and not with the data.
 
 ## Full reconciliation output
 
@@ -160,7 +160,7 @@ Reconciling 17 alert lines against the raw window
      sustained 21206s of 300s required
      band worsened runway:warning:lt48 -> runway:critical:lt24
      no top-up, reset or blip in the estimation window, so nothing to attribute the alert to
-     UNRECONCILED: field 'depleted_at': line says '2026-08-24T22:35:31.863Z', re-run gives '2026-08-24T22:35:31.862Z'
+     reconciled
 
 [14] 2026-08-23T23:05:25.027Z  warning  package_exhaustion  findymail
      findymail (Hunter) is projected to exhaust its credits package 142.5 h from now, 192.9 h before the 2026-09-01 refresh; 9,965 of 12,000 credits left, burning 70
@@ -205,7 +205,7 @@ Repeat lines, and what each one added
     + 74.6 min  runway:warning:lt72 -> runway:warning:lt48  runway 55.6 h -> 47.9 h
     +273.9 min  runway:warning:lt48 -> runway:critical:lt24  runway 47.9 h -> 24.0 h
 
-unreconciled lines: 2 of 17
+unreconciled lines: 1 of 17
 
 auditee sha256[:16]: 8c3c8ce6adf989fd -> 8c3c8ce6adf989fd  unchanged
 [replay] 14320 records from the raw window
