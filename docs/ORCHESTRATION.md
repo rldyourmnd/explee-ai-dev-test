@@ -31,8 +31,11 @@ true when written**. Where they disagree, ACCEPTANCE wins.
   external: `NDDev-it-com/ci-workflows` is **archived**, so its reusable workflows
   cannot be called. Nothing in this repository is wrong; proven by re-running a
   previously-successful run unchanged and watching it flip to `startup_failure`.
-- The alert audit reports one unreconciled line: a `scrapfly` re-fire repeating
-  the same band. The cause is closed at source, but the emitted line cannot be
+- The alert audit exits non-zero on one *class*: a `package_exhaustion` alert
+  re-firing into an unchanged band — `scrapfly` and `resend`, both emitted
+  before the fix deployed. Run `tools/alert_audit_doc.py --check` for the live
+  figure; it is not frozen here. The cause is closed at source, but the emitted
+  lines cannot be
   repaired because the log only grows, so the audit keeps naming a defect the
   current code would not produce. That is what an append-only record is for.
 

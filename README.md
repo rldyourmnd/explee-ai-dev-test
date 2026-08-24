@@ -28,10 +28,13 @@ Run `uv run tools/alert_audit_doc.py` for the current verdict — the count is
 deliberately not written here, because the previous version of this paragraph
 froze one and was false within two hours.
 
-What remains is a `scrapfly` re-fire that repeats the same
-`package_exhaustion:lt168` band instead of worsening: a pre-existing defect that
-no window shorter than this one could expose, left visible for the same reason
-the 429 correction is. A `depleted_at` mismatch also appeared and was fixed —
+What remains is one class, not one line: a `package_exhaustion` alert re-firing
+into an **unchanged** band instead of a worse one — `scrapfly` `lt168 → lt168`
+and `resend` `ge168 → ge168`. Both were emitted before the fix deployed, both
+are the same defect, and the cause is closed at source. No window shorter than
+this one could have exposed it. It is left visible for the same reason the 429
+correction is. What the task actually requires is measured and clean: **0**
+alerts caused solely by a top-up, **0** caused by a reverted blip. A `depleted_at` mismatch also appeared and was fixed —
 the projection is a float, so recomputing it by a different route landed
 microseconds away. It was reconciled *where the comparison happens*, by matching
 at the precision the quantity actually carries, rather than by re-emitting the

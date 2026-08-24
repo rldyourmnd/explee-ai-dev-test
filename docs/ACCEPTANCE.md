@@ -34,7 +34,7 @@ this commit on a clean tree, and the output is transcribed, not summarised:
 | `uv run tools/repo_checks.py consistency` | 0 | — |
 | `uv run tools/repo_checks.py acceptance` | 0 | — |
 | `uv run tools/assemble_submission.py --check` | 0 | `pre-flight: ok (0 outstanding)` |
-| `uv run tools/alert_audit_doc.py --check` | **1** | `audited 17, unreconciled 1` |
+| `uv run tools/alert_audit_doc.py --check` | **1** | `audited 30, unreconciled 2, caused solely by a top-up 0, by a reverted blip 0` |
 
 **The audit's non-zero exit is reported, not hidden.** The one unreconciled line
 is the `scrapfly` re-fire repeating the same band: cause closed at source, but

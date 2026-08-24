@@ -190,6 +190,11 @@ def main() -> int:
                              "for describing a sub-window such as the one after T1")
     parser.add_argument("--dry-run", action="store_true",
                         help="measure and print, write nothing")
+    parser.add_argument("--sync-alerts", action="store_true",
+                        help="ALSO overwrite the shipped task1 alerts.jsonl with "
+                             "the host copy. Off by default: this tool used to do "
+                             "it silently on every run, which mutated a shipped "
+                             "deliverable and stranded every document quoting it.")
     parser.add_argument("--require-span-s", type=float, default=None,
                         help="fail unless the first-to-last RECORD span reaches this "
                              "many seconds. Use 21600 for the six-hour minimum. "
@@ -211,8 +216,34 @@ def main() -> int:
     # that the copy is a faithful *prefix*: hash the same leading byte count on
     # the host and require a match.
     subprocess.run(["rsync", "-az", f"{HOST}:{REMOTE_RAW}", str(LOCAL_RAW)], check=True)
-    subprocess.run(["scp", "-q", f"{HOST}:{REMOTE_ALERTS}",
-                    str(REPO / "task1-spend-observability" / "alerts.jsonl")], check=True)
+
+    # alerts.jsonl is a SHIPPED DELIVERABLE, and this tool used to scp the host
+    # copy straight over it on every run. That made a tool whose entire purpose
+    # is producing an immutable record silently mutate an artifact - and every
+    # document quoting that artifact went stale without anyone deciding
+    # anything. It is how the file kept turning up dirty, and how the
+    # POLICY-SENSITIVITY bullet, ALERT-AUDIT.md and three status documents came
+    # within one commit of describing a file that no longer existed.
+    #
+    # Refreshing it is now something you ASK for. Default is to look and report:
+    # a difference is information, and overwriting a deliverable is a decision.
+    alerts_repo = REPO / "task1-spend-observability" / "alerts.jsonl"
+    if args.sync_alerts:
+        subprocess.run(["scp", "-q", f"{HOST}:{REMOTE_ALERTS}", str(alerts_repo)],
+                       check=True)
+        print(f"  alerts.jsonl REFRESHED from the host at your request -> "
+              f"{sum(1 for _ in open(alerts_repo, encoding='utf-8'))} lines. "
+              f"Everything quoting it must move in the same commit: "
+              f"POLICY-SENSITIVITY.md, ALERT-AUDIT.md, and submission/ via "
+              f"tools/assemble_submission.py.")
+    else:
+        host_lines = int(ssh(f"wc -l < {REMOTE_ALERTS}").split()[0])
+        repo_lines = sum(1 for _ in open(alerts_repo, encoding="utf-8"))
+        if host_lines != repo_lines:
+            print(f"  alerts.jsonl NOT touched: repo has {repo_lines} lines, host "
+                  f"has {host_lines}. The shipped artifact is a deliberate cut, "
+                  f"not a mirror. Pass --sync-alerts to move it, and move every "
+                  f"document that quotes it in the same commit.")
 
     sha, size, lines = local_digest(LOCAL_RAW)
     remote = ssh(f"head -c {size} {REMOTE_RAW} | sha256sum | cut -d' ' -f1; "
