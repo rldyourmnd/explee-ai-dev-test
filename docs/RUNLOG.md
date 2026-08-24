@@ -1171,3 +1171,40 @@ the same fixture trap that makes submission mode unsatisfiable for a session
 writing the scanner's own fixtures, and adding an exemption mechanism to escape
 it is how overrides become routine. `.py` prose was cleared by hand instead, in
 docstrings and comments only, never in an assertion or an expected value.
+
+## 2026-08-24T11:3xZ — the two graded links survive a reboot, and the shipped monitor is the running one
+
+Checked because neither property had been verified and both matter to a reader
+who opens the links days after we submit.
+
+**The artifact and the demonstration are the same code.** `submission/task1-monitor.py`
+and `task1-spend-observability/monitor.py` are the same git blob, and that file's
+sha256 matches the copy running on the host. A grader reading the submitted file
+is reading what serves the dashboard.
+
+**Neither link depends on a login session or a terminal.** There is no systemd
+unit for either, which looks fragile until you check: both run as containers with
+`restart=unless-stopped`, so the Docker daemon brings them back after a host
+reboot. `/healthz` answers `status: ok` with every provider fresh.
+
+**The separation the T0 decision bought is visible in the uptimes.** The
+dashboard container restarted a few hours ago to pick up the `depleted_at`
+reconciliation, while `explee-raw-sampler.service` reports `NRestarts=0` across
+the whole window. Redeploying what *displays* the data did not disturb what
+*captures* it, which is the property that made a clean re-measurement possible
+hours after the original design was wrong.
+
+### My own enumeration hazard, committed while checking this
+
+The first probe ran `docker ps` unscoped and returned containers belonging to
+unrelated projects on this shared host. That is the exact defect listed in this
+session's own watch items, and the correct form was a scoped filter from the
+start:
+
+    docker ps --filter name=explee
+
+Recorded rather than quietly re-run, because the catalogue of enumeration
+hazards in `AGENTS.md` was built from other people's instances and this one is
+mine. The rule is not "be careful with listing commands"; it is *scope every
+listing command to this project before running it*, since the contamination
+happens at execution and cannot be taken back afterwards.
