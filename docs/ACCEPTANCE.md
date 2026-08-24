@@ -643,6 +643,21 @@ So the last edit before submission is: run the gates on the clean final tree,
 replace the `Baseline:` SHA, and re-transcribe the outputs beneath it. That also
 closes row X.1, which is the row asserting exactly this.
 
+Capture the outputs with these, rather than by copying what scrolled past:
+
+```bash
+uv run --with 'pytest==8.3.4' pytest tests/ -q 2>&1 | tail -1 | sed 's/ in [0-9.]*s$//'
+uv run --with 'ruff==0.15.17' ruff check . 2>&1 | tail -1
+uv run --with pyright==1.1.411 --with pytest==8.3.4 --with httpx pyright 2>&1 | tail -1
+uv run tools/assemble_submission.py --check 2>&1 | tail -1
+uv run tools/alert_audit_doc.py --check 2>&1 | grep -o 'audited .*'
+```
+
+The `sed` matters: pytest prints `321 passed in 20.90s`, and the duration changes
+on every run. Transcribing it would put a number in this table that is wrong the
+next time anyone looks, which is the frozen-count defect in its purest form since
+it is guaranteed rather than merely likely to go stale.
+
 **The baseline cannot name the commit that contains it, and pretending otherwise
 is the circularity to avoid.** Writing the SHA creates a new commit with a new
 SHA, so the baseline necessarily names the commit the gates were *run at*, which
