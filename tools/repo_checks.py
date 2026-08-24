@@ -230,8 +230,20 @@ def check_traces(problems: list[str], strict: bool) -> None:
         if "| Session id |" not in head:
             _fail(problems, f"{rel}: no exporter header — a hand-written trace is worthless")
         body = open(path, encoding="utf-8", errors="replace").read()
+        # A lossy marker counts only when the EXPORTER emitted it, not when the
+        # exporter's own source is quoted inside a trace. task1's trace contains
+        # the line `327:  f"result truncated by --max-result")` - the source of
+        # the very check being described - and a bare substring test read that as
+        # proof the trace was truncated. Same self-referential shape that made
+        # the HostName gate unsatisfiable three times: a document discussing a
+        # pattern is not an instance of it.
+        #
+        # This exact fix already existed in tools/assemble_submission.py and was
+        # never propagated here, so one tool passed the trace and the other
+        # failed it. Fixing a defect class in one of two copies is how a repo
+        # ends up arguing with itself.
         for marker in ("This export is not verbatim", "truncated by --max-result"):
-            if marker in body:
+            if re.search(r"^[>\s]*" + re.escape(marker), body, re.M):
                 _fail(problems, f"{rel}: contains a lossy-export marker ({marker!r})")
 
 

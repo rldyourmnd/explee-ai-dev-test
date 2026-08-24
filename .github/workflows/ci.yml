@@ -86,8 +86,11 @@ jobs:
       - name: repository consistency
         run: uv run tools/repo_checks.py consistency
 
-      # Reports what the task still needs. Non-blocking until submission, when it
-      # is run with --strict: before then a missing trace is work in progress,
-      # and at submission it is a failed deliverable.
+      # Reports what the task still needs. The comment here used to claim this
+      # step was "non-blocking until submission" - it never was. There is no
+      # continue-on-error, so it has always failed the job, and it sat red while
+      # everyone read the comment instead of the behaviour. Kept blocking, which
+      # is now the right setting anyway: every deliverable exists, so a failure
+      # here is a real regression rather than work in progress.
       - name: acceptance status (reporting)
         run: uv run tools/repo_checks.py acceptance
