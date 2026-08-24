@@ -1112,3 +1112,62 @@ passes, at the moment of submission, is the move this project keeps proving
 wrong. The shape of a fix, for whoever picks it up: an acknowledgement that names
 the specific fixture and is itself recorded in the trace — not a blanket
 override.
+
+## 2026-08-24T11:2xZ — the file that exists to catch leaks did not become one
+
+Verified here rather than accepted, because "never tracked in any commit" is
+exactly the kind of claim that should be checked:
+
+| Path | Commits touching it, all refs | Blobs at that path in history | Ignored | Tracked |
+|---|---|---|---|---|
+| `.leak-patterns` | **0** | **0** | yes | no |
+| `.DS_Store` | 0 | — | yes | no |
+| `.serena` | **3** | 4 files | yes | no *(now)* |
+
+`.leak-patterns` holds the third-party identifiers and has never existed in any
+commit on any ref. The instrument built to detect a leak never became one, which
+is the outcome the gitignore-plus-never-name-it discipline was for.
+
+**One correction to the sweep, and it is small but it should be exact.**
+`.serena` is not "never tracked": four metadata files reached published history
+before it was ignored, in `bae8ae2`, `8f68d4e` and `9f354c3` — `.auto_sync_head`,
+`.gitignore`, `.serena_sync_state.json` and `project.yml`. Removed from HEAD is
+not removed from history on a public repository, so it was worth looking at
+rather than assuming.
+
+They are clean. `.serena/memories/` — the knowledge files, the part that could
+have carried anything — is **not** among them and was never committed. Scanning
+every `.serena` blob across all refs: **0** third-party identifier hits and **0**
+absolute paths. `project.yml` is tooling config: project name, language, encoding.
+
+So: no action, and no rewrite. Recorded because "we checked and it was fine" is
+only worth something when the check is stated precisely enough to be re-run.
+
+### Why the en dashes survived a sweep, and why the gate stops at markdown
+
+`task1-spend-observability/README.md` held 10 en dashes and **zero** em dashes.
+The sweep that cleared em dashes returned clean on it and said nothing about the
+file: an em-only check on a file with no em dashes is not evidence of anything.
+The gate now matches U+2014 **and** U+2013.
+
+**The dash was not the interesting defect.** Three of the ten were the
+estimator's name: `monitor.py` writes `Theil-Sen` with a hyphen, six times, while
+its own README wrote it with an en dash three times. Code and documentation had
+been spelling the estimator differently and neither looked wrong, because each
+was internally consistent. A punctuation sweep surfaced a naming inconsistency
+that no reader had caught.
+
+**U+2212 is deliberately exempt.** Seven minus signs remain in that README, which
+is the correct character for a negative quantity and matches the `&minus;` the
+dashboard renders. Replacing them with hyphens would re-open the code/document
+disagreement in the other direction. Verified by running the gate: it matches
+U+2014 and U+2013 only.
+
+**The gate stops at markdown, and the reason is not cost.** Extending it to
+tracked `.py` is *unsatisfiable*: `tests/test_export_trace.py` asserts
+`"Tool call — \`ListAgents\`" in md`, where the em dash is the expected output of
+the exporter. Remove it and the test breaks; keep it and the gate fails. That is
+the same fixture trap that makes submission mode unsatisfiable for a session
+writing the scanner's own fixtures, and adding an exemption mechanism to escape
+it is how overrides become routine. `.py` prose was cleared by hand instead, in
+docstrings and comments only, never in an assertion or an expected value.

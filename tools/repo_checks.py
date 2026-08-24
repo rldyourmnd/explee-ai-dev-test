@@ -189,6 +189,44 @@ def check_no_future_timestamps(problems: list[str]) -> None:
                                     f"heading above it)")
 
 
+# Markdown a grader actually reads, and that WE authored. Deliberately an
+# explicit list rather than "every tracked .md": `docs/TASK.md` is the verbatim
+# task and carries 20 em dashes, and the exported traces carry dozens more.
+# Sweeping those would be a gate satisfiable only by editing a verbatim record -
+# the sixth unsatisfiable-check instance this run, and the second whose only
+# passing state is a falsification. Authored prose is fixable; a record is not.
+PROSE_DOCS = ["README.md", "AGENTS.md", "submission/NOTES.md", "submission/LINKS.md",
+              "task1-spend-observability/README.md", "task2-stt-benchmark/README.md",
+              "task3-harness-artifact/README.md"]
+# U+2014 and U+2013. The two deployed pages were swept for these and the markdown
+# never was, which is how five documents accumulated 82 of them unnoticed.
+DASH_RE = re.compile(r"[\u2014\u2013]")
+
+
+def check_no_dashes_in_prose(problems: list[str]) -> None:
+    """No em or en dashes in the prose we wrote.
+
+    House style, enforced on both deployed pages from early on. The markdown was
+    never covered, so the rule held exactly where a machine checked it and
+    drifted everywhere else - which is the argument for the check rather than
+    against the rule.
+    """
+    for rel in PROSE_DOCS:
+        path = os.path.join(ROOT, rel)
+        if not os.path.exists(path):
+            continue
+        hits = []
+        for lineno, line in enumerate(open(path, encoding="utf-8"), 1):
+            for m in DASH_RE.finditer(line):
+                name = "em dash" if m.group(0) == "\u2014" else "en dash"
+                hits.append(f"{lineno} ({name})")
+        if hits:
+            shown = ", ".join(hits[:6]) + (" ..." if len(hits) > 6 else "")
+            _fail(problems, f"{rel}: {len(hits)} em/en dash(es) at line {shown} - "
+                            f"replace with a comma, colon, full stop or parentheses, "
+                            f"and rewrite the sentence where the dash carried it")
+
+
 def check_referenced_paths_exist(problems: list[str]) -> None:
     """A document may not link to a file that is not there.
 
@@ -485,6 +523,7 @@ def main() -> int:
         check_baseline_not_behind_head(problems)
         check_no_future_timestamps(problems)
         check_referenced_paths_exist(problems)
+        check_no_dashes_in_prose(problems)
     else:
         check_traces(problems, args.strict)
         check_alerts_schema(problems, args.strict)
