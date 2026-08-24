@@ -4,6 +4,32 @@
 # `push` and `schedule` on the default branch, and `pull_request` is
 # experimental. Folding it into the pull_request-triggered suite would produce a
 # job that fails for reasons unrelated to the change under review.
+#
+# KNOWN FAILING, CAUSE IS EXTERNAL. Runs end in startup_failure: zero jobs, no
+# logs, and the run named by this file path rather than by `name:`. Nothing in
+# this file is wrong.
+#
+# Cause: NDDev-it-com/ci-workflows is ARCHIVED. An archived repository is
+# read-only with Actions disabled, so its reusable workflows cannot be called.
+# Fix is the owner's - un-archive it, or vendor these workflows here and drop
+# the cross-repo calls, which forks the estate standard this repo was
+# registered against and so needs the owner's say-so.
+#
+# Ruled out, with evidence, so nobody re-runs this hunt:
+#   - all six reusables exist at the pin, declare `on: workflow_call`, and
+#     declare every input passed here; none requires a secret
+#   - both repos are public; the pin is an ancestor of the callee default
+#     branch (behind 97, ahead 0), so it resolves
+#   - YAML parses, actionlint is silent, no BOM, no CRLF
+#   - workflow-level `permissions: {}` plus job-level elevation is legal:
+#     dependency-review.yml does exactly that at the same pin
+#   - privileged scopes are not rejected pre-job: THIS file requests
+#     `id-token: write` and SUCCEEDED at 2026-08-23T23:59:15Z, run 32675226838
+#
+# The decisive evidence is a re-run, not a file read: the same run id, same
+# commit, same event went success -> startup_failure with zero repository
+# changes between attempts. That isolates the variable to something external,
+# which no amount of inspecting this file could have found.
 name: scorecard
 on:
   push: { branches: [main] }
