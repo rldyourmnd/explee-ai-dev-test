@@ -1,7 +1,14 @@
-# Notes field — draft
+# Notes field
 
 Paste the body below into the form's Notes box. Keep it as prose; the form is a
-plain textarea. Update the two bracketed numbers when the final window is cut.
+plain textarea.
+
+No placeholders remain, and every figure below traces to a committed artifact:
+the Task 2 numbers to the published report, the audit numbers to
+`ALERT-AUDIT.md`. The audit sentence is written to describe the *class* of
+finding rather than freeze a tally, because the window keeps growing and a
+count written here would go stale between drafting and submitting — which is
+exactly what happened to the sentence it replaced.
 
 ---
 
@@ -18,8 +25,21 @@ blip to see whether the alert survives, and proves it did not mutate the file it
 audits by hashing it before and after. The first run **failed**: 2 of 13 lines did
 not reconcile, and one existed only because of a top-up, which the task calls
 normal operations. We regenerated the artifact from a single frozen build rather
-than shipping a file we had already disproven. The submitted log passes at
-0 of [12] unreconciled.
+than shipping a file we had already disproven.
+
+**The submitted log still does not pass the audit, and we would rather tell you
+than have you find it.** It is 30 lines and two do not reconcile — both the same
+class: a `package_exhaustion` alert re-firing when the materiality band had not
+changed, so a line carrying no new information. Both were written about nine
+hours before the fix for that landed, and replaying the whole window under the
+current code produces none of them; the log is append-only, so the lines stay and
+the audit keeps naming them. That is the behaviour we want from a gate.
+
+What the task actually forbids is at zero and has stayed there: the top-up-caused
+line the first audit found is gone, and no alert is caused solely by a top-up or
+by a reverted blip. `uv run tools/alert_audit_doc.py --check` prints the current
+verdict — if the window grows before you read this, the count may differ and the
+class will not.
 
 Task 2 has the same shape. We recommended Whisper large-v3 with a glossary
 prompt, then found the score came from 19 of 99 segments where the model
