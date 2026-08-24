@@ -1,5 +1,9 @@
 # Documentation pass — run after every worker reports done
 
+**Status: COMPLETE — historical.** The brief for the documentation pass. The pass has been run; this is the standard it was held to.
+*A plan we executed is not deleted: the plan and its execution are together the evidence of how this was built. It is left as written — not tidied into hindsight.*
+
+
 Starts only when code has stopped moving. Documenting a moving target produces
 documents that are wrong by the time they are committed, which is the failure
 this repository has hit repeatedly: a stale board, a README recommending a

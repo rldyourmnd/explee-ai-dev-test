@@ -1,5 +1,9 @@
 # Prompt for the external review agent (GitHub web access only)
 
+**Status: COMPLETE — historical.** The first external-review prompt as issued.
+*A plan we executed is not deleted: the plan and its execution are together the evidence of how this was built. It is left as written — not tidied into hindsight.*
+
+
 Copy everything below the line into the review agent.
 
 ---

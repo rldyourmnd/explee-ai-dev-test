@@ -1,5 +1,9 @@
 # Shared UI specification — the dashboard and the report
 
+**Status: COMPLETE — historical.** The shared UI specification both pages were built to. Implemented and verified live; kept as the record of what was specified before it was built.
+*A plan we executed is not deleted: the plan and its execution are together the evidence of how this was built. It is left as written — not tidied into hindsight.*
+
+
 Both public pages are read by the same person in the same sitting, and today they
 look like they came from different companies. This file makes them one thing and
 fixes what I found by opening each at 1440 px.

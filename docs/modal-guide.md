@@ -1,5 +1,9 @@
 # Running the Task 2 engines on Modal — current API and the GPU cap
 
+**Status: COMPLETE — historical.** How the Task 2 engines were run, written while that work was live. The benchmark is published; kept for reproducibility, not as a live runbook.
+*A plan we executed is not deleted: the plan and its execution are together the evidence of how this was built. It is left as written — not tidied into hindsight.*
+
+
 The workspace hit its plan limit of **10 concurrent GPUs**, with a `Whisper.*`
 function holding all ten. This is not a capacity problem. It is a fan-out set
 higher than the work needs, and the fix costs nothing in wall-clock.

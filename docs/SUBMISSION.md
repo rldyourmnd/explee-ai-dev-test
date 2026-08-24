@@ -1,5 +1,9 @@
 # Submission package
 
+**Status: CURRENT — authoritative.** Defines the seven upload artifacts. This one is *not* historical: it governs what ships, and `tools/assemble_submission.py` is checked against it.
+*A plan we executed is not deleted: the plan and its execution are together the evidence of how this was built. It is left as written — not tidied into hindsight.*
+
+
 The form is now known, and it changes the plan. Read this before doing any more
 delivery work.
 

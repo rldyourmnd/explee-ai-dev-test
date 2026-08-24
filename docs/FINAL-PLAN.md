@@ -1,5 +1,9 @@
 # Final plan to submission
 
+**Status: COMPLETE — historical.** The plan that drove the run to submission, written 2026-08-23. Executed; kept as the record of how the work was directed, not as instructions.
+*A plan we executed is not deleted: the plan and its execution are together the evidence of how this was built. It is left as written — not tidied into hindsight.*
+
+
 Written after the third external review, which confirmed every technical finding
 I could check against the tree. This supersedes ad-hoc instructions: work this
 document, in this order.

@@ -1,5 +1,9 @@
 # Prompt for the external review agent — round 2
 
+**Status: COMPLETE — historical.** The round-2 external-review prompt as issued. Its review, and its unresolved gap, are in `docs/reviews/`.
+*A plan we executed is not deleted: the plan and its execution are together the evidence of how this was built. It is left as written — not tidied into hindsight.*
+
+
 Copy everything below the line.
 
 ---

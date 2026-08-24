@@ -5,47 +5,45 @@ single place that says what is true right now, with the measurement behind each
 claim. Maintained by the orchestrator (`surface:3`); workers report, they do not
 edit this file.
 
-**Last heartbeat: 2026-08-23T21:29Z.**
+**BOARD CLOSED — final heartbeat 2026-08-24T09:37Z.**
 
-## CURRENT STATE — 21:29Z. Everything below this block is a dated log, not status.
+**This board is no longer maintained and is not the authority.**
+[`docs/ACCEPTANCE.md`](ACCEPTANCE.md) supersedes it: it is verified row by row at
+the final SHA, with the command and its output recorded for every row. Everything
+in this file, including the block immediately below, is a **dated log of what was
+true when written**. Where they disagree, ACCEPTANCE wins.
 
-The sections after this one record what was true when they were written and are
-kept because the run's history is itself evidence. **They are not current.** Any
-disagreement between them and this block resolves in favour of this block, and
-`docs/ACCEPTANCE.md` is the row-by-row authority.
+## END STATE — 2026-08-24T09:37Z
 
 | | |
 |---|---|
-| Collector | `active`, 10096 records, **0 malformed**, max consecutive gap **29.670 s**, span **5.25 h** |
-| Six-hour mark | `22:14Z`, **45 min out**. Snapshot 01 closes the minimum; **collection continues** — the submission ships the last snapshot, not this one |
-| Task 1 | dashboard live at `spend.nddev.it.com` (200, valid cert, no login); shipped `alerts.jsonl` is **17 lines**, cut at `2026-08-23T23:15:00.509Z`; the served log only grows and is ahead of it. For the audit's current verdict run `uv run tools/alert_audit_doc.py` — the count is deliberately not frozen here, because a number copied into a table is stale the moment the replay changes |
-| Task 2 | **published** at `stt.nddev.it.com` — 5 engines + 2 tuned tracks, 99 hashed segments (2952.821 s), publisher human transcript, recommends Whisper large-v3 + glossary prompt |
+| Collector | `active`, `NRestarts=0`, never restarted since T0 `2026-08-23T16:13:26.775Z`. **33,392 records, 0 malformed**, max consecutive gap **29.684 s** — under the 30 s interval, so the series has no hole. Span **17.40 h** and still growing |
+| Six-hour requirement | **closed** by snapshot `04-final`, span **26,842 s** against the 21,600 s minimum. Snapshot 01 spanned 21,587.8 s and fell **12.2 s short** despite arriving after the mark; it is kept as evidence that span was measured rather than the clock trusted |
+| Task 1 | dashboard live at `spend.nddev.it.com` (200, valid cert, no login). Shipped `alerts.jsonl` is **17 lines**, cut at `2026-08-23T23:15:00.509Z`; the served log only grows and is ahead of it by construction |
+| Task 2 | **published** at `stt.nddev.it.com` — 5 engines + 2 tuned tracks, 99 hashed segments (2952.821 s), publisher human transcript. Recommends **Whisper `large-v3-turbo` with a glossary prompt**. `large-v3` is **retracted** — it collapses on 19 of 99 segments |
 | Task 3 | **complete** — artifact, its 2–3 lines, and a real tool-exported trace |
-| Gates | pytest 293 · ruff 0.15.17 clean · pyright **0** · consistency ok · CI green |
+| Repository | **public**, history rewritten and *not* flattened. `git rev-list --count HEAD` for the commit count; pre-rewrite SHAs resolve via [COMMIT-MAP.md](COMMIT-MAP.md) and are never edited inside traces |
+| Gates | run them; counts are not frozen here. `pytest`, pinned `ruff`, `pyright` (0), `repo_checks consistency`, `repo_checks acceptance`. Main CI green |
 
-**Open:** Task 1 and Task 2 traces (exported only when each session genuinely
-ends); the snapshot series; the T1 marker and clean-window regeneration; the
-single-file `--poll` deploy, which waits for a snapshot boundary.
+**Known-open, stated rather than hidden:**
 
-The pyright exclusion debt is **closed** — row X.5 is GREEN, cleared rather than
-hidden: no Task 2 path remains in `pyrightconfig.json` and pyright reports 0 with
-nothing task-related excluded. The history rewrite has **run**; the repository is
-public with its full history preserved (`git rev-list --count HEAD` for the
-current number — it grows, and writing it here made it wrong within the hour),
-and pre-rewrite SHAs resolve through
-[COMMIT-MAP.md](COMMIT-MAP.md). Both were still listed here as open long after
-they were done, which is the contradiction this board exists to catch and had
-started producing.
+- `security.yml` and `scorecard.yml` fail at workflow-file load. Root cause is
+  external: `NDDev-it-com/ci-workflows` is **archived**, so its reusable workflows
+  cannot be called. Nothing in this repository is wrong; proven by re-running a
+  previously-successful run unchanged and watching it flip to `startup_failure`.
+- The alert audit reports one unreconciled line: a `scrapfly` re-fire repeating
+  the same band. The cause is closed at source, but the emitted line cannot be
+  repaired because the log only grows, so the audit keeps naming a defect the
+  current code would not produce. That is what an append-only record is for.
 
-**All six human decisions are settled** — the `BLOCKED` markers further down are
-historical. Publication, submission timing, collector interruption and payment
-remain the human's; payment is settled as *nothing paid at all*.
+**All six human decisions are settled.** The `BLOCKED` markers further down are
+historical. Payment is settled as *nothing paid at all*.
 
 **Superseded below, listed so nobody re-reads them as fact:** the Task 3 artifact
 was `reviewer-protocol.md` before it became `flow-memory-sync.md`; the Task 2
 corpus was Радио-Т at 3600.0 s before the amendment to 2952.821 s; Task 2 was
-"not started" and "awaiting scope" before it was briefed.
-
+"not started" and "awaiting scope" before it was briefed; and this block
+previously named **large-v3** as the recommendation after it had been retracted.
 
 ## STATE CHANGE 18:54Z — all three workers active for the first time
 
@@ -551,7 +549,7 @@ On disk, verified by `find`:
 |---|---|
 | Pre-registration, frozen | `PREREGISTRATION.md` |
 | Frozen glossary | `glossary.json` |
-| Reference policy | `docs/reference-policy.md` |
+| Reference policy | `task2-stt-benchmark/docs/reference-policy.md` |
 | Corpus candidates | `docs/corpus-candidates.md` |
 | Harness | `harness/` — `runner.py`, `metrics.py`, `align.py`, `normalize.py`, `manifest.py`, `glossary.py`, `bootstrap.py` |
 | Task README | `README.md` |

@@ -1,5 +1,9 @@
 # Brief — Task 3: Your best harness artifact
 
+**Status: COMPLETE — historical.** The Task 3 brief as issued to its agent. Delivered.
+*A plan we executed is not deleted: the plan and its execution are together the evidence of how this was built. It is left as written — not tidied into hindsight.*
+
+
 You own Task 3 end to end. This session is one task, one trace: everything you
 do here becomes `task3-harness-artifact/TRACE.md`, exported verbatim at the end.
 

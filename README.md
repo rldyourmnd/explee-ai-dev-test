@@ -42,6 +42,12 @@ The audit is a *gate* rather than a document — it exits non-zero on any
 unreconciled line, so it cannot drift back into agreeing with itself, and this
 README cannot quietly claim a pass it does not have.
 
+**This work was reviewed externally three times, and the reviews are published
+with their unresolved gaps intact:** [`docs/reviews/`](docs/reviews/). The
+round-2 review's gap is stated there rather than quietly closed. An audit chain
+that admits its own hole is worth more than one that looks seamless — a seamless
+one only tells you nobody looked hard enough.
+
 An earlier Task 3 trace was quarantined for a confidentiality leak and replaced
 by a genuine fresh session rather than reconstructed or edited; the incident is
 kept at [`docs/task3-trace-quarantine.md`](docs/task3-trace-quarantine.md)

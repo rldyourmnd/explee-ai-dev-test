@@ -1,5 +1,9 @@
 # Brief — Orchestrator
 
+**Status: COMPLETE — historical.** The original orchestrator brief as issued, later superseded by `orchestrator-mandate.md`.
+*A plan we executed is not deleted: the plan and its execution are together the evidence of how this was built. It is left as written — not tidied into hindsight.*
+
+
 You coordinate three task agents running in parallel cmux panes against this one
 repository. You do **not** do their work. Your value is that nothing silently
 rots while three sessions are heads-down: the collector stays alive, the

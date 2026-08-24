@@ -63,7 +63,7 @@ Three properties the tests enforce, because each is a way a benchmark can lie:
 | Reference | done — the publisher's human transcript, independent of every engine ranked |
 | Engine runs | done — 5 engines and 2 prompted Whisper configurations, 99/99 segments each, on our own GPUs |
 | Report | **published** — <https://stt.nddev.it.com/> |
-| Recommendation | conditional and two-level; see the report |
+| Recommendation | **Whisper `large-v3-turbo` with a glossary prompt** for production. `large-v3` was **retracted**: it collapses on 19 of 99 segments. Conditional and two-level — the report states the conditions |
 
 ## Envelope
 

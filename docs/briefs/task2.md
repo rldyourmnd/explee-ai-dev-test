@@ -1,5 +1,9 @@
 # Brief — Task 2: Pick the best transcriber for our meetings
 
+**Status: COMPLETE — historical.** The Task 2 brief as issued to its agent. Delivered and published.
+*A plan we executed is not deleted: the plan and its execution are together the evidence of how this was built. It is left as written — not tidied into hindsight.*
+
+
 You own Task 2 end to end. This session is one task, one trace: everything you do
 here becomes `task2-stt-benchmark/TRACE.md`, exported verbatim at the end.
 

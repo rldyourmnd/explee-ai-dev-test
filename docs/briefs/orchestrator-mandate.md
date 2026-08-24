@@ -1,5 +1,9 @@
 # Orchestrator mandate — expanded authority
 
+**Status: COMPLETE — historical.** The expanded orchestrator mandate as issued. The run it governed is finished.
+*A plan we executed is not deleted: the plan and its execution are together the evidence of how this was built. It is left as written — not tidied into hindsight.*
+
+
 Issued 2026-08-23T19:00Z by the human, through the strategy session. This
 supersedes the coordination-only scope in `docs/briefs/orchestrator.md`: you now
 own the outcome, not just the status board.
