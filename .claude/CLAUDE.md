@@ -24,5 +24,12 @@ Claude Code specifics, which are the only things not covered there:
   uv run tools/repo_checks.py consistency
   ```
 
+- **Every pane shares one working tree and one branch.** A commit cannot be held
+  locally: the next agent to push carries yours to `origin` with it, whether or
+  not you were ready. This was learned by promising the owner that a commit was
+  being held back and finding it already public, pushed by another pane's commit
+  landing on top of it. If something genuinely must not ship yet, it cannot be
+  committed to `main` — say so rather than promising a hold the tree cannot give.
+
 - `docs/TASK.md` is the verbatim task and outranks every paraphrase in this
   repository, including this file.
