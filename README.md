@@ -23,16 +23,24 @@ was running. The cause was then found and fixed: one line was a 180-hour
 projection that a 0.04 % balance change could flip. It passed at that point, 12
 lines and 0 unreconciled.
 
-**It reports 2 of 17 unreconciled again now, and the gate exits non-zero.** Both
-are understood and neither is resolved by omission. One is a one-millisecond
-`depleted_at` difference — the line says `…863Z`, the re-run computes `…862Z` —
-a float-rounding artifact, not a disagreement about what happened. The other is a
-`scrapfly` re-fire that repeats the same `package_exhaustion:lt168` band instead
-of worsening; it is a pre-existing defect that no window shorter than this one
-could expose, and it is left visible for the same reason the 429 correction is.
-The audit is a *gate* rather than a document — `tools/alert_audit_doc.py` exits
-non-zero on any unreconciled line, so it cannot drift back into agreeing with
-itself, and this README cannot quietly claim a pass it does not have.
+**It does not pass today either, and the finding is named rather than hidden.**
+Run `uv run tools/alert_audit_doc.py` for the current verdict — the count is
+deliberately not written here, because the previous version of this paragraph
+froze one and was false within two hours.
+
+What remains is a `scrapfly` re-fire that repeats the same
+`package_exhaustion:lt168` band instead of worsening: a pre-existing defect that
+no window shorter than this one could expose, left visible for the same reason
+the 429 correction is. A `depleted_at` mismatch also appeared and was fixed —
+the projection is a float, so recomputing it by a different route landed
+microseconds away. It was reconciled *where the comparison happens*, by matching
+at the precision the quantity actually carries, rather than by re-emitting the
+shipped lines to agree with the new code. Re-emitting would have made the
+artifact agree with itself by changing what it claims was emitted.
+
+The audit is a *gate* rather than a document — it exits non-zero on any
+unreconciled line, so it cannot drift back into agreeing with itself, and this
+README cannot quietly claim a pass it does not have.
 
 An earlier Task 3 trace was quarantined for a confidentiality leak and replaced
 by a genuine fresh session rather than reconstructed or edited; the incident is
