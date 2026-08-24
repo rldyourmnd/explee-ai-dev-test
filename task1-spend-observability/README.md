@@ -148,11 +148,15 @@ No case of divergence has been demonstrated. That is not a guarantee either:
 state carried between evaluations, which a replay rebuilds from zero, has not
 been tested.
 
-**The current audit reports one unreconciled line, and it is not that class.**
-The monitor keeps running, so `alerts.jsonl` only grows; the count moves and is
-not the claim. What remains is a `scrapfly` `package_exhaustion` line that
-re-fired into the **same** materiality band, `lt168` to `lt168`, which is a line
-carrying no new information: exactly the spam the bands exist to prevent.
+**What the audit still reports is one class, and it is not that one.** The
+monitor keeps running and `alerts.jsonl` only grows, so any count here would be
+wrong within hours; the count is not the claim and the current figure is in
+`ALERT-AUDIT.md`, which is regenerated rather than remembered.
+
+The class is a `package_exhaustion` line that re-fired into the **same**
+materiality band, `scrapfly` at `lt168` to `lt168` and `resend` at `ge168` to
+`ge168`: a line carrying no new information, which is exactly the spam the bands
+exist to prevent.
 
 The cause was a real hole and it is closed. A recurrence that has aged out past
 `incident_forget_s` is a genuinely new incident and deserves a line, but the
