@@ -604,15 +604,29 @@ Derive it:
 # Every maintained document asserting something about the alerts artifact.
 grep -rlnE 'alerts\.jsonl|unreconciled|package_exhaustion|audited [0-9]+' \
   README.md AGENTS.md docs/*.md submission/*.md task1-spend-observability/*.md \
-  | grep -vE 'TRACE\.md|RUNLOG|ORCHESTRATION|COMMIT-MAP'
+  | grep -vE 'TRACE\.md|RUNLOG|ORCHESTRATION|COMMIT-MAP|TASK\.md|FINAL-PLAN'
 
 # Of those, the claims a re-cut actually breaks: line counts and cut times.
 grep -rnE '[0-9]+ lines|cut at|unreconciled [0-9]|audited [0-9]+' <the files above>
 ```
 
-`TRACE.md`, `RUNLOG.md` and `ORCHESTRATION.md` are excluded on purpose: they are
-records, and a record quoting yesterday's count is correct. Only maintained
-documents move.
+The exclusions are not incidental. Two kinds of file must never move here:
+
+- **Records.** `TRACE.md` (verbatim export), `RUNLOG.md` (append-only),
+  `ORCHESTRATION.md` (closed board), `COMMIT-MAP.md` (generated). A record
+  quoting yesterday's count is *correct*.
+- **Authorities and executed plans.** `docs/TASK.md` is the verbatim task and is
+  never edited for any reason. `FINAL-PLAN.md` and the other status-headed plan
+  documents record what was intended at the time.
+
+**This list was found by rehearsal, not by reasoning.** The first version
+excluded only the four records I happened to think of, and running the command
+returned `docs/TASK.md` — so the instruction, as written, told a reader to edit
+the one file this repository forbids editing. Anything you add to the include
+side of that `grep` must be re-checked the same way: run it and read what comes
+back, rather than trusting that the exclusions still cover the class.
+
+Only maintained documents move.
 
 Everything the second command finds moves in the **same commit** as the re-cut,
 or none of it does. A re-cut that lands alone leaves the shipped Notes claiming a
