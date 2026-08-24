@@ -86,6 +86,12 @@
          letter-spacing: 0.05em; color: var(--ok); display: block; }
 
   h2.first { border-top: none; padding-top: 0; margin-top: var(--s6); }
+  .answer { border: 1px solid var(--rule); border-left: 4px solid var(--ok);
+            border-radius: 4px; padding: var(--s4) var(--s5); margin: 0 0 var(--s6);
+            background: var(--surface); }
+  .answer p { margin: 0 0 var(--s2); max-width: 62ch; }
+  .answer p:last-child { margin-bottom: 0; }
+  .answer p:first-child { font-size: 1.15rem; }
   .callout { border-left: 3px solid var(--alarm); padding: var(--s3) 0 var(--s3) var(--s4);
              margin: var(--s5) 0; }
   .callout strong { color: var(--alarm); }
@@ -103,6 +109,14 @@
 <p class="lede">Five speech to text engines on the same 49 minutes of Russian technical
 talk, scored against a human transcript published by the conference itself, with the
 evaluation frozen before any engine ran.</p>
+
+<div class="answer">
+<p><strong>Run Whisper large-v3-turbo with a glossary prompt.</strong></p>
+<p>It recognises <strong>61% of technical terms against 36% without</strong> the prompt, the
+largest gain measured anywhere in this study.</p>
+<p>It also invents a term that was never spoken in <strong>5 of 99 segments</strong>, so use it
+only where a human reviews the transcript. Without review, run the same model unprompted.</p>
+</div>
 
 <h2 class="first">Output 1: the production recommendation</h2>
 
@@ -461,13 +475,15 @@ deliberately deleted, and that artefact lands entirely in the insertion term.</p
 <colgroup><col style="width: 26ch"><col style="width: 14ch"><col style="width: 14ch"><col style="width: 9ch"></colgroup>
 <thead><tr><th>Engine</th><th class="num">Insertions</th><th class="num">Deletions</th><th class="num">Ratio</th></tr></thead>
 <tbody>
-<tr><td>Parakeet-TDT v3</td><td class="num">0.407</td><td class="num">0.022</td><td class="num">18.5x</td></tr>
+<tr><td>Parakeet-TDT v3</td><td class="num">0.407</td><td class="num">0.022</td><td class="num">18.4x</td></tr>
 <tr><td>wav2vec2 XLSR Russian</td><td class="num">0.419</td><td class="num">0.033</td><td class="num">12.7x</td></tr>
 <tr><td>large-v3-turbo, stock</td><td class="num">0.349</td><td class="num">0.053</td><td class="num">6.6x</td></tr>
 <tr><td>large-v3, stock</td><td class="num">0.351</td><td class="num">0.062</td><td class="num">5.7x</td></tr>
 </tbody>
 </table>
 </div>
+
+<p class="meta">Ratios are computed from the unrounded rates, so they will not always match the two displayed columns divided by hand.</p>
 
 <p>Both rates are per reference word. Four independent models, three architectures, all
 inserting five to eighteen times more than they delete, in the same direction. They are not
@@ -596,7 +612,7 @@ python3 task2-stt-benchmark/rank.py
 uv run --with pytest pytest tests/ -q</pre>
 
 <footer>
-<p>Evaluation design frozen in commit <code>9fd6ff8</code> at 2026-08-23T19:00:14Z, before any
+<p>Evaluation design frozen at 2026-08-23T19:00:14Z, before any
 engine output existed. Every later change, including the guardrail metric, is a dated entry in
 <code>PREREGISTRATION.md</code> section 12, each stating whether engine output existed at the
 time.</p>
