@@ -115,13 +115,14 @@ in `POLICY`, and the first table states what it will cost.
   back to `lt50`, and crossed it again at 07:50:18Z at a **lower** deviation,
   50.7 MAD against 66.7. The floor correctly did not suppress the second line,
   because the gap was 1,080 s against a 600 s floor and a condition that
-  genuinely improves and then worsens again should speak. Note where that
-  evidence lives: those crossings are **not** in the `alerts.jsonl` shipped
-  beside this document, which is cut at 17 lines ending
-  `2026-08-23T23:15:00.509Z`. They are in the live log at
-  <https://spend.nddev.it.com/alerts.jsonl>, which only grows. The gap is stated
-  rather than glossed, because a threshold defended with evidence the reader
-  cannot open is an assertion wearing the clothes of a proof.
+  genuinely improves and then worsens again should speak. Both of those lines are in the
+  `alerts.jsonl` shipped beside this document, stamped `2026-08-24T07:32:06Z`
+  and `2026-08-24T07:50:18Z`, so the claim can be checked rather than taken.
+  An earlier version of this bullet had to disclose that they were not: the
+  shipped file was cut before they were emitted, and a threshold defended with
+  evidence the reader cannot open is an assertion wearing the clothes of a
+  proof. The file only grows, so the disclosure became unnecessary rather than
+  being argued away.
 - **Anomaly `k` is the sharpest dial, and it has moved.** `k=3` fires seven
   `burn_anomaly` lines, the shipped `k=6` fires three, `k=12` fires none. The
   three at `k=6` are the `resend` acceleration and two `meta_ads` lines. All

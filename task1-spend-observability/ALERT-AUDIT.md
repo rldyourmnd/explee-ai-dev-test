@@ -26,12 +26,12 @@ so the document cannot claim a verdict the audit did not produce.
 
 | provenance | |
 |---|---|
-| alert lines audited | 17 |
-| unreconciled | **1** |
+| alert lines audited | 30 |
+| unreconciled | **2** |
 | caused solely by a top-up | **0** |
 | caused solely by a reverted blip | **0** |
-| raw records | 14,320 |
-| raw log sha256 | `d2c0b09182c25c7f` |
+| raw records | 34,560 |
+| raw log sha256 | `9e08a9e0e1f307f5` |
 | regenerate | `uv run tools/alert_audit_doc.py` |
 
 ## Every line
@@ -55,15 +55,28 @@ so the document cannot claim a verdict the audit did not produce.
 | 15 | 2026-08-23T23:08:57.098Z | `burn_anomaly` | `zerobounce` | 22.9 MAD | yes |
 | 16 | 2026-08-23T23:09:27.371Z | `package_exhaustion` | `zerobounce` | 186.1 h | yes |
 | 17 | 2026-08-23T23:15:00.509Z | `package_exhaustion` | `scrapfly` | 151.9 h | **no** |
+| 18 | 2026-08-23T23:44:02.579Z | `package_exhaustion` | `resend` | 179.6 h | **no** |
+| 19 | 2026-08-24T02:35:32.408Z | `runway` | `twocaptcha` | 31.5 h | yes |
+| 20 | 2026-08-24T03:51:53.558Z | `burn_anomaly` | `brightdata` | 7.1 MAD | yes |
+| 21 | 2026-08-24T04:34:18.575Z | `package_exhaustion` | `zerobounce` | 168.0 h | yes |
+| 22 | 2026-08-24T06:03:09.031Z | `burn_anomaly` | `anthropic` | 6.9 MAD | yes |
+| 23 | 2026-08-24T07:01:45.872Z | `burn_anomaly` | `openrouter` | 7.7 MAD | yes |
+| 24 | 2026-08-24T07:07:19.348Z | `runway` | `brightdata` | 55.7 h | yes |
+| 25 | 2026-08-24T07:11:52.197Z | `burn_anomaly` | `openrouter` | 11.3 MAD | yes |
+| 26 | 2026-08-24T07:21:59.030Z | `burn_anomaly` | `meta_ads` | 45.2 MAD | yes |
+| 27 | 2026-08-24T07:32:06.666Z | `burn_anomaly` | `meta_ads` | 66.7 MAD | yes |
+| 28 | 2026-08-24T07:44:45.162Z | `runway` | `brightdata` | 48.0 h | yes |
+| 29 | 2026-08-24T07:50:18.752Z | `burn_anomaly` | `meta_ads` | 50.7 MAD | yes |
+| 30 | 2026-08-24T10:05:26.586Z | `package_exhaustion` | `findymail` | 129.5 h | yes |
 
 ## State of this audit
 
-**This audit fails: 1 of 17 lines do not reconcile**, 0 caused solely by a top-up and 0 solely by a reverted blip. The failing lines are marked in the table above and detailed below. A failing audit is published rather than hidden, because the alternative is a document that agrees with itself and not with the data.
+**This audit fails: 2 of 30 lines do not reconcile**, 0 caused solely by a top-up and 0 solely by a reverted blip. The failing lines are marked in the table above and detailed below. A failing audit is published rather than hidden, because the alternative is a document that agrees with itself and not with the data.
 
 ## Full reconciliation output
 
 ```
-Reconciling 17 alert lines against the raw window
+Reconciling 30 alert lines against the raw window
 
 [1] 2026-08-23T16:48:58.531Z  warning  package_exhaustion  elevenlabs
      elevenlabs (Deepgram) is projected to exhaust its credits package 44.0 h from now, 199.2 h before the 2026-09-01 refresh; 867,131 of 1,000,000 credits left, bur
@@ -191,22 +204,135 @@ Reconciling 17 alert lines against the raw window
      without the package_reset at 2026-08-23T22:39:45.669Z (+14997): the alert survives
      UNRECONCILED: re-fire did not worsen: '01|package_exhaustion:lt168' -> '01|package_exhaustion:lt168'
 
+[18] 2026-08-23T23:44:02.579Z  warning  package_exhaustion  resend
+     resend (Resend) is projected to exhaust its credits package 179.6 h from now, 192.3 h before the 2026-09-01 refresh; 38,626 of 50,000 credits left, burning 215 
+     re-ran package_exhaustion: 10 evidence fields compared
+     sustained 3682s of 300s required
+     no top-up, reset or blip in the estimation window, so nothing to attribute the alert to
+     UNRECONCILED: re-fire did not worsen: '00|package_exhaustion:ge168' -> '00|package_exhaustion:ge168'
+
+[19] 2026-08-24T02:35:32.408Z  warning  runway  twocaptcha
+     twocaptcha (Anti-Captcha, prepaid_balance) reaches zero in 31.5 h at the observed burn of 2.36 USD/h; 74.41 USD left, projected 2026-08-25T10:04:24.877Z
+     re-ran runway: 9 evidence fields compared
+     sustained 303s of 300s required
+     without the top_up at 2026-08-23T21:30:12.317Z (+0.05): the alert survives
+     without the top_up at 2026-08-24T00:00:19.599Z (+0.1): the alert survives
+     without the top_up at 2026-08-24T02:00:25.244Z (+0.22): the alert survives
+     reconciled
+
+[20] 2026-08-24T03:51:53.558Z  warning  burn_anomaly  brightdata
+     brightdata (Oxylabs) burn accelerated to 15.32 USD/h over the last 30 min against a window baseline of 8.93 USD/h, a change of +6.38 USD/h, 1.7x; deviation 7.1 
+     re-ran burn_anomaly: 10 evidence fields compared
+     sustained 304s of 300s required
+     no top-up, reset or blip in the estimation window, so nothing to attribute the alert to
+     reconciled
+
+[21] 2026-08-24T04:34:18.575Z  warning  package_exhaustion  zerobounce
+     zerobounce (NeverBounce) is projected to exhaust its credits package 168.0 h from now, 187.4 h before the 2026-09-01 refresh; 117,523 of 150,000 credits left, b
+     re-ran package_exhaustion: 10 evidence fields compared
+     sustained 9487s of 300s required
+     band worsened package_exhaustion:ge168 -> package_exhaustion:lt168
+     without the top_up at 2026-08-24T00:17:50.473Z (+19972): the alert survives
+     reconciled
+
+[22] 2026-08-24T06:03:09.031Z  warning  burn_anomaly  anthropic
+     anthropic (Anthropic) trailing-24h cost is now rising at 14.89 USD/h over the last 30 min, against a window baseline of 2.98 USD/h, a change of +11.91 USD/h; re
+     re-ran burn_anomaly: 10 evidence fields compared
+     sustained 303s of 300s required
+     no top-up, reset or blip in the estimation window, so nothing to attribute the alert to
+     reconciled
+
+[23] 2026-08-24T07:01:45.872Z  warning  burn_anomaly  openrouter
+     openrouter (Groq) burn accelerated to 3.13 USD/h over the last 30 min against a window baseline of 1.77 USD/h, a change of +1.36 USD/h, 1.8x; deviation 7.7 MAD-
+     re-ran burn_anomaly: 10 evidence fields compared
+     sustained 303s of 300s required
+     without the top_up at 2026-08-24T02:00:55.394Z (+49.98): the alert survives
+     reconciled
+
+[24] 2026-08-24T07:07:19.348Z  warning  runway  brightdata
+     brightdata (Oxylabs, prepaid_balance) reaches zero in 55.7 h at the observed burn of 17.31 USD/h; 963.33 USD left, projected 2026-08-26T14:46:37.741Z
+     re-ran runway: 9 evidence fields compared
+     sustained 303s of 300s required
+     no top-up, reset or blip in the estimation window, so nothing to attribute the alert to
+     reconciled
+
+[25] 2026-08-24T07:11:52.197Z  warning  burn_anomaly  openrouter
+     openrouter (Groq) burn accelerated to 3.80 USD/h over the last 30 min against a window baseline of 1.79 USD/h, a change of +2.01 USD/h, 2.1x; deviation 11.3 MAD
+     re-ran burn_anomaly: 10 evidence fields compared
+     sustained 910s of 300s required
+     band worsened burn_anomaly:lt10 -> burn_anomaly:lt20
+     without the top_up at 2026-08-24T02:00:55.394Z (+49.98): the alert survives
+     reconciled
+
+[26] 2026-08-24T07:21:59.030Z  warning  burn_anomaly  meta_ads
+     meta_ads (Google Ads) trailing-24h cost is now rising at 386.29 USD/h over the last 30 min, against a window baseline of 6.38 USD/h, a change of +379.91 USD/h; 
+     re-ran burn_anomaly: 10 evidence fields compared
+     sustained 304s of 300s required
+     band worsened burn_anomaly:lt10 -> burn_anomaly:lt50
+     no top-up, reset or blip in the estimation window, so nothing to attribute the alert to
+     reconciled
+
+[27] 2026-08-24T07:32:06.666Z  warning  burn_anomaly  meta_ads
+     meta_ads (Google Ads) trailing-24h cost is now rising at 672.03 USD/h over the last 30 min, against a window baseline of 6.92 USD/h, a change of +665.11 USD/h; 
+     re-ran burn_anomaly: 10 evidence fields compared
+     sustained 911s of 300s required
+     band worsened burn_anomaly:lt50 -> burn_anomaly:lt100
+     no top-up, reset or blip in the estimation window, so nothing to attribute the alert to
+     reconciled
+
+[28] 2026-08-24T07:44:45.162Z  warning  runway  brightdata
+     brightdata (Oxylabs, prepaid_balance) reaches zero in 48.0 h at the observed burn of 19.66 USD/h; 943.81 USD left, projected 2026-08-26T07:44:26.636Z
+     re-ran runway: 9 evidence fields compared
+     sustained 2549s of 300s required
+     band worsened runway:warning:lt72 -> runway:warning:lt48
+     no top-up, reset or blip in the estimation window, so nothing to attribute the alert to
+     reconciled
+
+[29] 2026-08-24T07:50:18.752Z  warning  burn_anomaly  meta_ads
+     meta_ads (Google Ads) trailing-24h cost is now rising at 623.29 USD/h over the last 30 min, against a window baseline of 7.44 USD/h, a change of +615.84 USD/h; 
+     re-ran burn_anomaly: 10 evidence fields compared
+     sustained 2003s of 300s required
+     band worsened burn_anomaly:lt50 -> burn_anomaly:lt100
+     no top-up, reset or blip in the estimation window, so nothing to attribute the alert to
+     reconciled
+
+[30] 2026-08-24T10:05:26.586Z  warning  package_exhaustion  findymail
+     findymail (Hunter) is projected to exhaust its credits package 129.5 h from now, 181.9 h before the 2026-09-01 refresh; 9,317 of 12,000 credits left, burning 72
+     re-ran package_exhaustion: 10 evidence fields compared
+     sustained 303s of 300s required
+     without the top_up at 2026-08-24T04:30:03.197Z (+6): the alert survives
+     without the top_up at 2026-08-24T07:30:12.016Z (+6): the alert survives
+     without the top_up at 2026-08-24T09:30:17.708Z (+6): the alert survives
+     reconciled
+
 Repeat lines, and what each one added
 
-  meta_ads / burn_anomaly: 2 lines
+  meta_ads / burn_anomaly: 5 lines
     + 60.0 min  burn_anomaly:lt10 -> burn_anomaly:lt20  band crossing
-  resend / package_exhaustion: 4 lines
+    +553.3 min  burn_anomaly:lt20 -> burn_anomaly:lt50  band crossing
+    + 10.1 min  burn_anomaly:lt50 -> burn_anomaly:lt100  band crossing
+    + 18.2 min  burn_anomaly:lt100 -> burn_anomaly:lt100  band crossing
+  openrouter / burn_anomaly: 2 lines
+    + 10.1 min  burn_anomaly:lt10 -> burn_anomaly:lt20  band crossing
+  findymail / package_exhaustion: 2 lines
+    +660.0 min  package_exhaustion:lt168 -> package_exhaustion:lt168  runway 142.5 h -> 129.5 h
+  resend / package_exhaustion: 5 lines
     + 20.0 min  package_exhaustion:ge168 -> package_exhaustion:lt168  runway 182.0 h -> 157.1 h
     + 13.5 min  package_exhaustion:lt168 -> package_exhaustion:lt72  runway 157.1 h -> 71.8 h
     + 21.5 min  package_exhaustion:lt72 -> package_exhaustion:lt48  runway 71.8 h -> 47.8 h
+    +360.0 min  package_exhaustion:lt48 -> package_exhaustion:ge168  runway 47.8 h -> 179.6 h
   scrapfly / package_exhaustion: 2 lines
     +386.0 min  package_exhaustion:lt168 -> package_exhaustion:lt168  runway 134.9 h -> 151.9 h
+  zerobounce / package_exhaustion: 2 lines
+    +324.9 min  package_exhaustion:ge168 -> package_exhaustion:lt168  runway 186.1 h -> 168.0 h
+  brightdata / runway: 2 lines
+    + 37.4 min  runway:warning:lt72 -> runway:warning:lt48  runway 55.7 h -> 48.0 h
   openrouter / runway: 3 lines
     + 74.6 min  runway:warning:lt72 -> runway:warning:lt48  runway 55.6 h -> 47.9 h
     +273.9 min  runway:warning:lt48 -> runway:critical:lt24  runway 47.9 h -> 24.0 h
 
-unreconciled lines: 1 of 17
+unreconciled lines: 2 of 30
 
-auditee sha256[:16]: 8c3c8ce6adf989fd -> 8c3c8ce6adf989fd  unchanged
-[replay] 14320 records from the raw window
+auditee sha256[:16]: 3df07f5ef96df366 -> 3df07f5ef96df366  unchanged
+[replay] 34560 records from the raw window
 ```
