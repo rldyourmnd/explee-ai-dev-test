@@ -69,12 +69,24 @@ jobs:
       - name: ruff
         run: uv run --with "ruff==${RUFF_VERSION}" ruff check .
 
-      # Blocking as of 20:20Z. It reached zero by scoping, not by lowering the
-      # bar: four Task 2 files are excluded in pyrightconfig.json while that task
-      # is mid-flight, and the exclusion is listed there in the open rather than
-      # hidden behind continue-on-error. Every other file in the repository is
-      # type-checked and must stay at zero. The exclusion comes out when Task 2
-      # stops editing them; until then this gate protects the other 95%.
+      # Blocking, with NOTHING excluded. This comment used to describe a
+      # compromise: four Task 2 files were excluded in pyrightconfig.json while
+      # that task was mid-flight, so the gate covered "the other 95%". That
+      # exclusion came out in fdb52b7 and the compromise no longer exists.
+      #
+      # pyrightconfig.json now excludes only .venv, __pycache__, node_modules,
+      # browser and docs. The repository reports 0 errors with no task-related
+      # path hidden, so the zero is earned rather than scoped.
+      #
+      # Verified by making it fail rather than by reading the config: injecting
+      # `return "not an int"` into tests/test_task2_blockbootstrap.py produced
+      # exactly 1 reportReturnType error, and removing it returned 0. A config
+      # that merely LOOKS unscoped is not evidence that the files are checked.
+      #
+      # The comment is corrected rather than deleted because it was true when
+      # written and went false when the thing it described was fixed - the same
+      # class as a status row that outlived its own condition, and it argued for
+      # a weaker gate than the one now running.
       - name: pyright
         run: uv run --with "pyright==${PYRIGHT_VERSION}" --with "pytest==${PYTEST_VERSION}" --with httpx pyright
 
@@ -92,5 +104,5 @@ jobs:
       # everyone read the comment instead of the behaviour. Kept blocking, which
       # is now the right setting anyway: every deliverable exists, so a failure
       # here is a real regression rather than work in progress.
-      - name: acceptance status (reporting)
+      - name: acceptance status (blocking)
         run: uv run tools/repo_checks.py acceptance
