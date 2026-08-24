@@ -1018,3 +1018,53 @@ you believe you put yourself in.
 The durable form: commit the fix first, then mutate, then restore. A mutation
 test should operate on a clean tree so that restoring cannot lose anything.
 
+
+## 2026-08-24T10:5xZ — the two unreconciled alerts are provably not a current defect
+
+The audit exits non-zero on two `package_exhaustion` lines that re-fired into an
+**unchanged** band. Until now the repository said "the cause is closed at
+source", which is an assertion. `surface:2` produced the measurement instead,
+and this session verified each part independently rather than accepting the
+report:
+
+| Claim | How it was checked here | Result |
+|---|---|---|
+| The offenders predate the fix | read `ts` straight out of `alerts.jsonl` | `scrapfly` `2026-08-23T23:15:00.509Z`, `resend` `2026-08-23T23:44:02.579Z` |
+| The fix exists and is dated | `git log -S'announced_from' -- monitor.py` | `cc64abb`, **2026-08-24T08:37:51Z** |
+| The gap is real | arithmetic on the two above | ≈ **9 hours** — the lines were written by a build that could not yet have contained the fix |
+
+`surface:2` additionally replayed the full eighteen-hour window under current
+code: 30 lines emitted, **zero** with `previous_band == band`, and both
+offenders re-derived as `previous_band=None` — correctly, as incident *starts*.
+A start has no previous band, and saying so is the fix.
+
+So the audit is naming a defect the current code **provably would not produce**,
+against lines that cannot be repaired because the log only grows. That is the
+correct behaviour for an append-only record, and it is why the finding is
+published rather than cleared.
+
+### The live-versus-replay divergence is now settled, against my earlier claim
+
+Matching shipped alerts to replayed ones on `(rule, provider)`: **30 of 30
+matched**, maximum offset **27.3 s**, bounded by the 30 s poll interval. Live and
+replay agree on *which* alerts fire and differ only in the instant a sustained
+condition is observed to cross. There was never divergence — only evaluation
+cadence. This confirms the retraction made at 23:5xZ on 08-23, which was issued
+on weaker grounds than this.
+
+**The instructive part is the first attempt.** Keying the comparison on
+`(ts, rule, provider)` reported **18 mismatches** and was nearly filed as a
+finding. The key was too strict: `ts` is an incidental property of when a
+condition was evaluated, not part of an alert's identity. Matching on identity
+rather than on an incidental field is the same lesson as excising a trace by
+named unit rather than by matched content, and as comparing a projected instant
+at the precision it actually carries.
+
+### Shape, not count
+
+`2 of 13` (one caused **solely** by a top-up) → `0 of 12` → `1 of 17` → `2 of 30`.
+The class that contradicted `docs/TASK.md` — an alert caused solely by a top-up
+or by a reverted blip — has stayed at **zero** while the sample tripled. What
+grew is duplicate-suppression residue: quality, not correctness. A rising count
+against a tripling sample with the correctness class at zero is convergence, not
+drift, and reading the raw count alone would have said the opposite.
