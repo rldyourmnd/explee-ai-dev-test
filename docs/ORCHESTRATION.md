@@ -25,9 +25,15 @@ disagreement between them and this block resolves in favour of this block, and
 
 **Open:** Task 1 and Task 2 traces (exported only when each session genuinely
 ends); the snapshot series; the T1 marker and clean-window regeneration; the
-single-file `--poll` deploy, which waits for a snapshot boundary; the pyright
-exclusion debt (**64 errors** behind four excluded Task 2 paths, row X.5 **not
-green**); and the history rewrite, which runs last.
+single-file `--poll` deploy, which waits for a snapshot boundary.
+
+The pyright exclusion debt is **closed** — row X.5 is GREEN, cleared rather than
+hidden: no Task 2 path remains in `pyrightconfig.json` and pyright reports 0 with
+nothing task-related excluded. The history rewrite has **run**; the repository is
+public at 193 commits, and pre-rewrite SHAs resolve through
+[COMMIT-MAP.md](COMMIT-MAP.md). Both were still listed here as open long after
+they were done, which is the contradiction this board exists to catch and had
+started producing.
 
 **All six human decisions are settled** — the `BLOCKED` markers further down are
 historical. Publication, submission timing, collector interruption and payment

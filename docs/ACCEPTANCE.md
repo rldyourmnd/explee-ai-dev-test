@@ -232,8 +232,8 @@ everything.
 **Consequence for the submission:** two of seven artifacts are now absent — both
 traces. Task 3's session was refused by its own guard; Task 2's is withheld by
 this one. The form permits partial submission, and an honest gap beats an
-acknowledged real client identifier. **Task 1's trace is not yet exported and
-must be scanned with this same pattern before it is placed.**
+acknowledged real client identifier. **All three traces are now exported and
+placed**, each scanned with this same pattern before placement.
 
 
 ## Reopened blocker: an alert can pass the guard and fail the counterfactual
