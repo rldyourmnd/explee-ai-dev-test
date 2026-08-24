@@ -1208,3 +1208,51 @@ hazards in `AGENTS.md` was built from other people's instances and this one is
 mine. The rule is not "be careful with listing commands"; it is *scope every
 listing command to this project before running it*, since the contamination
 happens at execution and cannot be taken back afterwards.
+
+## 2026-08-24T11:4xZ — the workflow failure was an archived callee, and two dead ends worth keeping
+
+`NDDev-it-com/ci-workflows` was **archived**. GitHub will not serve a reusable
+workflow from an archived repository, and every symptom follows from that:
+instant failure, **zero jobs created**, no logs to read, and the run registered
+under its file path instead of its `name:` field, because nothing ever parsed
+the file far enough to find one. Un-archived by the owner; `archived=false`
+confirmed here, and all five called workflows resolve at the pinned SHA.
+
+Nothing in this repository was ever wrong.
+
+### The dead ends, recorded because an undocumented one costs the next person a day
+
+**1. Permissions delegation.** The theory was that `permissions: {}` at workflow
+level could not delegate `id-token: write` to a job. `surface:8` granted the
+union at workflow level, pushed, watched it fail identically, and **reverted
+rather than leaving a loosened default under a disproved cause** — the right call
+independent of the outcome.
+
+**2. Unresolved pins.** The next theory was that two pinned actions did not
+resolve. They were `actions/checkout` and `astral-sh/setup-uv` in `ci.yml`, from
+other repositories entirely; looking for them inside `ci-workflows` was a mistake
+in where to look, not a finding.
+
+**3. The counterexample that felt decisive and was not.** `dependency-review.yml`
+calls the same cross-owner repository at the same pin and had a parsed `name:`,
+which appeared to prove cross-owner calls and empty-then-elevate permissions were
+both fine. It proves neither: that workflow has **never run**. It is
+`pull_request`-triggered and no PR exists, so its `name:` only shows GitHub
+*parsed* the file. Parsing is not executing, and only execution touches an
+archived repository. A workflow that has never run cannot testify about a
+run-time failure.
+
+### What actually settled it
+
+Re-running a previously **successful** scheduled run, unchanged — same run id,
+same commit, same event, `run_attempt=2` — and watching it flip from `success` to
+`startup_failure`. Nothing in the repository differed between the two attempts,
+which located the variable outside the repository and left one API call to find
+it. The lesson generalises: when a thing that used to work stops, re-run the
+identical thing before theorising about what changed in your files.
+
+### Both workflows now declare `workflow_dispatch`
+
+GitHub refuses to retry a run that failed at startup, and neither workflow had a
+manual trigger, so the only way to re-test was to push. A diagnosis should not
+cost commits.

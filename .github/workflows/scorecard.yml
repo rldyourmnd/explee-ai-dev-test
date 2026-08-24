@@ -5,36 +5,33 @@
 # experimental. Folding it into the pull_request-triggered suite would produce a
 # job that fails for reasons unrelated to the change under review.
 #
-# KNOWN FAILING, CAUSE IS EXTERNAL. Runs end in startup_failure: zero jobs, no
-# logs, and the run named by this file path rather than by `name:`. Nothing in
-# this file is wrong.
+# WAS FAILING FOR AN EXTERNAL REASON, RESOLVED 2026-08-24. Runs ended in
+# startup_failure: zero jobs, no logs, and the run named by this file path
+# rather than by `name:`. Nothing in this file was ever wrong.
 #
-# Cause: NDDev-it-com/ci-workflows is ARCHIVED. An archived repository is
-# read-only with Actions disabled, so its reusable workflows cannot be called.
-# Fix is the owner's - un-archive it, or vendor these workflows here and drop
-# the cross-repo calls, which forks the estate standard this repo was
-# registered against and so needs the owner's say-so.
+# Cause: NDDev-it-com/ci-workflows was ARCHIVED, and GitHub will not serve a
+# reusable workflow from an archived repository. The owner un-archived it.
 #
-# Ruled out, with evidence, so nobody re-runs this hunt:
-#   - all six reusables exist at the pin, declare `on: workflow_call`, and
-#     declare every input passed here; none requires a secret
-#   - both repos are public; the pin is an ancestor of the callee default
-#     branch (behind 97, ahead 0), so it resolves
-#   - YAML parses, actionlint is silent, no BOM, no CRLF
-#   - workflow-level `permissions: {}` plus job-level elevation is legal:
-#     dependency-review.yml does exactly that at the same pin
-#   - privileged scopes are not rejected pre-job: THIS file requests
-#     `id-token: write` and SUCCEEDED at 2026-08-23T23:59:15Z, run 32675226838
-#
-# The decisive evidence is a re-run, not a file read: the same run id, same
+# Kept because the hunt was expensive and the signature is worth recognising:
+# instant failure with NO LOGS means the platform refused to start the
+# workflow, so the cause is outside the file. Two hypotheses were tested and
+# both were wrong - permissions delegation (disproved by dependency-review.yml
+# doing empty-then-elevate at the same pin) and unresolvable pins (the pins in
+# question were actions/checkout and astral-sh/setup-uv, from other
+# repositories entirely). What settled it was a re-run: the same run id, same
 # commit, same event went success -> startup_failure with zero repository
-# changes between attempts. That isolates the variable to something external,
-# which no amount of inspecting this file could have found.
+# changes between attempts, which isolates the variable to something external
+# and which no amount of reading this file could have found.
 name: scorecard
 on:
   push: { branches: [main] }
   schedule:
     - cron: "31 2 * * 1"
+  # Manual trigger so a re-run never needs a synthetic commit. GitHub refuses to
+  # retry a run that failed at startup ("This workflow run cannot be retried"),
+  # so without this the only way to re-test was to push something. That is how a
+  # diagnosis ends up costing commits it should not.
+  workflow_dispatch:
 permissions: {}
 jobs:
   scorecard:
