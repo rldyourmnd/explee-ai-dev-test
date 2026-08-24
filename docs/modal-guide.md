@@ -1,4 +1,4 @@
-# Running the Task 2 engines on Modal — current API and the GPU cap
+# Running the Task 2 engines on Modal: the API as it stood, and the GPU cap
 
 **Status: COMPLETE — historical.** How the Task 2 engines were run, written while that work was live. The benchmark is published; kept for reproducibility, not as a live runbook.
 *A plan we executed is not deleted: the plan and its execution are together the evidence of how this was built. It is left as written — not tidied into hindsight.*
