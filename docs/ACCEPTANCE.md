@@ -576,6 +576,30 @@ uv run tools/assemble_submission.py --check;     echo "preflight exit=$?"
 uv run tools/alert_audit_doc.py --check;         echo "audit exit=$?"
 ```
 
+### After the last push, stop pushing and let CI finish
+
+`ci.yml` sets `concurrency: cancel-in-progress: true` on `ci-${{ github.ref }}`,
+so **a new push cancels the run for the previous commit.** That is correct
+behaviour for a busy branch and a trap at submission: the evidence this
+repository offers a grader is a green CI run attached to a commit, and the final
+commit's run is the one that gets cancelled if anything follows it.
+
+Observed rather than assumed. Run `f298d8a` was cancelled at 13:47:54Z, two
+seconds after `1101500` was pushed at 13:47:52Z.
+
+**Allow real time.** Queue latency is not stable: three consecutive runs
+concluded in 49, 50 and 57 seconds, and the very next one took **ten minutes**
+from creation to conclusion with GitHub reporting Actions fully operational. So
+"it usually takes a minute" is not a basis for deciding a run has failed.
+
+The sequence at submission:
+
+1. Push the final commit.
+2. Push nothing further.
+3. `gh run watch <id>` until it concludes, and read `conclusion` explicitly —
+   an empty conclusion means still running, not passing.
+4. Only then treat the SHA as final.
+
 `alert_audit_doc.py` is expected to exit non-zero on documented findings; every
 other command must exit 0.
 
