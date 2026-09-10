@@ -5,7 +5,7 @@ repository:
   display_name: "explee-ai-dev-test"
   roles:
     - "project"
-  lifecycle: "active"
+  lifecycle: "archived"
 
 provider:
   type: "github"
