@@ -16,7 +16,7 @@ provider:
 
 classification:
   portfolios:
-    - "portfolio:active-personal"
+    - "portfolio:personal-projects"
   visibility_contract: "private"
   data_classification: "internal"
 
