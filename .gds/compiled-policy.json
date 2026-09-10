@@ -2,8 +2,8 @@
   "schema_version": 1,
   "compiled_policy": {
     "repository_id": "repo_01M0QPEFY0YJFX2XGGCBG4FMZF",
-    "bundle_version": "0.4.0-dev",
-    "digest": "sha256:015ec995e7914b80f0e7abfcbe62e1383969eb8842a5d448d91d785e34e05f99"
+    "bundle_version": "0.8.0-dev",
+    "digest": "sha256:89f2b634811d614a37f06ecbb7306f4717b3d7a2a2e3cc0b1b1606227a0ba3c9"
   },
   "sources": [
     {
@@ -12,7 +12,7 @@
       "priority": 100,
       "distribution": "public",
       "path": "policies/base/repository-default.yaml",
-      "digest": "sha256:0eb08a87a099af826b074543a9bfe6410bc99e760219b48a95c7239efabd6341"
+      "digest": "sha256:c0a6adf8cbec6f701c58736d0757aded49aa7fee6bfcf1762236ca0a1f75e3fb"
     },
     {
       "id": "personal-default",
@@ -58,15 +58,14 @@
       "merge": {
         "allow_auto_merge": {
           "management": "managed",
-          "value": false
+          "value": true
         },
         "allow_merge_commit": {
           "management": "managed",
-          "value": false
+          "value": true
         },
         "allow_rebase_merge": {
-          "management": "managed",
-          "value": false
+          "management": "observed"
         },
         "allow_squash_merge": {
           "management": "managed",
@@ -118,24 +117,8 @@
       }
     },
     "package_management": {
-      "forbidden_executables": [
-        "pip",
-        "pipx",
-        "poetry",
-        "npm",
-        "npx",
-        "pnpm",
-        "yarn",
-        "corepack",
-        "mise",
-        "asdf"
-      ],
-      "language_dependency_managers": [
-        "uv",
-        "bun"
-      ],
       "mutable_version_resolution": "forbidden",
-      "npm_family_on_managed_path": "forbidden",
+      "npm_family_on_managed_path": "allowed",
       "remote_stream_to_shell": "forbidden"
     },
     "rollout": {
@@ -261,13 +244,6 @@
       "operation": "set"
     },
     "/effective/github/merge/allow_rebase_merge/management": {
-      "source": "repository-default",
-      "tier": "base",
-      "priority": 100,
-      "file": "policies/base/repository-default.yaml",
-      "operation": "set"
-    },
-    "/effective/github/merge/allow_rebase_merge/value": {
       "source": "repository-default",
       "tier": "base",
       "priority": 100,
@@ -401,90 +377,6 @@
       "operation": "set"
     },
     "/effective/github/workflow/default_workflow_permissions/value": {
-      "source": "repository-default",
-      "tier": "base",
-      "priority": 100,
-      "file": "policies/base/repository-default.yaml",
-      "operation": "set"
-    },
-    "/effective/package_management/forbidden_executables/0": {
-      "source": "repository-default",
-      "tier": "base",
-      "priority": 100,
-      "file": "policies/base/repository-default.yaml",
-      "operation": "set"
-    },
-    "/effective/package_management/forbidden_executables/1": {
-      "source": "repository-default",
-      "tier": "base",
-      "priority": 100,
-      "file": "policies/base/repository-default.yaml",
-      "operation": "set"
-    },
-    "/effective/package_management/forbidden_executables/2": {
-      "source": "repository-default",
-      "tier": "base",
-      "priority": 100,
-      "file": "policies/base/repository-default.yaml",
-      "operation": "set"
-    },
-    "/effective/package_management/forbidden_executables/3": {
-      "source": "repository-default",
-      "tier": "base",
-      "priority": 100,
-      "file": "policies/base/repository-default.yaml",
-      "operation": "set"
-    },
-    "/effective/package_management/forbidden_executables/4": {
-      "source": "repository-default",
-      "tier": "base",
-      "priority": 100,
-      "file": "policies/base/repository-default.yaml",
-      "operation": "set"
-    },
-    "/effective/package_management/forbidden_executables/5": {
-      "source": "repository-default",
-      "tier": "base",
-      "priority": 100,
-      "file": "policies/base/repository-default.yaml",
-      "operation": "set"
-    },
-    "/effective/package_management/forbidden_executables/6": {
-      "source": "repository-default",
-      "tier": "base",
-      "priority": 100,
-      "file": "policies/base/repository-default.yaml",
-      "operation": "set"
-    },
-    "/effective/package_management/forbidden_executables/7": {
-      "source": "repository-default",
-      "tier": "base",
-      "priority": 100,
-      "file": "policies/base/repository-default.yaml",
-      "operation": "set"
-    },
-    "/effective/package_management/forbidden_executables/8": {
-      "source": "repository-default",
-      "tier": "base",
-      "priority": 100,
-      "file": "policies/base/repository-default.yaml",
-      "operation": "set"
-    },
-    "/effective/package_management/forbidden_executables/9": {
-      "source": "repository-default",
-      "tier": "base",
-      "priority": 100,
-      "file": "policies/base/repository-default.yaml",
-      "operation": "set"
-    },
-    "/effective/package_management/language_dependency_managers/0": {
-      "source": "repository-default",
-      "tier": "base",
-      "priority": 100,
-      "file": "policies/base/repository-default.yaml",
-      "operation": "set"
-    },
-    "/effective/package_management/language_dependency_managers/1": {
       "source": "repository-default",
       "tier": "base",
       "priority": 100,
