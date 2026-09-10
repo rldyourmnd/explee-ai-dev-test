@@ -9,7 +9,7 @@ bundle:
   digest: "sha256:10c3788edaa293048e6dc83c036793a39d7b82aedf997388bb191d2abd80874e"
 
 projection:
-  input_digest: "sha256:5466c04d73052b994b276eb15f1d22bac08527b1029a155da92ccc8e5de43cb8"
+  input_digest: "sha256:0180da1318a1e4f085a5ab151c494b79d440c152782548719a64870c0c6bb2ed"
   output_digest: "sha256:84af42eca97f9703f3675a2c88a2c94ed65e4bbf116e6fb38eff39ceb7eecf84"
   files:
     - path: ".gds/compiled-policy.json"
